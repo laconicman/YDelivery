@@ -14,7 +14,9 @@ struct SettingsView: View {
                 draftToken: $draftToken,
                 signIn: {
                     session.signIn(token: draftToken)
-                    draftToken = ""
+                    // Only a successful sign-in consumes the draft: a failure keeps the
+                    // typed token in the field so retrying is not a full retype.
+                    if session.isSignedIn { draftToken = "" }
                 },
                 signOut: { session.signOut() }
             )
