@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DA9052D23040EC2800DE308D /* YandexDeliveryExpressAPI in Frameworks */ = {isa = PBXBuildFile; productRef = DA9052D13040EC2800DE308D /* YandexDeliveryExpressAPI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		DA9052AC3040EC2700DE308D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA9052D23040EC2800DE308D /* YandexDeliveryExpressAPI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = YDelivery;
 			packageProductDependencies = (
+				DA9052D13040EC2800DE308D /* YandexDeliveryExpressAPI */,
 			);
 			productName = YDelivery;
 			productReference = DA90529E3040EC2500DE308D /* YDelivery.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = DA9052953040EC2500DE308D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				DA9052D03040EC2800DE308D /* XCRemoteSwiftPackageReference "YandexDeliveryExpress" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DA90529F3040EC2500DE308D /* Products */;
 			projectDirPath = "";
@@ -539,6 +548,25 @@
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DA9052D03040EC2800DE308D /* XCRemoteSwiftPackageReference "YandexDeliveryExpress" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/laconicman/YandexDeliveryExpress";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.2.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DA9052D13040EC2800DE308D /* YandexDeliveryExpressAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA9052D03040EC2800DE308D /* XCRemoteSwiftPackageReference "YandexDeliveryExpress" */;
+			productName = YandexDeliveryExpressAPI;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */
 		DA9052993040EC2500DE308D /* Build configuration list for PBXProject "YDelivery" */ = {
