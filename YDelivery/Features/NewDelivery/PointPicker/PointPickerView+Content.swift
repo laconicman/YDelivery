@@ -1,0 +1,181 @@
+import MapKit
+import SwiftUI
+
+extension PointPickerView {
+    /// Pure presentation: the map, the pin, and the confirm bar. Camera position is view
+    /// state (R7); everything the screen decides arrives as values and closures.
+    struct Content: View {
+        let pin: PickedPlace?
+        @Binding var pinAddress: String
+        let isResolving: Bool
+        let errorText: String?
+        let onTap: (_ latitude: Double, _ longitude: Double) -> Void
+        let onVisibleRegionChange: (MKCoordinateRegion) -> Void
+
+        @State private var camera: MapCameraPosition
+
+        init(
+            pin: PickedPlace?,
+            pinAddress: Binding<String>,
+            isResolving: Bool,
+            errorText: String?,
+            onTap: @escaping (_ latitude: Double, _ longitude: Double) -> Void,
+            onVisibleRegionChange: @escaping (MKCoordinateRegion) -> Void
+        ) {
+            self.pin = pin
+            _pinAddress = pinAddress
+            self.isResolving = isResolving
+            self.errorText = errorText
+            self.onTap = onTap
+            self.onVisibleRegionChange = onVisibleRegionChange
+            // `.automatic` frames the marker when editing; with nothing to frame it shows
+            // the whole world, so a fresh picker starts over the service's home market.
+            _camera = State(initialValue: pin == nil ? .region(.moscow) : .automatic)
+        }
+
+        var body: some View {
+            MapReader { proxy in
+                Map(position: $camera) {
+                    if let pin {
+                        Marker(
+                            pin.address.isEmpty ? String(localized: "Selected point") : pin.address,
+                            systemImage: "mappin",
+                            coordinate: pin.coordinate
+                        )
+                    }
+                }
+                .onTapGesture { screenPoint in
+                    if let coordinate = proxy.convert(screenPoint, from: .local) {
+                        onTap(coordinate.latitude, coordinate.longitude)
+                    }
+                }
+            }
+            .mapControls {
+                MapCompass()
+                MapScaleView()
+            }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                onVisibleRegionChange(context.region)
+            }
+            .onChange(of: pin?.coordinateOnly) { previous, current in
+                // Recenter when the pin arrives from search or editing starts — but not on
+                // address-only edits, hence comparing coordinates rather than the place.
+                if let current, previous != current {
+                    camera = .region(
+                        MKCoordinateRegion(
+                            center: current.coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                        )
+                    )
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                ConfirmBar(
+                    hasPin: pin != nil,
+                    address: $pinAddress,
+                    isResolving: isResolving,
+                    errorText: errorText
+                )
+            }
+        }
+    }
+}
+
+extension PointPickerView.Content {
+    /// The bottom bar: resolved address (editable), progress, or the invitation to tap.
+    struct ConfirmBar: View {
+        let hasPin: Bool
+        @Binding var address: String
+        let isResolving: Bool
+        let errorText: String?
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                if hasPin {
+                    HStack {
+                        TextField("Address", text: $address, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                        if isResolving {
+                            ProgressView()
+                        }
+                    }
+                    if let errorText {
+                        Text(errorText)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                } else {
+                    Text("Tap the map or search to choose the point.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+        }
+    }
+}
+
+private extension MKCoordinateRegion {
+    /// The fallback start for an empty picker. Yandex Delivery's Express API serves Russia;
+    /// Moscow is the densest market and a familiar anchor to pan away from.
+    static let moscow = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 55.7558, longitude: 37.6173),
+        span: MKCoordinateSpan(latitudeDelta: 0.35, longitudeDelta: 0.35)
+    )
+}
+
+private extension PickedPlace {
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    /// The place without its address — the identity the camera follows.
+    var coordinateOnly: Coordinate { Coordinate(latitude: latitude, longitude: longitude) }
+
+    struct Coordinate: Hashable {
+        let latitude: Double
+        let longitude: Double
+
+        var coordinate: CLLocationCoordinate2D {
+            CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+    }
+}
+
+#Preview("No pin yet") {
+    @Previewable @State var address = ""
+    PointPickerView.Content(
+        pin: nil,
+        pinAddress: $address,
+        isResolving: false,
+        errorText: nil,
+        onTap: { _, _ in },
+        onVisibleRegionChange: { _ in }
+    )
+}
+
+#Preview("Pin resolving") {
+    @Previewable @State var address = ""
+    PointPickerView.Content(
+        pin: PickedPlace(latitude: 55.7558, longitude: 37.6173, address: ""),
+        pinAddress: $address,
+        isResolving: true,
+        errorText: nil,
+        onTap: { _, _ in },
+        onVisibleRegionChange: { _ in }
+    )
+}
+
+#Preview("Pin resolved") {
+    @Previewable @State var address = "Москва, Красная площадь, 1"
+    PointPickerView.Content(
+        pin: PickedPlace(latitude: 55.7539, longitude: 37.6208, address: "Москва, Красная площадь, 1"),
+        pinAddress: $address,
+        isResolving: false,
+        errorText: nil,
+        onTap: { _, _ in },
+        onVisibleRegionChange: { _ in }
+    )
+}
