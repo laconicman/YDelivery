@@ -100,6 +100,24 @@ struct PointPickerModelTests {
         #expect(model.pin?.address == "Resolved")
     }
 
+    @Test("Typing an address during resolution takes it over from the geocoder")
+    func addressEditCancelsInFlightLookup() async throws {
+        let model = PointPickerView.Model(
+            resolveAddress: { _, _ in
+                try await Task.sleep(for: .seconds(5))
+                return "Слишком поздно"
+            },
+            searchPlace: { _, _ in throw Unexpected() }
+        )
+
+        model.dropPin(latitude: 1, longitude: 1)
+        model.pinAddress = "Мой адрес точнее"
+
+        #expect(!model.isResolving, "the user took the address over")
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(model.pin?.address == "Мой адрес точнее", "the late lookup must not overwrite the edit")
+    }
+
     @Test("The editable address writes through to the pin")
     func addressEditsWriteThrough() {
         let model = PointPickerView.Model(

@@ -50,7 +50,15 @@ extension PointPickerView {
 
         var pinAddress: String {
             get { pin?.address ?? "" }
-            set { pin?.address = newValue }
+            set {
+                pin?.address = newValue
+                // The geocoder proposes, the user disposes: typing while a lookup is in
+                // flight takes the address over, and the late result must not overwrite it.
+                if isResolving {
+                    lookupTask?.cancel()
+                    isResolving = false
+                }
+            }
         }
 
         private let completer = MKLocalSearchCompleter()

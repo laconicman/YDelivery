@@ -34,9 +34,13 @@ extension PointPickerView {
             self.errorText = errorText
             self.onTap = onTap
             self.onVisibleRegionChange = onVisibleRegionChange
-            // `.automatic` frames the marker when editing; with nothing to frame it shows
-            // the whole world, so a fresh picker starts over the service's home market.
-            _camera = State(initialValue: pin == nil ? .region(.moscow) : .automatic)
+            // Always a concrete region, never `.automatic`: automatic follows content, so
+            // editing would reframe on every tap-moved marker, defeating the suppression
+            // below. A fresh picker starts over the service's home market; editing starts
+            // on the place being edited.
+            _camera = State(initialValue: .region(
+                pin.map { MKCoordinateRegion(center: $0.coordinate, span: .addressLevel) } ?? .moscow
+            ))
         }
 
         var body: some View {
@@ -52,7 +56,12 @@ extension PointPickerView {
                 }
                 .onTapGesture { screenPoint in
                     if let coordinate = proxy.convert(screenPoint, from: .local) {
-                        suppressNextRecenter = true
+                        // Suppress only when this tap will actually move the pin — a tap on
+                        // the identical coordinate fires no change, and a lingering flag
+                        // would wrongly swallow the next search arrival's recenter.
+                        if pin?.latitude != coordinate.latitude || pin?.longitude != coordinate.longitude {
+                            suppressNextRecenter = true
+                        }
                         onTap(coordinate.latitude, coordinate.longitude)
                     }
                 }
@@ -73,10 +82,7 @@ extension PointPickerView {
                     suppressNextRecenter = false
                 } else {
                     camera = .region(
-                        MKCoordinateRegion(
-                            center: current.coordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                        )
+                        MKCoordinateRegion(center: current.coordinate, span: .addressLevel)
                     )
                 }
             }
@@ -135,6 +141,11 @@ private extension MKCoordinateRegion {
         center: CLLocationCoordinate2D(latitude: 55.7558, longitude: 37.6173),
         span: MKCoordinateSpan(latitudeDelta: 0.35, longitudeDelta: 0.35)
     )
+}
+
+private extension MKCoordinateSpan {
+    /// Tight enough to read house numbers, loose enough to keep the block in view.
+    static let addressLevel = MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
 }
 
 private extension PickedPlace {
