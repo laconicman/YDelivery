@@ -10,8 +10,8 @@ struct NewDeliveryView: View {
     var body: some View {
         NavigationStack {
             Content(
-                pickupAddress: model.pickup?.address,
-                dropoffAddress: model.dropoff?.address,
+                pickupAddress: model.pickup?.displayAddress,
+                dropoffAddress: model.dropoff?.displayAddress,
                 canSwap: model.canSwap,
                 pick: { pickingEnd = $0 },
                 swapEnds: { model.swapEnds() }

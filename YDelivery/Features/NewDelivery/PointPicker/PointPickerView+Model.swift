@@ -63,6 +63,7 @@ extension PointPickerView {
 
         private let completer = MKLocalSearchCompleter()
         private var completerBridge: CompleterBridge?
+        private var suggestionsTask: Task<Void, Never>?
         private let resolveAddress: AddressResolver
         private let searchPlace: PlaceSearcher
         private var lookupTask: Task<Void, Never>?
@@ -75,6 +76,14 @@ extension PointPickerView {
             pin = initialPlace
             self.resolveAddress = resolveAddress
             self.searchPlace = searchPlace
+        }
+
+        // Isolated (SE-0371) so it may touch the actor's stored tasks: the consuming loop
+        // holds the bridge (and with it the stream) alive, so without this cancel it would
+        // await a yield that can never come.
+        isolated deinit {
+            suggestionsTask?.cancel()
+            lookupTask?.cancel()
         }
 
         /// A tap on the map: the pin moves immediately, the address arrives asynchronously
@@ -120,12 +129,15 @@ extension PointPickerView {
 
         private func wireCompleterIfNeeded() {
             guard completerBridge == nil else { return }
-            let bridge = CompleterBridge { [weak self] suggestions in
-                Task { @MainActor [weak self] in self?.suggestions = suggestions }
-            }
+            let bridge = CompleterBridge()
             completerBridge = bridge
             completer.delegate = bridge
             completer.resultTypes = [.address, .pointOfInterest]
+            suggestionsTask = Task { [weak self] in
+                for await batch in bridge.updates {
+                    self?.suggestions = batch
+                }
+            }
         }
     }
 }
@@ -164,24 +176,32 @@ extension PointPickerView.Model {
 // MARK: - Completer bridge
 
 /// `MKLocalSearchCompleter` speaks through a delegate with no documented queue guarantee,
-/// so the bridge is nonisolated, converts to `Sendable` values on the spot, and hops to the
-/// main actor explicitly. Held strongly by the model; the completer's `delegate` is weak.
+/// so the bridge is nonisolated and converts to `Sendable` values on the spot. Delivery is
+/// an `AsyncStream` rather than per-callback hops: one continuation keeps batches ordered,
+/// and `bufferingNewest(1)` drops stale intermediates so the consumer only ever renders the
+/// latest set. Held strongly by the model; the completer's `delegate` is weak.
 private nonisolated final class CompleterBridge: NSObject, MKLocalSearchCompleterDelegate {
-    private let deliver: @Sendable ([PointPickerView.Model.AddressSuggestion]) -> Void
+    let updates: AsyncStream<[PointPickerView.Model.AddressSuggestion]>
+    private let continuation: AsyncStream<[PointPickerView.Model.AddressSuggestion]>.Continuation
 
-    init(deliver: @escaping @Sendable ([PointPickerView.Model.AddressSuggestion]) -> Void) {
-        self.deliver = deliver
+    override init() {
+        (updates, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
+        super.init()
+    }
+
+    deinit {
+        continuation.finish()
     }
 
     func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
-        deliver(completer.results.map {
+        continuation.yield(completer.results.map {
             .init(title: $0.title, subtitle: $0.subtitle)
         })
     }
 
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: any Error) {
         // Autocomplete failing is not worth an alert; the user keeps typing or taps the map.
-        deliver([])
+        continuation.yield([])
     }
 }
 

@@ -47,11 +47,7 @@ extension PointPickerView {
             MapReader { proxy in
                 Map(position: $camera) {
                     if let pin {
-                        Marker(
-                            pin.address.isEmpty ? String(localized: "Selected point") : pin.address,
-                            systemImage: "mappin",
-                            coordinate: pin.coordinate
-                        )
+                        Marker(pin.displayAddress, systemImage: "mappin", coordinate: pin.coordinate)
                     }
                 }
                 .onTapGesture { screenPoint in
