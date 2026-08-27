@@ -15,16 +15,18 @@ and the test action, run by whoever remembers.
   `-skipPackagePluginValidation` (the OpenAPI generator plugin's trust prompt fails
   non-interactive builds with no useful message otherwise). Scheduled on the Roadmap.
 
-## YD-2 — The test targets are template stubs — **open**
+## YD-2 — The test targets are template stubs — **discharged**
 
-`YDeliveryTests` holds one empty `@Test`; the UI test target is the Xcode template
+`YDeliveryTests` held one empty `@Test`; the UI test target was the Xcode template
 verbatim.
 
-- **Cost:** the test action is green and means nothing — worse than red, because it looks
-  like coverage.
-- **Discharge:** first real logic (offer mapping, journal event application) arrives with
-  Swift Testing suites; the UI target keeps exactly one launch smoke test and loses the
-  rest of the template.
+- **The cost it carried:** the test action was green and meant nothing — worse than red,
+  because it looked like coverage.
+- **Discharged by:** the first real logic arriving with its suites (2026-08-28) —
+  `TokenStoreTests` runs the Keychain round-trip against per-test service names, and
+  `ClientControllerTests` pins the session lifecycle, including the trimmed-and-persisted
+  token and the rendered empty-token error. The UI target keeps exactly the launch smoke
+  test.
 
 ## See Also
 
