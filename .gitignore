@@ -1,0 +1,28 @@
+.DS_Store
+.build
+/Packages
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.swiftpm
+.netrc
+.vscode
+.ci/
+.cursorignore
+
+# Credentials. The package's live suites read AUTH_TOKEN from the environment and the token
+# lives outside any repository (~/.yandex-auth-token, mode 600). These patterns exist so a
+# copy made "just for a minute" cannot be committed by accident.
+*.token
+*auth-token*
+*-token
+.env
+.env.*
+secrets.*
+*.pem
+*.p12
+
+# NOT ignored, deliberately, and both differ from the sibling package:
+#   *.xcodeproj      — this repo *is* the app, so the project file is the product.
+#   Package.resolved — an app pins its dependencies; a library lets consumers resolve their
+#                      own. See the workspace CLAUDE.md.
