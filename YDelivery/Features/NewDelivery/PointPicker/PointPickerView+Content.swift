@@ -14,6 +14,12 @@ extension PointPickerView {
 
         @State private var camera: MapCameraPosition
 
+        /// A tap places the pin exactly where the user is already looking — recentering
+        /// (and worse, snap-zooming) would fight their framing. Search results arrive from
+        /// off-screen and do deserve the camera. The gesture and the camera are both view
+        /// state, so the view reconciles them.
+        @State private var suppressNextRecenter = false
+
         init(
             pin: PickedPlace?,
             pinAddress: Binding<String>,
@@ -46,6 +52,7 @@ extension PointPickerView {
                 }
                 .onTapGesture { screenPoint in
                     if let coordinate = proxy.convert(screenPoint, from: .local) {
+                        suppressNextRecenter = true
                         onTap(coordinate.latitude, coordinate.longitude)
                     }
                 }
@@ -58,9 +65,13 @@ extension PointPickerView {
                 onVisibleRegionChange(context.region)
             }
             .onChange(of: pin?.coordinateOnly) { previous, current in
-                // Recenter when the pin arrives from search or editing starts — but not on
-                // address-only edits, hence comparing coordinates rather than the place.
-                if let current, previous != current {
+                // Recenter when the pin arrives from search — not on address-only edits
+                // (hence comparing coordinates, not places), and not on taps (suppressed
+                // above, since the tapped point is already on screen).
+                guard let current, previous != current else { return }
+                if suppressNextRecenter {
+                    suppressNextRecenter = false
+                } else {
                     camera = .region(
                         MKCoordinateRegion(
                             center: current.coordinate,

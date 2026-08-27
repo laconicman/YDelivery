@@ -75,6 +75,31 @@ struct PointPickerModelTests {
         #expect(model.pin?.address == "Faster")
     }
 
+    @Test("A superseded lookup does not switch the spinner off under its replacement")
+    func supersededLookupKeepsResolvingFlag() async throws {
+        let model = PointPickerView.Model(
+            resolveAddress: { latitude, _ in
+                // The stale lookup parks far longer than the live one so its cancelled
+                // unwind happens while the live one is still in flight.
+                try await Task.sleep(for: latitude == 1 ? .seconds(5) : .milliseconds(300))
+                return "Resolved"
+            },
+            searchPlace: { _, _ in throw Unexpected() }
+        )
+
+        model.dropPin(latitude: 1, longitude: 1)
+        model.dropPin(latitude: 2, longitude: 2)
+
+        // Give the cancelled task's unwind (its sleep throws immediately) time to run its
+        // defer — with the regression, this is the moment the spinner wrongly vanished and
+        // Confirm enabled against an empty address.
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(model.isResolving, "only the live lookup may declare resolution over")
+
+        try await waitUntil { !model.isResolving }
+        #expect(model.pin?.address == "Resolved")
+    }
+
     @Test("The editable address writes through to the pin")
     func addressEditsWriteThrough() {
         let model = PointPickerView.Model(

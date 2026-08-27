@@ -95,7 +95,10 @@ extension PointPickerView {
             lookupError = nil
             isResolving = true
             lookupTask = Task {
-                defer { isResolving = false }
+                // A superseded task unwinds while its replacement is still in flight; only
+                // the live task may declare resolution over, or the spinner vanishes and
+                // Confirm enables against an empty address.
+                defer { if !Task.isCancelled { isResolving = false } }
                 do {
                     let place = try await operation()
                     guard !Task.isCancelled else { return }
