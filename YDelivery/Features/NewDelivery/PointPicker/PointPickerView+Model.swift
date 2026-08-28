@@ -32,9 +32,13 @@ extension PointPickerView {
         private(set) var isResolving = false
         private(set) var lookupError: (any Error)?
 
-        /// The map's visible region, reported by the view; biases search results toward
-        /// what the user is looking at.
-        var visibleRegion: MKCoordinateRegion?
+        /// The map's visible region, reported by the view; biases the autocomplete and the
+        /// final place search toward what the user is looking at.
+        var visibleRegion: MKCoordinateRegion? {
+            didSet {
+                if let visibleRegion { completer.region = visibleRegion }
+            }
+        }
 
         var searchText = "" {
             didSet {
