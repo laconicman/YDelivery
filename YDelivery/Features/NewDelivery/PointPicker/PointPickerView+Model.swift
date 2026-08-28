@@ -39,7 +39,6 @@ extension PointPickerView {
         var searchText = "" {
             didSet {
                 guard searchText != oldValue else { return }
-                wireCompleterIfNeeded()
                 completer.queryFragment = searchText
                 if searchText.isEmpty { suggestions = [] }
             }
@@ -65,7 +64,6 @@ extension PointPickerView {
 
         private let completer = MKLocalSearchCompleter()
         private var completerBridge: CompleterBridge?
-        private var suggestionsTask: Task<Void, Never>?
         private let resolveAddress: AddressResolver
         private let searchPlace: PlaceSearcher
         private var lookupTask: Task<Void, Never>?
@@ -80,12 +78,23 @@ extension PointPickerView {
             self.searchPlace = searchPlace
         }
 
-        // Isolated (SE-0371) so it may touch the actor's stored tasks: the consuming loop
-        // holds the bridge (and with it the stream) alive, so without this cancel it would
-        // await a yield that can never come.
-        isolated deinit {
-            suggestionsTask?.cancel()
-            lookupTask?.cancel()
+        /// Consumes completer batches for as long as the screen lives. Run it from the root
+        /// view's `.task`: structured concurrency, so SwiftUI cancels it on dismiss and the
+        /// bridge (with its stream) releases with the screen — no stored task, no custom
+        /// `deinit`. (`isolated deinit` would have carried an iOS 18.4 runtime floor.)
+        func streamSuggestions() async {
+            guard completerBridge == nil else { return }
+            let bridge = CompleterBridge()
+            completerBridge = bridge
+            completer.delegate = bridge
+            completer.resultTypes = [.address, .pointOfInterest]
+            defer { completerBridge = nil }
+
+            for await batch in bridge.updates {
+                // A batch for an already-cleared query (selection just landed) would flash
+                // stale suggestions back under the empty search field.
+                if !searchText.isEmpty { suggestions = batch }
+            }
         }
 
         /// A tap on the map: the pin moves immediately, the address arrives asynchronously
@@ -132,21 +141,6 @@ extension PointPickerView {
             }
         }
 
-        private func wireCompleterIfNeeded() {
-            guard completerBridge == nil else { return }
-            let bridge = CompleterBridge()
-            completerBridge = bridge
-            completer.delegate = bridge
-            completer.resultTypes = [.address, .pointOfInterest]
-            suggestionsTask = Task { [weak self] in
-                for await batch in bridge.updates {
-                    guard let self else { return }
-                    // A batch for an already-cleared query (selection just landed) would
-                    // flash stale suggestions back under the empty search field.
-                    if !searchText.isEmpty { suggestions = batch }
-                }
-            }
-        }
     }
 }
 

@@ -35,6 +35,7 @@ struct PointPickerView: View {
             )
             .navigationTitle(prompt)
             .navigationBarTitleDisplayMode(.inline)
+            .task { await model.streamSuggestions() }
             .searchable(text: $model.searchText, prompt: "Search address or place")
             .searchSuggestions {
                 ForEach(model.suggestions) { suggestion in
