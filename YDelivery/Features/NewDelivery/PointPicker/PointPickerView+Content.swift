@@ -14,6 +14,10 @@ extension PointPickerView {
 
         @State private var camera: MapCameraPosition
 
+        /// What the map shows before any interaction — reported on appear so the first
+        /// search is region-biased too; `.onMapCameraChange(.onEnd)` only fires after a move.
+        private let initialRegion: MKCoordinateRegion
+
         /// A tap places the pin exactly where the user is already looking — recentering
         /// (and worse, snap-zooming) would fight their framing. Search results arrive from
         /// off-screen and do deserve the camera. The gesture and the camera are both view
@@ -38,9 +42,9 @@ extension PointPickerView {
             // editing would reframe on every tap-moved marker, defeating the suppression
             // below. A fresh picker starts over the service's home market; editing starts
             // on the place being edited.
-            _camera = State(initialValue: .region(
-                pin.map { MKCoordinateRegion(center: $0.coordinate, span: .addressLevel) } ?? .moscow
-            ))
+            let region = pin.map { MKCoordinateRegion(center: $0.coordinate, span: .addressLevel) } ?? .moscow
+            initialRegion = region
+            _camera = State(initialValue: .region(region))
         }
 
         var body: some View {
@@ -68,6 +72,9 @@ extension PointPickerView {
             }
             .onMapCameraChange(frequency: .onEnd) { context in
                 onVisibleRegionChange(context.region)
+            }
+            .onAppear {
+                onVisibleRegionChange(initialRegion)
             }
             .onChange(of: pin?.coordinateOnly) { previous, current in
                 // Recenter when the pin arrives from search — not on address-only edits
