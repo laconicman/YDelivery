@@ -70,6 +70,23 @@ extension NewDeliveryView.Content {
     }
 }
 
+#Preview("End row: chosen and unchosen") {
+    List {
+        NewDeliveryView.Content.EndRow(
+            label: "Pickup",
+            systemImage: "shippingbox.and.arrow.backward",
+            address: "Москва, ул Москворечье, 6",
+            select: {}
+        )
+        NewDeliveryView.Content.EndRow(
+            label: "Drop-off",
+            systemImage: "house",
+            address: nil,
+            select: {}
+        )
+    }
+}
+
 #Preview("Empty draft") {
     NewDeliveryView.Content(
         pickupAddress: nil,

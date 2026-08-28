@@ -96,6 +96,8 @@ extension PointPickerView {
 
 extension PointPickerView.Content {
     /// The bottom bar: resolved address (editable), progress, or the invitation to tap.
+    /// Progress and errors render regardless of a pin — a search launched from a fresh
+    /// picker has no pin yet, and silence there reads as a dead search box.
     struct ConfirmBar: View {
         let hasPin: Bool
         @Binding var address: String
@@ -112,15 +114,23 @@ extension PointPickerView.Content {
                             ProgressView()
                         }
                     }
-                    if let errorText {
-                        Text(errorText)
+                } else if isResolving {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Finding the place…")
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(.secondary)
                     }
                 } else {
                     Text("Tap the map or search to choose the point.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                if let errorText {
+                    Text(errorText)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
                 }
             }
             .padding()
@@ -128,6 +138,26 @@ extension PointPickerView.Content {
             .background(.bar)
         }
     }
+}
+
+#Preview("Confirm bar: searching from an empty picker") {
+    @Previewable @State var address = ""
+    PointPickerView.Content.ConfirmBar(
+        hasPin: false,
+        address: $address,
+        isResolving: true,
+        errorText: nil
+    )
+}
+
+#Preview("Confirm bar: search failed, still no pin") {
+    @Previewable @State var address = ""
+    PointPickerView.Content.ConfirmBar(
+        hasPin: false,
+        address: $address,
+        isResolving: false,
+        errorText: "No address found."
+    )
 }
 
 private extension MKCoordinateRegion {

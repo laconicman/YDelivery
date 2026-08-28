@@ -111,18 +111,21 @@ extension PointPickerView {
             lookupTask?.cancel()
             lookupError = nil
             isResolving = true
-            lookupTask = Task {
+            // Weak self, so an in-flight lookup does not pin a dismissed screen's model
+            // alive until the network answers — deallocation reaches the isolated deinit,
+            // which cancels this task.
+            lookupTask = Task { [weak self] in
                 // A superseded task unwinds while its replacement is still in flight; only
                 // the live task may declare resolution over, or the spinner vanishes and
                 // Confirm enables against an empty address.
-                defer { if !Task.isCancelled { isResolving = false } }
+                defer { if !Task.isCancelled { self?.isResolving = false } }
                 do {
                     let place = try await operation()
                     guard !Task.isCancelled else { return }
-                    pin = place
+                    self?.pin = place
                 } catch {
                     guard !Task.isCancelled else { return }
-                    lookupError = error
+                    self?.lookupError = error
                 }
             }
         }
@@ -208,9 +211,9 @@ private nonisolated final class CompleterBridge: NSObject, MKLocalSearchComplete
 // MARK: - Address formatting
 
 private nonisolated extension CLPlacemark {
-    /// The address string a courier can act on: street-level detail first, city for
-    /// disambiguation. Falls back progressively — a bare coordinate pin in a park still
-    /// deserves its best-effort name.
+    /// The address string a courier can act on: city first, then street-level detail — the
+    /// Russian/Yandex convention ("Москва, Тверская, 1"). Falls back progressively — a bare
+    /// coordinate pin in a park still deserves its best-effort name.
     var deliveryAddress: String {
         let street = [thoroughfare, subThoroughfare].compactMap(\.self).joined(separator: ", ")
         let parts = [locality, street.isEmpty ? name : street]
