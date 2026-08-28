@@ -123,8 +123,9 @@ extension PointPickerView {
             lookupError = nil
             isResolving = true
             // Weak self, so an in-flight lookup does not pin a dismissed screen's model
-            // alive until the network answers — deallocation reaches the isolated deinit,
-            // which cancels this task.
+            // alive until the network answers. Nothing cancels this task on deallocation —
+            // it is superseded-cancelled by the next lookup, or completes naturally and
+            // finds nobody to tell.
             lookupTask = Task { [weak self] in
                 // A superseded task unwinds while its replacement is still in flight; only
                 // the live task may declare resolution over, or the spinner vanishes and
