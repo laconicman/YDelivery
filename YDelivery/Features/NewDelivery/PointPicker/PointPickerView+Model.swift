@@ -138,7 +138,10 @@ extension PointPickerView {
             completer.resultTypes = [.address, .pointOfInterest]
             suggestionsTask = Task { [weak self] in
                 for await batch in bridge.updates {
-                    self?.suggestions = batch
+                    guard let self else { return }
+                    // A batch for an already-cleared query (selection just landed) would
+                    // flash stale suggestions back under the empty search field.
+                    if !searchText.isEmpty { suggestions = batch }
                 }
             }
         }
