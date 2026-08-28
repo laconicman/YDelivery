@@ -176,7 +176,11 @@ extension PointPickerView.Model {
         )
     }
 
-    nonisolated struct NoAddressFound: Error {}
+    /// `LocalizedError`, so the confirm bar's red footer reads "No address found." rather
+    /// than the generic "The operation couldn't be completed…" a bare `Error` renders as.
+    nonisolated struct NoAddressFound: LocalizedError {
+        var errorDescription: String? { String(localized: "No address found.") }
+    }
 }
 
 // MARK: - Completer bridge
@@ -219,7 +223,9 @@ private nonisolated extension CLPlacemark {
     /// coordinate pin in a park still deserves its best-effort name.
     var deliveryAddress: String {
         let street = [thoroughfare, subThoroughfare].compactMap(\.self).joined(separator: ", ")
-        let parts = [locality, street.isEmpty ? name : street]
-        return parts.compactMap(\.self).joined(separator: ", ")
+        // `name` sometimes *is* the locality (a pin in a park, a city-level match) — using
+        // it as the detail would read "Москва, Москва".
+        let detail = street.isEmpty ? (name == locality ? nil : name) : street
+        return [locality, detail].compactMap(\.self).joined(separator: ", ")
     }
 }
