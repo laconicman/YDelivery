@@ -41,16 +41,23 @@ SwiftData, `MKMapView` wrappers instead of SwiftUI MapKit) plus re-opening the p
 documented floor, for a device population this B2B tool does not have. Also rejected:
 iOS 18+ — nothing above 17 is needed yet, and reach is free.
 
-## SwiftData is the persistence layer and the app's model layer
+## SwiftData is the persistence layer and the app's model layer — **reopened 2026-08-28**
 
-Orders, route points, saved addresses and contacts live in SwiftData; the store is the
-single source of truth the UI observes. Status history arrives by applying
-`claims/journal` events (see <doc:Vision>), so the app is usable offline and history
-survives the vendor's 72-hour claim visibility horizon.
+Orders, route points, saved addresses and contacts live in the local store as the single
+source of truth the UI observes. Status history arrives by applying `claims/journal` events
+(see <doc:Vision>), so the app is usable offline and history survives the vendor's 72-hour
+claim visibility horizon. That much stands.
 
-**Rejected:** Core Data (boilerplate without a floor reason to pay it) and "no store, poll
-`claims/search` on every launch" (history becomes hostage to the API's retention and the
-network).
+**What reopened the stack choice:** the CloudKit ambitions — an organization sharing one
+Yandex token, employees reading/creating/editing orders by role — need shared databases
+(plausibly a shared record zone, "sharing the table"). SwiftData's CloudKit sync offers no
+`CKShare` surface; `NSPersistentCloudKitContainer` does. Phase 2 therefore opens with a
+schema-and-stack research task (<doc:Roadmap>) rather than an implementation sprint, and the
+schema gets designed with relational discipline first — the LearnWords project on this
+machine records what a rushed CloudKit schema costs.
+
+**Still rejected:** "no store, poll `claims/search` on every launch" — history becomes
+hostage to the API's retention and the network.
 
 ## Polling first; a push relay only as a later, separate deliverable
 

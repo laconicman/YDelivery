@@ -28,6 +28,29 @@ verbatim.
   token and the rendered empty-token error. The UI target keeps exactly the launch smoke
   test.
 
+## YD-3 — SF Symbol names are raw strings — **open**
+
+`Image(systemName: "chevron.forward")` and its siblings compile whether or not the symbol
+exists; a typo renders an empty image at runtime (author's review, 2026-08-28).
+
+- **Cost:** no compile-time safety over an asset namespace that changes with every OS.
+- **Discharge:** adopt [SFSafeSymbols](https://github.com/SFSafeSymbols/SFSafeSymbols) — the
+  demo repo already depends on it, so this is alignment, not a new precedent. One chore PR
+  replacing the string call sites.
+
+## YD-4 — The project file is hand-maintained — **open**
+
+The pbxproj was hand-edited for the floor, language mode, and the package dependency.
+Buildable folders keep file lists out of it, but build settings still live in a format no
+contributor should have to untangle — and the house precedent is XcodeGen
+(`NetworkObserverSample/project.yml`).
+
+- **Cost:** settings diffs are noisy to review; a second target (widgets, App Intents) would
+  multiply the hand-editing.
+- **Discharge:** a `project.yml` generating the current project verbatim, checked by a clean
+  build; the pbxproj leaves version control. One chore PR, scheduled before any new target
+  is added.
+
 ## See Also
 
 - <doc:Design>
