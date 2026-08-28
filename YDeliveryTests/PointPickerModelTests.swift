@@ -34,6 +34,9 @@ struct PointPickerModelTests {
 
         #expect(model.pin != nil, "the coordinate is still usable; only the address failed")
         #expect(model.lookupErrorText != nil)
+
+        model.pinAddress = "Москва, вручную"
+        #expect(model.lookupErrorText == nil, "an edit supersedes the failure it corrects")
     }
 
     @Test("Selecting a suggestion resolves through the search seam and clears the query")

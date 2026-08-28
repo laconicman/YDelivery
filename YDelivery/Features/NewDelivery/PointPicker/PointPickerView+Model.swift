@@ -52,8 +52,10 @@ extension PointPickerView {
             get { pin?.address ?? "" }
             set {
                 pin?.address = newValue
-                // The geocoder proposes, the user disposes: typing while a lookup is in
-                // flight takes the address over, and the late result must not overwrite it.
+                // The geocoder proposes, the user disposes: typing takes the address over —
+                // a late result must not overwrite it, and a failure it supersedes must not
+                // keep shouting under the corrected text.
+                lookupError = nil
                 if isResolving {
                     lookupTask?.cancel()
                     isResolving = false
