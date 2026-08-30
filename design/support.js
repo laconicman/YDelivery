@@ -1932,18 +1932,28 @@
     "6a": "Round 4 - Capture, Color & Keyboard.dc.html", "6b": "Round 4 - Capture, Color & Keyboard.dc.html",
     "6c": "Round 4 - Capture, Color & Keyboard.dc.html", "6d": "Round 4 - Capture, Color & Keyboard.dc.html"
   };
-  if (typeof document !== "undefined") {
-    document.addEventListener("click", function (e) {
-      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      var a = e.target && e.target.closest ? e.target.closest("a[href^=\"#\"]") : null;
-      if (!a) return;
-      var id = a.getAttribute("href").slice(1);
-      if (!id || document.getElementById(id)) return;
-      var board = FRAME_BOARDS[id];
-      if (!board) return;
-      e.preventDefault();
-      window.location.href = encodeURI(board) + "#" + id;
-    });
+  // Rewrite cross-board anchors to their owning file so every gesture — primary click,
+  // new tab, new window, download — carries native semantics. Anchors whose frame lives in
+  // this very board are left as same-document links; frames render progressively, so the
+  // check keys on the filename, not on getElementById timing.
+  if (typeof document !== "undefined" && typeof MutationObserver !== "undefined") {
+    var CURRENT_BOARD = decodeURIComponent((window.location.pathname.split("/").pop() || ""));
+    var canonicalizeBoardLinks = function () {
+      var anchors = document.querySelectorAll('a[href^="#"]');
+      for (var i = 0; i < anchors.length; i++) {
+        var id = anchors[i].getAttribute("href").slice(1);
+        var board = FRAME_BOARDS[id];
+        if (board && board !== CURRENT_BOARD) {
+          anchors[i].setAttribute("href", encodeURI(board) + "#" + id);
+        }
+      }
+    };
+    var startCanonicalizing = function () {
+      canonicalizeBoardLinks();
+      new MutationObserver(canonicalizeBoardLinks).observe(document.body, { childList: true, subtree: true });
+    };
+    if (document.readyState !== "loading") startCanonicalizing();
+    else document.addEventListener("DOMContentLoaded", startCanonicalizing);
   }
   hideRawTemplate();
   loadReactUmd().then(init).catch((err) => {
