@@ -22,8 +22,13 @@ secrets.*
 *.pem
 *.p12
 
-# NOT ignored, deliberately, and both differ from the sibling package:
-#   *.xcodeproj      — this repo *is* the app, so the project file is the product.
+# The project file is generated: project.yml is the source of truth (TechDebt → YD-4),
+# so the pbxproj and the generated scheme leave version control — run `xcodegen generate`
+# after cloning or editing the spec.
+YDelivery.xcodeproj/project.pbxproj
+YDelivery.xcodeproj/xcshareddata/xcschemes/
+
+# NOT ignored, deliberately, and it differs from the sibling package:
 #   Package.resolved — an app pins its dependencies; a library lets consumers resolve their
 #                      own. See the workspace CLAUDE.md.
 .thumbnail
