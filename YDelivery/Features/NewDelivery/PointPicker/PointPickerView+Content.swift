@@ -117,6 +117,7 @@ extension PointPickerView.Content {
                     HStack {
                         TextField("Address", text: $address, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
+                            .textContentType(.fullStreetAddress)
                         if isResolving {
                             ProgressView()
                         }
