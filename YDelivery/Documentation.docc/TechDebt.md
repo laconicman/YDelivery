@@ -28,15 +28,20 @@ verbatim.
   token and the rendered empty-token error. The UI target keeps exactly the launch smoke
   test.
 
-## YD-3 — SF Symbol names are raw strings — **open**
+## YD-3 — SF Symbol names are raw strings — **discharged**
 
 `Image(systemName: "chevron.forward")` and its siblings compile whether or not the symbol
 exists; a typo renders an empty image at runtime (author's review, 2026-08-28).
 
-- **Cost:** no compile-time safety over an asset namespace that changes with every OS.
-- **Discharge:** adopt [SFSafeSymbols](https://github.com/SFSafeSymbols/SFSafeSymbols) — the
-  demo repo already depends on it, so this is alignment, not a new precedent. One chore PR
-  replacing the string call sites.
+- **The cost it carried:** no compile-time safety over an asset namespace that changes
+  with every OS.
+- **Discharged by:** [SFSafeSymbols](https://github.com/SFSafeSymbols/SFSafeSymbols) 7.0.0
+  (2026-08-30) — a dependency of `YDeliveryKit` from its first commit, then one sweep
+  over the app's call sites. The demo repo already depended on it, so this is alignment.
+  Availability annotations also enforce the iOS 17 floor per symbol, which the
+  DesignSystem's pin table asks to be verified by hand. The one exception: MapKit's
+  `Marker` has no SFSafeSymbols overload, so it takes `SFSymbol.mappin.rawValue` — still
+  compile-checked.
 
 ## YD-4 — The project file is hand-maintained — **discharged**
 

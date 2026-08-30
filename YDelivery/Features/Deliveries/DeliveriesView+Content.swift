@@ -1,3 +1,4 @@
+import SFSafeSymbols
 import SwiftUI
 
 extension DeliveriesView {
@@ -13,22 +14,22 @@ extension DeliveriesView {
         var body: some View {
             Group {
                 if isSignedIn {
-                    ContentUnavailableView(
-                        "No deliveries yet",
-                        systemImage: "shippingbox",
-                        description: Text("Orders you create will appear here, and stay here.")
-                    )
+                    ContentUnavailableView {
+                        Label("No deliveries yet", systemSymbol: .shippingbox)
+                    } description: {
+                        Text("Orders you create will appear here, and stay here.")
+                    }
                 } else {
-                    ContentUnavailableView(
-                        "Sign in to start",
-                        systemImage: "key",
-                        description: Text("Add your Yandex Delivery OAuth token in Settings.")
-                    )
+                    ContentUnavailableView {
+                        Label("Sign in to start", systemSymbol: .key)
+                    } description: {
+                        Text("Add your Yandex Delivery OAuth token in Settings.")
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom) {
                 Button(action: compose) {
-                    Label("New Delivery", systemImage: "plus")
+                    Label("New Delivery", systemSymbol: .plus)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                 }

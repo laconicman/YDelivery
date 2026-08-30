@@ -1,3 +1,4 @@
+import SFSafeSymbols
 import SwiftUI
 
 extension NewDeliveryView {
@@ -15,13 +16,13 @@ extension NewDeliveryView {
                 Section {
                     EndRow(
                         label: "Pickup",
-                        systemImage: "shippingbox.and.arrow.backward",
+                        symbol: .shippingboxAndArrowBackward,
                         address: pickupAddress,
                         select: { pick(.pickup) }
                     )
                     EndRow(
                         label: "Drop-off",
-                        systemImage: "house",
+                        symbol: .house,
                         address: dropoffAddress,
                         select: { pick(.dropoff) }
                     )
@@ -30,7 +31,9 @@ extension NewDeliveryView {
                 }
 
                 if canSwap {
-                    Button("Swap pickup and drop-off", systemImage: "arrow.up.arrow.down", action: swapEnds)
+                    Button(action: swapEnds) {
+                        Label("Swap pickup and drop-off", systemSymbol: .arrowUpArrowDown)
+                    }
                 }
             }
         }
@@ -41,7 +44,7 @@ extension NewDeliveryView.Content {
     /// One end of the route: shows the chosen address or invites choosing one.
     struct EndRow: View {
         let label: LocalizedStringKey
-        let systemImage: String
+        let symbol: SFSymbol
         let address: String?
         let select: () -> Void
 
@@ -57,10 +60,10 @@ extension NewDeliveryView.Content {
                                 .foregroundStyle(address == nil ? .tertiary : .secondary)
                         }
                     } icon: {
-                        Image(systemName: systemImage)
+                        Image(systemSymbol: symbol)
                     }
                     Spacer()
-                    Image(systemName: "chevron.forward")
+                    Image(systemSymbol: .chevronForward)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
                 }
@@ -74,13 +77,13 @@ extension NewDeliveryView.Content {
     List {
         NewDeliveryView.Content.EndRow(
             label: "Pickup",
-            systemImage: "shippingbox.and.arrow.backward",
+            symbol: .shippingboxAndArrowBackward,
             address: "Москва, ул Москворечье, 6",
             select: {}
         )
         NewDeliveryView.Content.EndRow(
             label: "Drop-off",
-            systemImage: "house",
+            symbol: .house,
             address: nil,
             select: {}
         )
