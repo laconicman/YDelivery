@@ -48,6 +48,14 @@ packages:
   YandexDeliveryExpress:
     url: https://github.com/laconicman/YandexDeliveryExpress
     minorVersion: 0.2.0
+  # The shared foundation below app + future widget/activity (DESIGN-HANDOFF §6):
+  # the semantic color set, StatusChip, and — from the store PR on — the order store.
+  YDeliveryKit:
+    path: YDeliveryKit
+  # Compile-checked SF Symbol names (TechDebt → YD-3).
+  SFSafeSymbols:
+    url: https://github.com/SFSafeSymbols/SFSafeSymbols
+    from: 7.0.0
 
 targets:
   YDelivery:
@@ -58,6 +66,10 @@ targets:
     dependencies:
       - package: YandexDeliveryExpress
         product: YandexDeliveryExpressAPI
+      - package: YDeliveryKit
+        product: YDeliveryKit
+      - package: SFSafeSymbols
+        product: SFSafeSymbols
     settings:
       groups: [signing]
       base:
