@@ -38,18 +38,20 @@ exists; a typo renders an empty image at runtime (author's review, 2026-08-28).
   demo repo already depends on it, so this is alignment, not a new precedent. One chore PR
   replacing the string call sites.
 
-## YD-4 — The project file is hand-maintained — **open**
+## YD-4 — The project file is hand-maintained — **discharged**
 
 The pbxproj was hand-edited for the floor, language mode, and the package dependency.
 Buildable folders keep file lists out of it, but build settings still live in a format no
 contributor should have to untangle — and the house precedent is XcodeGen
 (`NetworkObserverSample/project.yml`).
 
-- **Cost:** settings diffs are noisy to review; a second target (widgets, App Intents) would
-  multiply the hand-editing.
-- **Discharge:** a `project.yml` generating the current project verbatim, checked by a clean
-  build; the pbxproj leaves version control. One chore PR, scheduled before any new target
-  is added.
+- **The cost it carried:** settings diffs were noisy to review; a second target (widgets,
+  App Intents) would have multiplied the hand-editing.
+- **Discharged by:** `project.yml` at the repo root (2026-08-30) — synced folders, the
+  same package pin, and effective build settings verified equal by diffing
+  `xcodebuild -showBuildSettings` per target before and after (the residue restates Xcode
+  defaults). The pbxproj and the generated scheme left version control; `xcodegen generate`
+  recreates them after cloning or editing the spec.
 
 ## See Also
 

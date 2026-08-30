@@ -1,0 +1,111 @@
+# The source of truth for YDelivery.xcodeproj — run `xcodegen generate` after editing this
+# file or after cloning (TechDebt → YD-4; house precedent NetworkObserverSample/project.yml).
+# The generated pbxproj stays out of version control; Package.resolved remains tracked, so
+# dependency pins survive regeneration.
+name: YDelivery
+
+options:
+  bundleIdPrefix: com.learnable
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "26.6"
+  # Buildable folders, as the hand-made project had them: file lists never enter the
+  # pbxproj, and adding a file needs no regeneration (XcodeGen ≥ 2.44, projectFormat
+  # xcode16_0 — its default).
+  defaultSourceDirectoryType: syncedFolder
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: WEJF495R4D
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: 1
+    # The floor and the language mode are load-bearing decisions (Design → "The floor is
+    # iOS 17, in Swift 6 language mode"); MainActor default isolation is applied on the
+    # app target only, matching the project this file replaces.
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
+    # Compile-time symbols for catalog colors — what DesignSystem's semantic set builds on.
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    GCC_C_LANGUAGE_STANDARD: gnu17
+    CLANG_CXX_LANGUAGE_STANDARD: gnu++20
+  configs:
+    Release:
+      VALIDATE_PRODUCT: YES
+
+settingGroups:
+  # Target-level because XcodeGen's iOS preset would otherwise override the project
+  # setting with the legacy "iPhone Developer"; Xcode wrote "Apple Development".
+  signing:
+    CODE_SIGN_IDENTITY: Apple Development
+
+packages:
+  # Consumed by URL at 0.2.x so a clean clone proves the published product builds
+  # (workspace CLAUDE.md); cross-editing uses Xcode's local-override instead.
+  YandexDeliveryExpress:
+    url: https://github.com/laconicman/YandexDeliveryExpress
+    minorVersion: 0.2.0
+
+targets:
+  YDelivery:
+    type: application
+    platform: iOS
+    sources:
+      - YDelivery
+    dependencies:
+      - package: YandexDeliveryExpress
+        product: YandexDeliveryExpressAPI
+    settings:
+      groups: [signing]
+      base:
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+        STRING_CATALOG_GENERATE_SYMBOLS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+    scheme:
+      testTargets:
+        - YDeliveryTests
+        - YDeliveryUITests
+
+  YDeliveryTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - YDeliveryTests
+    dependencies:
+      - target: YDelivery
+    settings:
+      groups: [signing]
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/YDelivery.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/YDelivery"
+        STRING_CATALOG_GENERATE_SYMBOLS: NO
+        SWIFT_EMIT_LOC_STRINGS: NO
+
+  YDeliveryUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - YDeliveryUITests
+    dependencies:
+      - target: YDelivery
+    settings:
+      groups: [signing]
+      base:
+        TEST_TARGET_NAME: YDelivery
+        GENERATE_INFOPLIST_FILE: YES
+        STRING_CATALOG_GENERATE_SYMBOLS: NO
+        SWIFT_EMIT_LOC_STRINGS: NO
