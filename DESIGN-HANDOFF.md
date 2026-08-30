@@ -304,6 +304,22 @@ and find more than a mock will show. The design intent to check against:
 1. **Does the journal feed carry courier coordinates?** Blocks the moving marker (`4a`) and
    route progress (`5a`). If it is status-only, both degrade cleanly to status — but know
    before building.
+
+   > **Answered 2026-08-30, from the API reference** (`IntegrationV2ClaimsJournal`, checked
+   > that date): **no coordinates, ever.** A journal `Event` carries exactly `change_type`
+   > (only `status_changed` | `price_changed`), `claim_id`, `operation_id`, `revision`,
+   > `updated_ts`, and optionally `client_id`, `current_point_id`, `new_price`,
+   > `new_currency`, `new_status`, `resolution`. Courier position exists only on
+   > `GET claims/performer-position` (coords, speed, heading) and inside `claims/points-eta`.
+   >
+   > Three consequences, finer than yes/no:
+   > - The **moving marker (`4a`)** is buildable only by polling `performer-position` while
+   >   the app is foreground (later: via a push relay) — never from the journal.
+   > - **Route progress (`5a`) survives at stop granularity without coordinates**:
+   >   `current_point_id` names the stop the courier is working, so the progress dots can
+   >   advance from journal data alone, including background refresh.
+   > - The Live Activity's states therefore degrade to *status + current stop*, not to bare
+   >   status, whenever only journal data is available. Both surfaces keep their design.
 2. **Is the return point (`_type: return`) a real flow** for your senders, or an API
    capability that need not surface in v1? Drawn as a role in `2b`.
 3. **Do items genuinely split across stops?** `3d` hides per-item point mapping behind two
