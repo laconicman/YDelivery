@@ -84,9 +84,44 @@ An OAuth token that can spend real money is a credential, not a preference.
 `kSecClassGenericPassword`, no iCloud sync. The demo's `@AppStorage` token is explicitly a
 demo-only allowance; copying it here would ship the anti-pattern the demo documents.
 
+Since 2026-08-30 the item lives in the **App-Group keychain access group** (`AppGroup.id`),
+not the default team-prefixed one — see "Surviving an account transfer" below for why.
+
 **Rejected:** `@AppStorage`/`UserDefaults` (plaintext on disk, backed up), and environment
 variables (fine for the demo's scheme-launched runs; useless for a product installed from
-TestFlight).
+TestFlight). Also rejected (2026-08-30, on review of
+[swift-security](https://github.com/dm-zharov/swift-security)): a Keychain wrapper
+dependency. The library is vetted and would express the same store in fewer, type-safe
+lines — but the app holds exactly one generic password behind three tested methods, and a
+whole SecItem abstraction on the credential path is a dependency **larger than the
+problem** (the standing preference, stated explicitly so the question is not re-asked).
+Reconsider if the keychain surface ever grows past this one item — per-organization
+tokens are the plausible trigger.
+
+## Surviving an account transfer
+
+Nothing has shipped, which is exactly when transferability is cheap (analysis 2026-08-30,
+against Apple's current App Store Connect transfer documentation). What this app does
+about each constraint:
+
+- **An unreleased app cannot be transferred at all** — the criteria require a version live
+  on the App Store. If a different owning entity ever becomes plausible, the cheapest
+  transfer is publishing v1 from that entity in the first place.
+- **Keychain is the one user-visible loss, pre-empted.** Default access groups are
+  team-prefixed; a transfer changes the prefix and strands every credential
+  (QA1726/TN2311). The token therefore lives in the App-Group access group — no team
+  prefix, re-registered to the recipient, blessed by Apple's current guidance for exactly
+  this.
+- **The CloudKit container stays exclusive to this app.** Containers transfer with the
+  app — data, schema, and identifier — but sharing one with a sibling app breaks that
+  sibling at transfer time. A hard input to the Phase-2 schema research; the transferor
+  also loses all dashboard access to user data.
+- **APNs credentials are team property.** The old team's keys stop signing pushes shortly
+  after a transfer completes; device tokens and the topic (bundle id) survive. The Later
+  push relay treats Team ID / Key ID / key as rotate-able configuration with a runbook
+  line: swap credentials the moment a transfer completes.
+- **Survives untouched:** bundle ID, the App Group identifier and its on-device data,
+  ratings and users. **Does not transfer:** TestFlight builds and testers.
 
 ## The destination & ordering design (2026-08)
 
