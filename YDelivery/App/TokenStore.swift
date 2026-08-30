@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import YDeliveryKit
 
 /// Keychain-backed storage for the one credential this app holds — the Yandex Delivery
 /// OAuth token (`Design` → "The token lives in the Keychain").
@@ -8,6 +9,13 @@ import Security
 /// `BGAppRefreshTask` can read it, and deliberately **not** synchronized to iCloud: the
 /// token authorizes spending money and belongs to this device's owner, not to every device
 /// on the Apple Account.
+///
+/// Items live in the **App-Group keychain access group**, not the default team-prefixed
+/// one: the default group's prefix is the Team ID, so an app transfer to another
+/// developer account would strand every stored token (QA1726/TN2311); an App Group
+/// identifier carries no team prefix and re-registers to the recipient, so the credential
+/// survives the transfer (Design → "Surviving an account transfer"). Decided before any
+/// token was ever stored — no migration path exists or is needed.
 ///
 /// `nonisolated`: the project defaults new types onto the main actor
 /// (`SWIFT_DEFAULT_ACTOR_ISOLATION`), but this store has no UI affinity — the Keychain is
@@ -25,6 +33,7 @@ nonisolated struct TokenStore: Sendable {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: "oauth-token",
+            kSecAttrAccessGroup as String: AppGroup.id,
         ]
     }
 

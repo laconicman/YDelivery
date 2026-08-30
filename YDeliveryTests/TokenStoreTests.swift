@@ -1,5 +1,7 @@
 import Foundation
+import Security
 import Testing
+import YDeliveryKit
 @testable import YDelivery
 
 /// Runs against the real Keychain in the test host, each test under its own service name so
@@ -45,5 +47,26 @@ struct TokenStoreTests {
         try store.write("doomed")
         try store.delete()
         #expect(store.read() == nil)
+    }
+
+    @Test("The token lands in the App-Group access group — the transfer-proof one")
+    func storedInAppGroupAccessGroup() throws {
+        let store = makeStore()
+        defer { try? store.delete() }
+        try store.write("grouped")
+
+        // Read the stored item's attributes back through raw SecItem, independent of the
+        // store's own query, so a regression to the default (team-prefixed) group fails
+        // here rather than after a future account transfer.
+        let attributesQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: store.service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        #expect(SecItemCopyMatching(attributesQuery as CFDictionary, &result) == errSecSuccess)
+        let attributes = try #require(result as? [String: Any])
+        #expect(attributes[kSecAttrAccessGroup as String] as? String == AppGroup.id)
     }
 }
