@@ -1,82 +1,102 @@
 # Roadmap
 
 Priority order. Rationale lives in <doc:Design>; the capability map with API dependencies is
-<doc:Vision>; what is wrong today is <doc:TechDebt>.
+<doc:Vision>; what is wrong today is <doc:TechDebt>. Since 2026-08-30 the phasing follows
+the design handoff's build order (`DESIGN-HANDOFF.md` §7, transient at the repo root) —
+each phase ends somewhere shippable.
 
-## Now — Phase 1: a delivery can be ordered
+## Done
 
-### The shell and composition root
+The shell and composition root (tabs, injected controllers, Keychain auth as rendered
+state — PR #1) and route picking (search / tap-to-pin / editable resolved address — PR #2).
+Every view carries a running `#Preview`.
 
-Tab structure (Deliveries · New Delivery · Settings), controllers created in `@main` and
-injected, Keychain-backed auth state rendered rather than crashed on. Every view lands with
-a running `#Preview`.
+## Now — design Phase 1: structure (touches shipped code)
 
-### New-delivery flow
+Deliberately unglamorous, and first because both later phases assume it:
 
-Point picking shipped (PR #2). Remaining: parcel details, offer cards from
-`offers/calculate`, then create → accept, with the cancel price (`cancel-info`) shown before
-any cancel. The generated types stay behind the controllers (<doc:Design>).
+- **The tab bar goes** — two tabs (Доставки, Настройки), «Новая доставка» presents the flow
+  modally, and the draft survives dismissal instead of dying with a tab switch
+  (handoff §2.3; touches `RootView.swift`).
+- **The order store lands in an App Group from day one** — widgets will read it directly,
+  and retrofitting after Keychain and history exist is the expensive version (handoff §6,
+  "the single most consequential line"). The store's *location* is decided now; its *stack*
+  still awaits the Phase-2 research below.
+- **`YDeliveryKit` created** (local package below app + future widget/activity) with the
+  <doc:DesignSystem> color set and `StatusChip`.
+- **One local substrate** for completed orders and points — recents, saved places and
+  repeat-order are one store, not three features.
+- **`textContentType` + keyboard types** on every existing field.
+- **Chores fold in here:** SFSafeSymbols adoption (YD-3) rides the `YDeliveryKit`/badge
+  work; the XcodeGen conversion (YD-4) lands *before* the widget target Phase 3 needs.
 
-### Route truth before price
+*Done when:* nothing looks new, the draft cannot be destroyed by navigation, and a widget
+target could read the store if it existed.
 
-A route preview once both ends exist: `MKDirections` polyline, distance, rough drive time —
-the "am I pricing the right trip?" check the author's review called out. Slots between
-picking and offers.
+## Next — design Phase 2: the draft screen (boards `1b`, `2a`, `2c`, `3a`, `3d`)
 
-### The destination experience (design-gated)
+- Fixed route card: map above, rows with `pointStart`/`pointEnd` badges per
+  <doc:DesignSystem>, collapsed contact rows, swap, add point.
+- Picker grows saved chips, recents-with-contacts, choose-on-map confirm-pin with address
+  parts, and the paste affordance per <doc:LinkGrammars>.
+- Estimate bar (information, never the CTA) with its failure state — `MKDirections`
+  distance/time, replaced by provider figures when offers land.
+- Tariff strip with waiting/failed states; vertical beginner explainer auto-opening until
+  the first successful order.
+- Parcel and options with constraint-as-hint and the §4 interdependencies enforced in the
+  UI, never discovered via API errors.
+- Review sheet before ordering — the one irreversible action acknowledges itself.
+- Start from the user's position: When-In-Use with the considerate acquisition UX
+  (`NetworkObserverSample` pattern); explicit start city in Settings as fallback.
 
-`Design-Research-Brief.md` (repo root, transient) commissions the full treatment: the 2GIS
-"Проезд"-style laconic tariff strip vs an explanatory beginner mode, pin taxonomy
-(start/intermediate/end; warehouse/pickup-point/door-to-door), reorderable multi-point route
-list, link-paste geocoding (Yandex/Google/2GIS URLs), recents resurfacing in search, saved
-places. Reference screenshots live in `Documentation.docc/Resources/`. Implementation
-follows the returned design, not the other way around.
+*Done when:* a sender completes a real order without typing an address twice, and every
+bounded field states its bound.
 
-### Start from the user's position
+### In parallel: the persistence and sharing research
 
-When-In-Use location with the considerate acquisition UX from `NetworkObserverSample`
-(pre-permission explainer, denial as a rendered state); explicit region setting as the
-fallback. Until then the Moscow fallback stands.
+**Do not brace into implementing** (author, 2026-08-28). The store must carry the CloudKit
+ambitions: private sync, and an organization sharing one Yandex token whose employees see,
+create, and edit orders by role — plausibly a shared record zone. SwiftData's CloudKit sync
+has no sharing story; `NSPersistentCloudKitContainer` does (<doc:Design> — reopened). Schema
+first (relational discipline — Codd, not vibes; the LearnWords sessions record how a rushed
+CloudKit schema went), stack second, provider-plurality in the schema from day one.
 
-## Next — Phase 2: history that stays true
+## Then — design Phase 3: while closed (boards `5a`–`5d`, `4b`)
 
-### First: the persistence and sharing research
+- **Journal sync first, package first:** `journal` and `search` operations do not exist in
+  `YandexDeliveryExpressAPI` 0.2.0 — spec + tests land there, tagged, before the app
+  feature. The journal carries **no coordinates** (verified 2026-08-30, <doc:Vision>):
+  status/price events plus `current_point_id`, which is exactly enough for stop-granularity
+  progress on every closed-app surface.
+- Custom fields: settings schema, two flags, own draft section, Spotlight indexing.
+- Live Activity (seven states, failures never auto-dismiss), started locally on order
+  creation, updated by polling — the push relay stays a Later item.
+- Two widgets (waiting · working), three App Intents, notification thread rules with
+  parcel-photo attachments, share-in extension.
+- Local notifications + `BGAppRefreshTask` from journal events.
 
-**Do not brace into implementing** (author, 2026-08-28). Phase 2's store must carry the
-CloudKit ambitions: private sync, and an organization sharing one Yandex token whose
-employees see, create, and edit orders by role — which smells like sharing a whole record
-zone, not a row. SwiftData's CloudKit sync has no sharing story; `NSPersistentCloudKitContainer`
-does (<doc:Design> — the SwiftData decision is reopened). The research task: schema first
-(relational discipline — Codd, not vibes; the LearnWords sessions on this machine record how
-a rushed CloudKit schema went), stack second, with provider-plurality in the schema from day
-one even while Yandex is the only provider.
+*Done when:* a sender learns their courier arrived without opening the app.
 
-### The order store and journal sync
+## Later — design Phase 4 and beyond
 
-The store (per the research above) as the single source of truth; `claims/journal` cursor
-sync applying status events; `claims/search` backfill. **Package first:** `journal` and
-`search` operations do not exist in `YandexDeliveryExpressAPI` 0.2.0 — spec + tests land
-there, tagged, before the app feature starts.
-
-### Local notifications and background refresh
-
-Status-change notifications from journal events; `BGAppRefreshTask` so they arrive without
-the app foregrounded. Saved addresses/contacts and repeat-order land here too — the
-warehouse story is a saved source point plus `external_order_id`.
-
-## Later — Phase 3+: the delivery you can watch
-
-- **Tracking screen**: courier position, per-point ETA, status timeline, call
+- Regular width: sidebar + detail, map inside detail, shortcut set, focus order — decide
+  the multiple-drafts model (handoff §9.4) before building windows.
+- **Tracking on the map**: moving courier marker via `performer-position` polling
+  (foreground-only until a relay exists), per-point ETA (`points-eta`), call
   (`driver-voiceforwarding`), ShareLink (`tracking-links`). Package first, same rule.
-- **Live Activity / Dynamic Island** for the active delivery.
 - **Push relay** (Cloudflare Worker or edgepush; webhook `callback_url` must end `?`/`&`) —
-  its own repo, evaluated with DeepWiki before adoption.
-- Handoff codes, proof of delivery, edit/return, `delivery-methods` windows, widgets.
-- CI (build + tests on push), a Mac target if the product earns one.
-- **Extract the map components into a public SPM** once the destination design settles —
-  point picker, pin taxonomy, link-paste geocoding. The demo repo becomes its second
-  consumer (its own roadmap wants maps), which is exactly the Rule-of-Three moment; before
-  a second consumer exists, extraction is speculation.
+  its own repo, evaluated with DeepWiki before adoption; unlocks background Live Activity
+  updates.
+- Handoff codes, proof of delivery, edit/return, `delivery-methods` windows.
+- CI (build + tests on push); a Mac target if the product earns one.
+- **Extract the map components into a public SPM** once the destination design has shipped —
+  point picker, pin taxonomy, link-paste geocoding. The demo repo becomes the second
+  consumer (its own roadmap wants maps); before that, extraction is speculation.
+
+### Deferred, deliberately (no stubs)
+
+Scan-to-fill (board `6a`) — manual entry stays a complete path, so its absence carries no UI
+debt. Inbound tracking — record-keeping only, and only if honest about not being live.
 
 ## See Also
 

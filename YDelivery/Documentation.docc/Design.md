@@ -88,6 +88,33 @@ demo-only allowance; copying it here would ship the anti-pattern the demo docume
 variables (fine for the demo's scheme-launched runs; useless for a product installed from
 TestFlight).
 
+## The destination & ordering design (2026-08)
+
+The design session's full record is `DESIGN-HANDOFF.md` (transient, repo root — folds in
+here as it is implemented); its four permanent specifications live in <doc:DesignSystem>.
+Three decisions shape everything else, recorded here so they survive the handoff's deletion:
+
+**The route card is fixed; the map sits above it.** Delivery classes must be visible before
+pricing — courier vs van changes the route, not just the price — and filled point rows run
+two lines (address + contact) with routes reaching five and ten points; a bottom sheet you
+must drag to read the route is the wrong container, and the fixed card is the safer shell at
+accessibility sizes. **Rejected:** the map-first taxi shell — the better shell only where
+the user is the one travelling.
+
+**A point carries data, not coordinates.** A saved place stores address parts, a default
+contact, a role, default options; history stores whole orders, so «Повторить» refills
+everything in one tap. Recents, saved places and repeat-order are one local store read three
+ways. **Rejected:** three separate features — triple the work, split truth.
+
+**The tab bar goes.** «New Delivery» is a verb, not a place; two tabs remain (Доставки,
+Настройки) and the flow presents modally, making the draft's lifetime legible — a tab
+switch may no longer destroy it. **Rejected:** the three-tab layout this app shipped with.
+
+Two framings that settle later arguments: **the unit of work is the order, not the parcel**
+(the sender's own order number outranks the vendor's claim id on every surface), and **the
+app is mostly used while it is closed** (ordering takes ninety seconds; the forty waiting
+minutes happen on the Lock Screen).
+
 ## Unofficial, visibly
 
 The name is `YDelivery`, not Yandex-anything; no Yandex logos, colors, or iconography.
