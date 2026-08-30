@@ -7,7 +7,7 @@ lands, and this file is then deleted — the sibling repos' `HANDOFF.md` convent
 
 **Method.** Findings come from vendor documentation, product help pages, recorded flow
 teardowns (Page Flows, Mobbin), design case studies, and the two reference screenshots in
-`YDelivery/Documentation.docc/Resources/` (`2gis-search-home.png`, `2gis-route-transport-tabs.png`).
+`design/ref/` (`2gis-search-home.png`, `2gis-route-transport-tabs.png`).
 Every factual claim cites its source URL. Where a claim rests only on the screenshots or on
 general product knowledge, it is marked *(observed)*. Checked 2026-02.
 

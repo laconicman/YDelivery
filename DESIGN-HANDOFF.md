@@ -8,7 +8,7 @@
 
 ## 0. How to use this package
 
-Six board files, three documents. The boards are the argument; the documents are the residue
+Seven board files, three documents. The boards are the argument; the documents are the residue
 that should outlive them.
 
 | File | Goes to | Keep? |

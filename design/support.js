@@ -1914,6 +1914,36 @@
     if (document.readyState !== "loading") api.__dcBoot();
     else document.addEventListener("DOMContentLoaded", () => api.__dcBoot());
   }
+  // Patched when landing the boards in-repo (YDelivery PR #4): frame ids are referenced
+  // across boards (#2c from Round 3, etc.), but each id lives in exactly one file. When a
+  // hash link has no target in the open document, navigate to the board that owns it.
+  var FRAME_BOARDS = {
+    "1a": "Round 1 - Route & Ordering.dc.html", "1b": "Round 1 - Route & Ordering.dc.html",
+    "2a": "Round 1 - Picker & Points.dc.html", "2b": "Round 1 - Picker & Points.dc.html",
+    "2c": "Round 1 - Picker & Points.dc.html",
+    "3a": "Round 1 - Tariffs, Fields & XL.dc.html", "3b": "Round 1 - Tariffs, Fields & XL.dc.html",
+    "3c": "Round 1 - Tariffs, Fields & XL.dc.html", "3d": "Round 1 - Tariffs, Fields & XL.dc.html",
+    "3e": "Round 1 - Tariffs, Fields & XL.dc.html", "3f": "Round 1 - Tariffs, Fields & XL.dc.html",
+    "4a": "Round 2 - Callouts, Custom Fields & Motion.dc.html", "4b": "Round 2 - Callouts, Custom Fields & Motion.dc.html",
+    "4c": "Round 2 - Callouts, Custom Fields & Motion.dc.html",
+    "5a": "Round 3 - System Surfaces.dc.html", "5b": "Round 3 - System Surfaces.dc.html",
+    "5c": "Round 3 - System Surfaces.dc.html", "5d": "Round 3 - System Surfaces.dc.html",
+    "5e": "Round 3 - System Surfaces.dc.html", "5f": "Round 3 - System Surfaces.dc.html",
+    "6a": "Round 4 - Capture, Color & Keyboard.dc.html", "6b": "Round 4 - Capture, Color & Keyboard.dc.html",
+    "6c": "Round 4 - Capture, Color & Keyboard.dc.html", "6d": "Round 4 - Capture, Color & Keyboard.dc.html"
+  };
+  if (typeof document !== "undefined") {
+    document.addEventListener("click", function (e) {
+      var a = e.target && e.target.closest ? e.target.closest("a[href^=\"#\"]") : null;
+      if (!a) return;
+      var id = a.getAttribute("href").slice(1);
+      if (!id || document.getElementById(id)) return;
+      var board = FRAME_BOARDS[id];
+      if (!board) return;
+      e.preventDefault();
+      window.location.href = encodeURI(board) + "#" + id;
+    });
+  }
   hideRawTemplate();
   loadReactUmd().then(init).catch((err) => {
     console.error("[dc] failed to load React or boot:", err);
