@@ -27,3 +27,8 @@ package's `WorkingWithYandex` article outranks every assumption.
 - <doc:Design>
 - <doc:Roadmap>
 - <doc:TechDebt>
+
+### Specifications
+
+- <doc:DesignSystem>
+- <doc:LinkGrammars>

@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+  body { margin:0; background:#E9E9EC; -webkit-font-smoothing:antialiased; }
+  a { color:#007AFF; } a:hover { color:#0060DF; }
+</style>
+</helmet>
+
+<div style="font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;padding:56px 64px 96px;background:#E9E9EC;box-sizing:border-box">
+
+  <div style="max-width:1160px;margin-bottom:50px">
+    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8E8E93;font-weight:600">Round 1 · Board 2 · picker, points, pins</div>
+    <h1 style="font:700 36px/1.12 -apple-system,'SF Pro Display',sans-serif;margin:10px 0 12px;color:#000">Choosing a point, and what a point carries</h1>
+    <p style="font-size:15px;line-height:1.6;color:#3C3C43;max-width:66ch;margin:0 0 12px;text-wrap:pretty">Search-first with a map escape hatch (§1.4), saved chips and clock-badged recents in one list (§3.3), the paste affordance as a suggestion row with a verifiable preview (§3.2), the confirm-pin state, and permission as a rendered state (§5). Saved places carry a whole point — address parts, contact, defaults — not just coordinates, which is the change your demo's field set argues for.</p>
+    <p style="font-size:14px;line-height:1.6;color:#6C6C70;max-width:66ch;margin:0;text-wrap:pretty">Options: <a href="#2a">2a</a> picker states · <a href="#2b">2b</a> multi-point ladder · <a href="#2c">2c</a> pin &amp; badge spec.</p>
+  </div>
+
+  <section style="display:block">
+    <div style="display:flex;flex-direction:column;gap:70px">
+
+      <div id="2a" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">2a</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Picker — eight states</h2>
+          <span style="font-size:14px;color:#6C6C70">the sheet opens on the keyboard; the map is one row away, never a mode</span>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:32px 26px;align-items:flex-start">
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Пустой запрос · сохранённые + недавние</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:4px 16px 10px;flex:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+                  <span style="font-size:17px;color:#007AFF">Отмена</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Откуда забрать</span>
+                  <span style="font-size:17px;color:#C4C4C6">Готово</span>
+                </div>
+                <div style="margin-top:8px;height:38px;border-radius:10px;background:#E3E3E8;display:flex;align-items:center;gap:7px;padding:0 10px">
+                  <span style="font-size:15px;color:#8E8E93">⌕</span><span style="font-size:17px;color:#8E8E93;flex:1">Адрес или место</span><span style="width:2px;height:20px;background:#007AFF"></span>
+                </div>
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:17px;background:#E9E9EC;font-size:15px;color:#000"><span style="font-size:13px">⌂</span>Дом</div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:17px;background:#E9E9EC;font-size:15px;color:#000"><span style="font-size:13px">▤</span>Склад</div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:17px;background:#E9E9EC;font-size:15px;color:#000"><span style="font-size:13px">⌗</span>Магазин</div>
+                </div>
+              </div>
+              <div style="flex:1;background:#fff">
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:18px;color:#007AFF;width:22px;text-align:center">➤</span>
+                  <span style="font-size:17px;color:#007AFF">Моё местоположение</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:18px;color:#007AFF;width:22px;text-align:center">⊕</span>
+                  <span style="font-size:17px;color:#007AFF">Выбрать на карте</span>
+                </div>
+                <div style="padding:14px 16px 6px;font-size:13px;font-weight:600;color:#8E8E93;text-transform:uppercase;letter-spacing:.02em">Недавние</div>
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:17px;color:#8E8E93;width:22px;text-align:center">◷</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">ул. Москворечье, 6</div><div style="font-size:13px;color:#8E8E93">Москва · Иван Петров</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:17px;color:#8E8E93;width:22px;text-align:center">◷</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">Арбат, 10, магазин «Электроника»</div><div style="font-size:13px;color:#8E8E93">Москва</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 16px">
+                  <span style="font-size:17px;color:#8E8E93;width:22px;text-align:center">◷</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">Каширское шоссе, 52</div><div style="font-size:13px;color:#8E8E93">Москва</div></div>
+                </div>
+              </div>
+              <div style="height:250px;background:#EDE8DF;border-top:.5px solid #C6C6C8;flex:none;position:relative">
+                <div style="position:absolute;inset:0;background:repeating-linear-gradient(60deg,#DCD3C6 0 2px,transparent 2px 26px),repeating-linear-gradient(-30deg,#DCD3C6 0 2px,transparent 2px 30px),#EDE8DF;opacity:.8"></div>
+                <div style="position:absolute;left:0;right:0;bottom:0;height:44px;background:linear-gradient(transparent,#F2F2F7)"></div>
+                <div style="position:absolute;left:50%;bottom:14px;transform:translateX(-50%);font-size:12px;color:#8E8E93;background:rgba(255,255,255,.8);padding:3px 10px;border-radius:9px">клавиатура закрывает карту</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Печатает · недавние закреплены выше подсказок</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:4px 16px 10px;flex:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+                  <span style="font-size:17px;color:#007AFF">Отмена</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Куда доставить</span>
+                  <span style="font-size:17px;color:#C4C4C6">Готово</span>
+                </div>
+                <div style="margin-top:8px;height:38px;border-radius:10px;background:#E3E3E8;display:flex;align-items:center;gap:7px;padding:0 10px">
+                  <span style="font-size:15px;color:#8E8E93">⌕</span><span style="font-size:17px;color:#000">москворечье</span><span style="width:2px;height:20px;background:#007AFF"></span>
+                </div>
+              </div>
+              <div style="flex:1;background:#fff">
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:17px;color:#8E8E93;width:22px;text-align:center">◷</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">ул. Москворечье, 6</div><div style="font-size:13px;color:#8E8E93">Москва · был вчера</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:17px;color:#8E8E93;width:22px;text-align:center">⌕</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">Москворечье-Сабурово</div><div style="font-size:13px;color:#8E8E93">Москва, район</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:17px;color:#8E8E93;width:22px;text-align:center">⌕</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">улица Москворечье, 31к1</div><div style="font-size:13px;color:#8E8E93">Москва, Россия</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 16px">
+                  <span style="font-size:17px;color:#8E8E93;width:22px;text-align:center">⌕</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">Москворечье-Сабурово, метро</div><div style="font-size:13px;color:#8E8E93">Москва</div></div>
+                </div>
+              </div>
+              <div style="height:288px;background:#EDE8DF;flex:none;position:relative;border-top:.5px solid #C6C6C8">
+                <div style="position:absolute;inset:0;background:#D1D1D6"></div>
+                <div style="position:absolute;left:0;right:0;top:0;padding:6px 8px;display:flex;gap:5px;justify-content:center;background:#D1D1D6">
+                  <div style="flex:1;max-width:34px;height:38px;border-radius:5px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:15px;color:#000">й</div>
+                  <div style="flex:1;max-width:34px;height:38px;border-radius:5px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:15px;color:#000">ц</div>
+                  <div style="flex:1;max-width:34px;height:38px;border-radius:5px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:15px;color:#000">у</div>
+                  <div style="flex:1;max-width:34px;height:38px;border-radius:5px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:15px;color:#000">к</div>
+                  <div style="flex:1;max-width:34px;height:38px;border-radius:5px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:15px;color:#000">е</div>
+                  <div style="flex:1;max-width:34px;height:38px;border-radius:5px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:15px;color:#000">н</div>
+                  <div style="flex:1;max-width:34px;height:38px;border-radius:5px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:15px;color:#000">г</div>
+                </div>
+                <div style="position:absolute;left:50%;top:60%;transform:translateX(-50%);font-size:12px;color:#6C6C70">клавиатура</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Ничего не нашлось</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:4px 16px 10px;flex:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+                  <span style="font-size:17px;color:#007AFF">Отмена</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Откуда забрать</span>
+                  <span style="font-size:17px;color:#C4C4C6">Готово</span>
+                </div>
+                <div style="margin-top:8px;height:38px;border-radius:10px;background:#E3E3E8;display:flex;align-items:center;gap:7px;padding:0 10px">
+                  <span style="font-size:15px;color:#8E8E93">⌕</span><span style="font-size:17px;color:#000">кудыкина гора 14</span>
+                </div>
+              </div>
+              <div style="flex:1;background:#fff">
+                <div style="padding:18px 16px 12px;font-size:15px;line-height:1.45;color:#8E8E93">Подсказок нет. Можно поискать по этой строке как по адресу или поставить точку вручную.</div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:.5px solid #EDEDF0;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:18px;color:#007AFF;width:22px;text-align:center">⌖</span>
+                  <span style="font-size:17px;color:#007AFF;flex:1">Искать «кудыкина гора 14» как адрес</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:18px;color:#007AFF;width:22px;text-align:center">⊕</span>
+                  <span style="font-size:17px;color:#007AFF;flex:1">Выбрать на карте</span>
+                </div>
+              </div>
+              <div style="height:288px;background:#D1D1D6;flex:none;position:relative;border-top:.5px solid #C6C6C8">
+                <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#6C6C70">клавиатура</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Ссылка в буфере · строка-подсказка с превью</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:4px 16px 10px;flex:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+                  <span style="font-size:17px;color:#007AFF">Отмена</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Куда доставить</span>
+                  <span style="font-size:17px;color:#C4C4C6">Готово</span>
+                </div>
+                <div style="margin-top:8px;height:38px;border-radius:10px;background:#E3E3E8;display:flex;align-items:center;gap:7px;padding:0 10px">
+                  <span style="font-size:15px;color:#8E8E93">⌕</span><span style="font-size:17px;color:#8E8E93;flex:1">Адрес или место</span>
+                  <span style="display:flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:13px;background:#fff;font-size:13px;color:#007AFF;font-weight:600">⎘ Вставить</span>
+                </div>
+              </div>
+              <div style="flex:1;background:#fff">
+                <div style="margin:12px;padding:12px;border:1px solid #D9D9DE;border-radius:12px;display:flex;flex-direction:column;gap:10px">
+                  <div style="font-size:15px;line-height:1.4;color:#000">Похоже на ссылку с точкой — использовать её?</div>
+                  <div style="display:flex;gap:10px;align-items:center">
+                    <div style="width:74px;height:74px;border-radius:8px;background:#EDE8DF;position:relative;flex:none;overflow:hidden">
+                      <div style="position:absolute;inset:0;background:repeating-linear-gradient(58deg,#DCD3C6 0 2px,transparent 2px 18px),#EDE8DF"></div>
+                      <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:17px;height:20px;background:#D55E00;border-radius:50% 50% 50% 0"></div>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                      <div style="font-size:15px;color:#000;line-height:1.35">Красная площадь, 1</div>
+                      <div style="font-size:13px;color:#8E8E93">55.75361, 37.62094</div>
+                      <div style="font-size:12px;color:#8E8E93">из ссылки Яндекс Карт</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <div style="flex:1;height:38px;border-radius:10px;background:#007AFF;color:#fff;display:flex;align-items:center;justify-content:center;font:600 15px/1 -apple-system,sans-serif">Поставить точку</div>
+                    <div style="height:38px;padding:0 14px;border-radius:10px;background:#EDEDF0;color:#3C3C43;display:flex;align-items:center;justify-content:center;font-size:15px">Не надо</div>
+                  </div>
+                </div>
+                <div style="padding:4px 16px 10px;font-size:13px;line-height:1.4;color:#8E8E93">Точку всегда показываем до того, как она попадёт в маршрут: у разных карт порядок координат разный.</div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:.5px solid #EDEDF0">
+                  <span style="font-size:18px;color:#007AFF;width:22px;text-align:center">⊕</span>
+                  <span style="font-size:17px;color:#007AFF">Выбрать на карте</span>
+                </div>
+              </div>
+              <div style="height:230px;background:#D1D1D6;flex:none;border-top:.5px solid #C6C6C8;position:relative">
+                <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#6C6C70">клавиатура</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Короткая ссылка · разворачиваем / без сети</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:4px 16px 10px;flex:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+                  <span style="font-size:17px;color:#007AFF">Отмена</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Куда доставить</span>
+                  <span style="font-size:17px;color:#C4C4C6">Готово</span>
+                </div>
+                <div style="margin-top:8px;height:38px;border-radius:10px;background:#E3E3E8;display:flex;align-items:center;gap:7px;padding:0 10px">
+                  <span style="font-size:15px;color:#8E8E93">⌕</span><span style="font-size:16px;color:#000">maps.app.goo.gl/Abc123</span>
+                </div>
+              </div>
+              <div style="flex:1;background:#fff">
+                <div style="margin:12px;padding:14px 12px;border:1px solid #D9D9DE;border-radius:12px;display:flex;align-items:center;gap:10px">
+                  <span style="display:inline-block;width:18px;height:18px;border:2px solid #D9D9DE;border-top-color:#8E8E93;border-radius:50%;flex:none"></span>
+                  <span style="font-size:15px;color:#3C3C43">Разворачиваем ссылку…</span>
+                </div>
+                <div style="margin:0 12px 12px;padding:14px 12px;border:1px solid #D9D9DE;border-radius:12px;display:flex;flex-direction:column;gap:8px;background:#FDF6F2">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="font-size:15px;color:#D55E00">⚠</span><span style="font:600 15px/1.3 -apple-system,sans-serif;color:#000">Без сети короткую ссылку не развернуть</span></div>
+                  <div style="font-size:14px;line-height:1.45;color:#3C3C43">Откройте её в приложении карт и скопируйте адрес — или поставьте точку на карте вручную.</div>
+                  <div style="font-size:12px;color:#8E8E93;word-break:break-all">maps.app.goo.gl/Abc123</div>
+                </div>
+                <div style="margin:0 12px 12px;padding:14px 12px;border:1px solid #D9D9DE;border-radius:12px;display:flex;flex-direction:column;gap:6px">
+                  <div style="font:600 15px/1.3 -apple-system,sans-serif;color:#000">Ссылка есть, а точки в ней нет</div>
+                  <div style="font-size:14px;line-height:1.45;color:#3C3C43">Это карточка организации — координат в адресе нет. Откройте её и скопируйте адрес.</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:.5px solid #EDEDF0">
+                  <span style="font-size:18px;color:#007AFF;width:22px;text-align:center">⊕</span>
+                  <span style="font-size:17px;color:#007AFF">Выбрать на карте</span>
+                </div>
+              </div>
+              <div style="height:210px;background:#D1D1D6;flex:none;border-top:.5px solid #C6C6C8;position:relative">
+                <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#6C6C70">клавиатура</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Уточните точку · один Готово</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#EDE8DF;display:flex;flex-direction:column">
+              <div style="position:absolute;inset:0;background:repeating-linear-gradient(64deg,#E4DED3 0 2px,transparent 2px 74px),repeating-linear-gradient(-28deg,#E4DED3 0 2px,transparent 2px 96px),radial-gradient(circle at 40% 56%,#D9E6DD 0 96px,transparent 98px),#EDE8DF"></div>
+              <div style="position:relative;height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="position:relative;background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:4px 16px 10px;flex:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+                  <span style="font-size:17px;color:#007AFF">Назад</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Уточните точку</span>
+                  <span style="font-size:17px;color:#F2F2F7">Назад</span>
+                </div>
+              </div>
+              <div style="position:absolute;left:50%;top:44%;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center">
+                <div style="background:#D55E00;width:36px;height:41px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 4px 10px rgba(0,0,0,.28)"></div>
+                <div style="width:8px;height:8px;border-radius:50%;background:rgba(0,0,0,.28);margin-top:3px"></div>
+              </div>
+              <div style="position:absolute;left:50%;top:44%;transform:translate(-50%,14px);font-size:12px;color:#3C3C43;background:rgba(255,255,255,.86);padding:3px 9px;border-radius:9px">перетащите, чтобы поправить</div>
+              <div style="position:absolute;right:16px;top:150px;width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,.94);box-shadow:0 2px 8px rgba(0,0,0,.16);display:flex;align-items:center;justify-content:center;font-size:18px;color:#007AFF">➤</div>
+              <div style="position:absolute;left:0;right:0;bottom:0;background:#F7F7F9;border-radius:16px 16px 0 0;box-shadow:0 -6px 26px rgba(0,0,0,.12);padding:14px 16px 34px;display:flex;flex-direction:column;gap:10px">
+                <div style="font-size:13px;color:#8E8E93">Адрес по точке</div>
+                <div style="background:#fff;border:.5px solid #D9D9DE;border-radius:10px;padding:11px 12px;display:flex;align-items:center;gap:8px">
+                  <span style="flex:1;font-size:17px;color:#000">Москва, ул. Москворечье, 6</span>
+                  <span style="font-size:15px;color:#007AFF">✎</span>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <div style="display:flex;align-items:center;gap:5px;height:32px;padding:0 11px;border-radius:16px;background:#EDEDF0;font-size:14px;color:#3C3C43">подъезд А</div>
+                  <div style="display:flex;align-items:center;gap:5px;height:32px;padding:0 11px;border-radius:16px;background:#EDEDF0;font-size:14px;color:#3C3C43">этаж 3</div>
+                  <div style="display:flex;align-items:center;gap:5px;height:32px;padding:0 11px;border-radius:16px;background:#EDEDF0;font-size:14px;color:#3C3C43">кв. 301</div>
+                  <div style="display:flex;align-items:center;gap:5px;height:32px;padding:0 11px;border-radius:16px;background:#E9F0FB;font-size:14px;color:#007AFF">＋ домофон</div>
+                </div>
+                <div style="height:50px;border-radius:14px;background:#007AFF;display:flex;align-items:center;justify-content:center;font:600 17px/1 -apple-system,sans-serif;color:#fff;margin-top:2px">Готово</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Геолокация · объяснение перед запросом</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#EDE8DF;display:flex;flex-direction:column">
+              <div style="position:absolute;inset:0;background:repeating-linear-gradient(64deg,#E4DED3 0 2px,transparent 2px 74px),repeating-linear-gradient(-28deg,#E4DED3 0 2px,transparent 2px 96px),#EDE8DF"></div>
+              <div style="position:relative;height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="position:relative;background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:4px 16px 10px;flex:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+                  <span style="font-size:17px;color:#007AFF">Отмена</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Откуда забрать</span>
+                  <span style="font-size:17px;color:#C4C4C6">Готово</span>
+                </div>
+              </div>
+              <div style="position:absolute;left:16px;right:16px;top:150px;background:#fff;border-radius:14px;padding:16px;box-shadow:0 6px 22px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px;color:#007AFF">➤</span><span style="font:600 17px/1.25 -apple-system,sans-serif;color:#000">Показать, где вы сейчас?</span></div>
+                <div style="font-size:15px;line-height:1.45;color:#3C3C43">Покажем вашу позицию на карте и подставим её как точку отправления. Без доступа всё работает — точки можно ставить вручную.</div>
+                <div style="display:flex;gap:8px;margin-top:2px">
+                  <div style="flex:1;height:44px;border-radius:12px;background:#007AFF;color:#fff;display:flex;align-items:center;justify-content:center;font:600 16px/1 -apple-system,sans-serif">Продолжить</div>
+                  <div style="height:44px;padding:0 16px;border-radius:12px;background:#EDEDF0;color:#3C3C43;display:flex;align-items:center;justify-content:center;font-size:16px">Не сейчас</div>
+                </div>
+              </div>
+              <div style="position:absolute;left:0;right:0;bottom:0;background:#F7F7F9;border-top:.5px solid #C6C6C8;padding:14px 16px 34px;font-size:13px;color:#8E8E93">Нажмите на карту или найдите адрес, чтобы поставить точку.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Доступ запрещён · и приблизительная точность</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#EDE8DF;display:flex;flex-direction:column">
+              <div style="position:absolute;inset:0;background:repeating-linear-gradient(64deg,#E4DED3 0 2px,transparent 2px 74px),repeating-linear-gradient(-28deg,#E4DED3 0 2px,transparent 2px 96px),#EDE8DF"></div>
+              <div style="position:absolute;left:44px;top:300px;width:190px;height:190px;border-radius:50%;background:rgba(0,122,255,.14);border:1px solid rgba(0,122,255,.3)"></div>
+              <div style="position:absolute;left:132px;top:388px;width:16px;height:16px;border-radius:50%;background:#007AFF;box-shadow:0 0 0 3px rgba(255,255,255,.9)"></div>
+              <div style="position:relative;height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="position:relative;background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:4px 16px 10px;flex:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+                  <span style="font-size:17px;color:#007AFF">Отмена</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Откуда забрать</span>
+                  <span style="font-size:17px;color:#C4C4C6">Готово</span>
+                </div>
+              </div>
+              <div style="position:absolute;right:16px;top:112px;width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,.94);box-shadow:0 2px 8px rgba(0,0,0,.16);display:flex;align-items:center;justify-content:center;font-size:18px;color:#8E8E93">⊘</div>
+              <div style="position:absolute;left:16px;right:16px;top:170px;background:#FDF6F2;border:1px solid #F0D6C2;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px">
+                <div style="display:flex;align-items:center;gap:9px"><span style="font-size:17px;color:#D55E00">⚠</span><span style="font:600 16px/1.3 -apple-system,sans-serif;color:#000">Доступ к геолокации выключен</span></div>
+                <div style="font-size:14px;line-height:1.45;color:#3C3C43">Позицию не покажем и как точку отправления не подставим. Всё остальное работает.</div>
+                <div style="height:40px;border-radius:11px;background:#fff;border:1px solid #E3D2C4;display:flex;align-items:center;justify-content:center;font:600 15px/1 -apple-system,sans-serif;color:#007AFF">Открыть Настройки</div>
+              </div>
+              <div style="position:absolute;left:16px;right:16px;top:322px;background:rgba(255,255,255,.95);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.45;color:#3C3C43">Позиция приблизительная — примерно в пределах километра. Поставьте точку сами, чтобы курьер приехал куда нужно.</div>
+              <div style="position:absolute;left:0;right:0;bottom:0;background:#F7F7F9;border-top:.5px solid #C6C6C8;padding:14px 16px 34px;font-size:13px;color:#8E8E93">Нажмите на карту или найдите адрес, чтобы поставить точку.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="2b" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">2b</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Multi-point ladder — 2, 5, 10+</h2>
+          <span style="font-size:14px;color:#6C6C70">symbols for the ends, numbers for the middle (§2.2, revised)</span>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">Two points keep the A→B reading. From three, intermediates become numbered circles that survive reordering. Past eight the list scrolls inside the card, a summary row replaces per-point contact lines, and the map clusters — the degenerate case stays usable rather than pretty. Point type (забрать / доставить / вернуть) is a per-row control, since the API models return points as first-class.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:30px 26px;align-items:flex-start">
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">2 точки · обычный случай</div>
+            <div style="width:360px;background:#F2F2F7;border-radius:18px;padding:16px;box-shadow:0 12px 34px rgba(0,0,0,.1)">
+              <div style="background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                  <span style="width:22px;height:22px;border-radius:50%;background:#1E8E3E;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:9px;height:9px;border-radius:50%;background:#fff"></span></span>
+                  <div style="flex:1"><div style="font-size:16px;color:#000">ул. Москворечье, 6</div><div style="font-size:13px;color:#8E8E93">забрать · Иван Петров</div></div>
+                  <span style="font-size:16px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:48px"></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                  <span style="width:22px;height:26px;background:#D55E00;border-radius:50% 50% 50% 0;transform:rotate(-45deg);flex:none;display:flex;align-items:center;justify-content:center"><span style="width:8px;height:8px;border-radius:50%;background:#fff"></span></span>
+                  <div style="flex:1"><div style="font-size:16px;color:#000">Каширское шоссе, 52</div><div style="font-size:13px;color:#8E8E93">доставить · Анна Сидорова</div></div>
+                  <span style="font-size:16px;color:#C4C4C6">≡</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:16px;padding:11px 4px 0"><span style="font-size:15px;color:#007AFF">⇅ Поменять</span><span style="font-size:15px;color:#007AFF">＋ Ещё точка</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">5 точек · номера в середине, тип у каждой</div>
+            <div style="width:360px;background:#F2F2F7;border-radius:18px;padding:16px;box-shadow:0 12px 34px rgba(0,0,0,.1)">
+              <div style="background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                  <span style="width:22px;height:22px;border-radius:50%;background:#1E8E3E;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:9px;height:9px;border-radius:50%;background:#fff"></span></span>
+                  <div style="flex:1"><div style="font-size:16px;color:#000">Невский проспект, 100, склад</div><div style="font-size:13px;color:#8E8E93">забрать · Менеджер склада</div></div>
+                  <span style="font-size:16px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:48px"></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                  <span style="width:22px;height:22px;border-radius:50%;background:#6C6C70;color:#fff;font:700 12px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">2</span>
+                  <div style="flex:1"><div style="font-size:16px;color:#000">Арбат, 10, «Электроника»</div><div style="font-size:13px;color:#8E8E93">доставить</div></div>
+                  <span style="font-size:16px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:48px"></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                  <span style="width:22px;height:22px;border-radius:50%;background:#6C6C70;color:#fff;font:700 12px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">3</span>
+                  <div style="flex:1"><div style="font-size:16px;color:#000">Москворечье, 6</div><div style="font-size:13px;color:#8E8E93">доставить · нет телефона</div></div>
+                  <span style="font-size:16px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:48px"></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                  <span style="width:22px;height:22px;border-radius:50%;background:#6C6C70;color:#fff;font:700 12px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">4</span>
+                  <div style="flex:1"><div style="font-size:16px;color:#000">Каширское шоссе, 52</div><div style="font-size:13px;color:#8E8E93">доставить · Анна Сидорова</div></div>
+                  <span style="font-size:16px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:48px"></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                  <span style="width:22px;height:22px;border-radius:4px;background:#8E5A3C;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">▤</span>
+                  <div style="flex:1"><div style="font-size:16px;color:#000">Невский проспект, 100, склад</div><div style="font-size:13px;color:#8E8E93">вернуть остаток</div></div>
+                  <span style="font-size:16px;color:#C4C4C6">≡</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:16px;padding:11px 4px 0"><span style="font-size:15px;color:#007AFF">＋ Ещё точка</span><span style="font-size:15px;color:#007AFF">Порядок</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">11 точек · список скроллится, карта группирует</div>
+            <div style="width:360px;background:#F2F2F7;border-radius:18px;padding:16px;box-shadow:0 12px 34px rgba(0,0,0,.1)">
+              <div style="display:flex;align-items:center;gap:8px;padding:0 4px 10px">
+                <span style="font:600 15px/1 -apple-system,sans-serif;color:#000">11 точек</span>
+                <span style="font-size:13px;color:#8E8E93">· 3 без телефона</span>
+                <span style="margin-left:auto;font-size:14px;color:#007AFF">Проверить</span>
+              </div>
+              <div style="background:#fff;border-radius:12px;overflow:hidden;max-height:330px;position:relative">
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#1E8E3E;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:8px;height:8px;border-radius:50%;background:#fff"></span></span>
+                  <div style="flex:1;font-size:15px;color:#000">Невский проспект, 100</div><span style="font-size:15px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:44px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#6C6C70;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">2</span>
+                  <div style="flex:1;font-size:15px;color:#000">Арбат, 10</div><span style="font-size:15px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:44px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#6C6C70;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">3</span>
+                  <div style="flex:1;font-size:15px;color:#000">Москворечье, 6</div><span style="font-size:13px;color:#D55E00">нет тел.</span><span style="font-size:15px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:44px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#6C6C70;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">4</span>
+                  <div style="flex:1;font-size:15px;color:#000">Каширское шоссе, 52</div><span style="font-size:15px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:44px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#6C6C70;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">5</span>
+                  <div style="flex:1;font-size:15px;color:#000">Ленинский проспект, 32</div><span style="font-size:15px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:44px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#6C6C70;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">6</span>
+                  <div style="flex:1;font-size:15px;color:#000">Тверская, 6</div><span style="font-size:13px;color:#D55E00">нет тел.</span><span style="font-size:15px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:44px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;opacity:.5">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#6C6C70;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">7</span>
+                  <div style="flex:1;font-size:15px;color:#000">Пятницкая, 14</div><span style="font-size:15px;color:#C4C4C6">≡</span>
+                </div>
+                <div style="position:absolute;left:0;right:0;bottom:0;height:36px;background:linear-gradient(transparent,#fff)"></div>
+              </div>
+              <div style="display:flex;gap:16px;padding:11px 4px 0"><span style="font-size:15px;color:#007AFF">＋ Ещё точка</span><span style="font-size:15px;color:#007AFF">Порядок</span><span style="margin-left:auto;font-size:14px;color:#8E8E93">конец — Пятницкая, 14</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="2c" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">2c</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Pin &amp; badge spec</h2>
+          <span style="font-size:14px;color:#6C6C70">shape and glyph carry the role; color only reinforces</span>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">Grayscale column is the test: every row must stay distinguishable with color removed. Because that holds, the palette can keep the market's green/red reading — moved to Okabe-Ito green and vermillion so the pair also survives protanopia. Map marker and list badge use the same glyph, which makes the route list the map's legend.</p>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty"><strong>Ends are symbols, not letters.</strong> A and B were map-app shorthand borrowed without reason: they carry no meaning, they need localizing thought at accessibility sizes, and they collide with numbered intermediates. Start becomes a concentric ring (<code style="font-size:13px">smallcircle.filled.circle</code>), which is the origin mark every map already uses; end keeps the teardrop (<code style="font-size:13px">mappin.circle.fill</code>). Where a row must state the <em>action</em> rather than the position — the multi-point list, where every stop is somebody's doorstep — pair them with <code style="font-size:13px">shippingbox.fill</code> for «забрать» and <code style="font-size:13px">house.fill</code> for «доставить». Verify each in the SF Symbols app against the iOS 17 floor before it lands in the catalog.</p>
+
+        <div style="background:#fff;border-radius:18px;padding:8px 0;box-shadow:0 12px 34px rgba(0,0,0,.08);max-width:1060px">
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:12px 24px;font-size:12px;font-weight:600;color:#8E8E93;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #EDEDF0">
+            <span>Role</span><span>On map</span><span>No color</span><span>Token</span><span>SF Symbol · list badge</span>
+          </div>
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:14px 24px;border-bottom:.5px solid #F2F2F5">
+            <span style="font-size:15px;color:#000">Start · pickup</span>
+            <span style="width:22px;height:22px;border-radius:50%;background:#1E8E3E;display:flex;align-items:center;justify-content:center"><span style="width:9px;height:9px;border-radius:50%;background:#fff"></span></span>
+            <span style="width:22px;height:22px;border-radius:50%;background:#4A4A4E;display:flex;align-items:center;justify-content:center"><span style="width:9px;height:9px;border-radius:50%;background:#fff"></span></span>
+            <span style="font-size:13px;color:#3C3C43;font-family:ui-monospace,monospace">PinStart · #1E8E3E</span>
+            <span style="font-size:14px;color:#3C3C43">concentric ring · <code style="font-size:13px">smallcircle.filled.circle</code> · row may use <code style="font-size:13px">shippingbox.fill</code></span>
+          </div>
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:14px 24px;border-bottom:.5px solid #F2F2F5">
+            <span style="font-size:15px;color:#000">Intermediate <em>n</em></span>
+            <span style="width:22px;height:22px;border-radius:50%;background:#6C6C70;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center">3</span>
+            <span style="width:22px;height:22px;border-radius:50%;background:#9A9A9E;color:#fff;font:700 11px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center">3</span>
+            <span style="font-size:13px;color:#3C3C43;font-family:ui-monospace,monospace">PinMid · secondary</span>
+            <span style="font-size:14px;color:#3C3C43">numbered circle · <code style="font-size:13px">3.circle.fill</code></span>
+          </div>
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:14px 24px;border-bottom:.5px solid #F2F2F5">
+            <span style="font-size:15px;color:#000">End · drop-off</span>
+            <span style="width:22px;height:26px;background:#D55E00;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center"><span style="width:8px;height:8px;border-radius:50%;background:#fff"></span></span>
+            <span style="width:22px;height:26px;background:#2C2C2E;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center"><span style="width:8px;height:8px;border-radius:50%;background:#fff"></span></span>
+            <span style="font-size:13px;color:#3C3C43;font-family:ui-monospace,monospace">PinEnd · #D55E00</span>
+            <span style="font-size:14px;color:#3C3C43">teardrop · <code style="font-size:13px">mappin.circle.fill</code> · row may use <code style="font-size:13px">house.fill</code></span>
+          </div>
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:14px 24px;border-bottom:.5px solid #F2F2F5">
+            <span style="font-size:15px;color:#000">Warehouse</span>
+            <span style="width:24px;height:24px;border-radius:5px;background:#8E5A3C;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">▤</span>
+            <span style="width:24px;height:24px;border-radius:5px;background:#5A5A5E;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">▤</span>
+            <span style="font-size:13px;color:#3C3C43;font-family:ui-monospace,monospace">PlaceWarehouse</span>
+            <span style="font-size:14px;color:#3C3C43">rounded square · <code style="font-size:13px">building.2.fill</code></span>
+          </div>
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:14px 24px;border-bottom:.5px solid #F2F2F5">
+            <span style="font-size:15px;color:#000">ПВЗ · staffed</span>
+            <span style="width:24px;height:24px;border-radius:5px;background:#4B4BA8;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">⌗</span>
+            <span style="width:24px;height:24px;border-radius:5px;background:#5A5A5E;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">⌗</span>
+            <span style="font-size:13px;color:#3C3C43;font-family:ui-monospace,monospace">PlacePickup</span>
+            <span style="font-size:14px;color:#3C3C43">rounded square · <code style="font-size:13px">storefront.fill</code></span>
+          </div>
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:14px 24px;border-bottom:.5px solid #F2F2F5">
+            <span style="font-size:15px;color:#000">Постамат · locker</span>
+            <span style="width:24px;height:24px;border-radius:5px;background:#7A3FA8;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">▥</span>
+            <span style="width:24px;height:24px;border-radius:5px;background:#5A5A5E;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">▥</span>
+            <span style="font-size:13px;color:#3C3C43;font-family:ui-monospace,monospace">PlaceLocker</span>
+            <span style="font-size:14px;color:#3C3C43">rounded square · <code style="font-size:13px">cabinet.fill</code></span>
+          </div>
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:14px 24px;border-bottom:.5px solid #F2F2F5">
+            <span style="font-size:15px;color:#000">Recent</span>
+            <span style="font-size:17px;color:#8E8E93">◷</span>
+            <span style="font-size:17px;color:#8E8E93">◷</span>
+            <span style="font-size:13px;color:#3C3C43;font-family:ui-monospace,monospace">secondary</span>
+            <span style="font-size:14px;color:#3C3C43">row icon · <code style="font-size:13px">clock</code> — never a pin shape</span>
+          </div>
+          <div style="display:grid;grid-template-columns:180px 96px 96px 200px 1fr;gap:0;align-items:center;padding:14px 24px">
+            <span style="font-size:15px;color:#000">Return point</span>
+            <span style="width:22px;height:22px;border-radius:50%;background:#8E5A3C;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">↩</span>
+            <span style="width:22px;height:22px;border-radius:50%;background:#5A5A5E;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">↩</span>
+            <span style="font-size:13px;color:#3C3C43;font-family:ui-monospace,monospace">PlaceReturn</span>
+            <span style="font-size:14px;color:#3C3C43">circle + arrow · <code style="font-size:13px">arrow.uturn.backward.circle.fill</code></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>

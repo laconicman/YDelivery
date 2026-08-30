@@ -20,7 +20,7 @@ the API can do). The API's own vocabulary (claims, offers) must never surface in
 
 Design the end-to-end "set the route" experience benchmarked against the best taxi/nav apps
 (Yandex Go, Uber, Bolt, 2GIS, Яндекс.Карты). Reference screenshots in
-`YDelivery/Documentation.docc/Resources/`:
+`design/ref/`:
 
 - `2gis-search-home.png` — search sheet over the map: saved-place chips (Home/Work +
   bookmarks) directly under the field.
