@@ -20,13 +20,25 @@ widget's green drifts from the app's within two releases.
 | `statusCancelled` | closed, undelivered | ✕ · «Отменён» |
 | `pointStart` | pickup | concentric ring |
 | `pointEnd` | drop-off | teardrop |
-| `scanConfident` | recognised | ✓ solid outline |
-| `scanUncertain` | check this | dashed outline · «проверьте» |
+| `scanConfident` | recognised — UI text and outlines | ✓ solid outline |
+| `scanUncertain` | check this — UI text and outlines | dashed outline · «проверьте» |
+| `scanOverlayConfident` | recognised — viewfinder overlay only | ✓ solid outline |
+| `scanOverlayUncertain` | check this — viewfinder overlay only | dashed outline |
 
 Two rules: **a status color never appears without glyph and words**; and `statusAttention`
 is for *decisions* — a network failure is a retry, not attention. Values run deliberately
 darker than `.systemGreen`/`.systemRed` where text sits on them; verify AA at 13 px, the
-tight case.
+tight case, **measured against the surface the words actually sit on** — the chip's 12%
+tint, not the naked background (designer confirmation, 2026-08-30).
+
+A third rule, the general form of a bug the scan tokens carried: **a token that renders
+both as a graphic on dark chrome and as text on light gets two entries, not one clever
+value** (designer, 2026-08-30). The overlay pair keeps the bright system values at the
+3:1 graphics threshold — safe for pins and outlines because shape and glyph carry the
+role, so poor contrast loses emphasis, never meaning. The UI pair holds AA for text in
+both modes: light `#14682F`/`#8A5A00` matching the 6a results screen; dark reusing
+`statusDone`/`statusSearching` dark values rather than inventing more. Confidence must
+survive greyscale: solid versus dashed outline, plus the word.
 
 ### Implementation approach (house precedent)
 
