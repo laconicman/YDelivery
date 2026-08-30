@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+  body { margin:0; background:#E9E9EC; -webkit-font-smoothing:antialiased; }
+  a { color:#007AFF; } a:hover { color:#0060DF; }
+</style>
+</helmet>
+
+<div style="font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;padding:56px 64px 96px;background:#E9E9EC;box-sizing:border-box">
+
+  <div style="max-width:1160px;margin-bottom:50px">
+    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8E8E93;font-weight:600">Round 3 · system surfaces &amp; reuse</div>
+    <h1 style="font:700 36px/1.12 -apple-system,'SF Pro Display',sans-serif;margin:10px 0 12px;color:#000">The app is mostly used while it's closed</h1>
+    <p style="font-size:15px;line-height:1.6;color:#3C3C43;max-width:66ch;margin:0 0 12px;text-wrap:pretty">This is the round the earlier boards implied but didn't draw. Ordering takes ninety seconds; waiting takes forty minutes, and during those forty minutes the sender is serving a customer, packing the next parcel, or driving. Every minute of that is spent on the Lock Screen, in the Dynamic Island, or in a notification — never in the app. A delivery has a definite start, a definite end and a monotonic status, which is exactly the shape a Live Activity is for.</p>
+    <p style="font-size:14px;line-height:1.6;color:#6C6C70;max-width:66ch;margin:0;text-wrap:pretty"><a href="#5a">5a</a> Live Activity &amp; Dynamic Island · <a href="#5b">5b</a> widgets · <a href="#5c">5c</a> notifications · <a href="#5d">5d</a> intents, Spotlight &amp; sharing · <a href="#5e">5e</a> the shared component set · <a href="#5f">5f</a> HIG audit.</p>
+  </div>
+
+  <section style="display:block">
+    <div style="display:flex;flex-direction:column;gap:66px">
+
+      <div id="5a" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">5a</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Live Activity — one glance, one action</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">Content rule, in priority order: <strong>where is it now</strong>, <strong>when will it be there</strong>, <strong>who to call if something's wrong</strong>. Your own order number is the identifier shown, not the vendor's claim id — this is the one place the sender's vocabulary must win, because they're matching it against a customer chat. The dashed remainder of the route is the only graphic; a live map in a Live Activity is a battery bill for information the ETA already gives.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start">
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Экран блокировки · курьер едет</div>
+            <div style="width:393px;height:600px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.18);overflow:hidden;position:relative;background:linear-gradient(#1B2A3A,#0E1620)">
+              <div style="position:absolute;inset:0;background:radial-gradient(circle at 70% 12%,rgba(120,160,200,.25),transparent 60%)"></div>
+              <div style="position:relative;padding:28px 0 0;text-align:center;color:#fff">
+                <div style="font-size:15px;opacity:.75;letter-spacing:.02em">пятница, 12 сентября</div>
+                <div style="font:300 78px/1 -apple-system,'SF Pro Display',sans-serif;letter-spacing:-2px;margin-top:2px">9:27</div>
+              </div>
+              <div style="position:relative;margin:26px 12px 0;background:rgba(255,255,255,.13);backdrop-filter:blur(20px);border-radius:22px;padding:15px 16px;display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <span style="width:22px;height:22px;border-radius:6px;background:#007AFF;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff">▣</span>
+                  <span style="font:600 14px/1 -apple-system,sans-serif;color:rgba(255,255,255,.9)">Заказ №4417</span>
+                  <span style="margin-left:auto;font-size:13px;color:rgba(255,255,255,.6)">Каширское, 52</span>
+                </div>
+                <div style="display:flex;align-items:flex-end;gap:12px">
+                  <div style="flex:1">
+                    <div style="font:600 17px/1.2 -apple-system,sans-serif;color:#fff">Курьер едет к получателю</div>
+                    <div style="font-size:14px;color:rgba(255,255,255,.7);margin-top:3px">Сергей · м 234 ор 77</div>
+                  </div>
+                  <div style="text-align:right">
+                    <div style="font:700 28px/1 -apple-system,'SF Pro Display',sans-serif;color:#fff">9:41</div>
+                    <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:2px">~14 мин</div>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:0">
+                  <span style="width:11px;height:11px;border-radius:50%;background:#4ADE80;flex:none;display:flex;align-items:center;justify-content:center"><span style="width:4px;height:4px;border-radius:50%;background:#12351F"></span></span>
+                  <span style="flex:1;height:3px;background:#4ADE80"></span>
+                  <span style="width:22px;height:22px;border-radius:11px;background:#fff;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;box-shadow:0 0 0 3px rgba(255,255,255,.18)">🛵</span>
+                  <span style="flex:1;height:3px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.5) 0 3px,transparent 3px 8px)"></span>
+                  <span style="width:11px;height:13px;background:#FB923C;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <div style="flex:1;height:36px;border-radius:10px;background:rgba(255,255,255,.18);color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;font:600 14px/1 -apple-system,sans-serif">✆ Курьеру</div>
+                  <div style="flex:1;height:36px;border-radius:10px;background:rgba(255,255,255,.18);color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;font:600 14px/1 -apple-system,sans-serif">⇗ Поделиться</div>
+                </div>
+              </div>
+              <div style="position:relative;margin:14px 12px 0;background:rgba(255,255,255,.1);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+                <span style="width:20px;height:20px;border-radius:5px;background:#34C759;flex:none"></span>
+                <span style="font-size:14px;color:rgba(255,255,255,.85);flex:1">Заказ №4418 — ищем курьера</span>
+                <span style="font-size:13px;color:rgba(255,255,255,.5)">2 мин</span>
+              </div>
+              <div style="position:absolute;left:0;right:0;bottom:22px;display:flex;justify-content:space-between;padding:0 40px;color:rgba(255,255,255,.75);font-size:19px"><span>⌦</span><span>◉</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Dynamic Island · три размера</div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:12px;color:#8E8E93">Compact — курьер едет</div>
+              <div style="width:393px;height:104px;border-radius:26px;background:linear-gradient(#1B2A3A,#12202E);position:relative;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.16)">
+                <div style="position:absolute;left:50%;top:16px;transform:translateX(-50%);height:37px;min-width:126px;padding:0 12px;border-radius:19px;background:#000;display:flex;align-items:center;gap:9px">
+                  <span style="font-size:14px">🛵</span>
+                  <span style="width:1px;height:16px;background:rgba(255,255,255,.2)"></span>
+                  <span style="font:600 14px/1 -apple-system,sans-serif;color:#fff">14 мин</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:12px;color:#8E8E93">Minimal — свёрнуто до глифа со статусом</div>
+              <div style="width:393px;height:104px;border-radius:26px;background:linear-gradient(#1B2A3A,#12202E);position:relative;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.16)">
+                <div style="position:absolute;left:50%;top:16px;transform:translateX(-50%);height:37px;width:126px;border-radius:19px;background:#000"></div>
+                <div style="position:absolute;left:calc(50% + 78px);top:16px;width:37px;height:37px;border-radius:19px;background:#000;display:flex;align-items:center;justify-content:center;font-size:15px">🛵</div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:12px;color:#8E8E93">Expanded — long press</div>
+              <div style="width:393px;height:250px;border-radius:26px;background:linear-gradient(#1B2A3A,#12202E);position:relative;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.16)">
+                <div style="position:absolute;left:12px;right:12px;top:14px;border-radius:32px;background:#000;padding:16px 18px 18px;display:flex;flex-direction:column;gap:13px">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <span style="width:38px;height:38px;border-radius:19px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none">🛵</span>
+                    <div style="flex:1">
+                      <div style="font:600 16px/1.2 -apple-system,sans-serif;color:#fff">Едет к получателю</div>
+                      <div style="font-size:13px;color:rgba(255,255,255,.6);margin-top:2px">Заказ №4417 · Каширское, 52</div>
+                    </div>
+                    <div style="text-align:right"><div style="font:700 22px/1 -apple-system,'SF Pro Display',sans-serif;color:#fff">9:41</div><div style="font-size:11px;color:rgba(255,255,255,.55)">~14 мин</div></div>
+                  </div>
+                  <div style="display:flex;align-items:center">
+                    <span style="width:10px;height:10px;border-radius:50%;background:#4ADE80;flex:none"></span>
+                    <span style="flex:1;height:3px;background:#4ADE80"></span>
+                    <span style="width:20px;height:20px;border-radius:10px;background:#fff;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px">🛵</span>
+                    <span style="flex:1;height:3px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.45) 0 3px,transparent 3px 8px)"></span>
+                    <span style="width:10px;height:12px;background:#FB923C;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span>
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <div style="flex:1;height:34px;border-radius:9px;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;font:600 13px/1 -apple-system,sans-serif">✆ Курьеру</div>
+                    <div style="flex:1;height:34px;border-radius:9px;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;font:600 13px/1 -apple-system,sans-serif">✆ Получателю</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:12px;width:330px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Состояния активности</div>
+            <div style="background:#fff;border-radius:16px;padding:8px 0;box-shadow:0 12px 34px rgba(0,0,0,.08)">
+              <div style="padding:11px 16px;border-bottom:.5px solid #F2F2F5"><div style="font:600 14px/1.3 -apple-system,sans-serif;color:#000">Ищем курьера</div><div style="font-size:13px;line-height:1.45;color:#3C3C43;margin-top:2px">Нет ETA — вместо него «обычно 3–7 мин». Глиф дышит, время не врёт.</div></div>
+              <div style="padding:11px 16px;border-bottom:.5px solid #F2F2F5"><div style="font:600 14px/1.3 -apple-system,sans-serif;color:#000">Едет забирать</div><div style="font-size:13px;line-height:1.45;color:#3C3C43;margin-top:2px">Первый сегмент активен, звонок — курьеру.</div></div>
+              <div style="padding:11px 16px;border-bottom:.5px solid #F2F2F5"><div style="font:600 14px/1.3 -apple-system,sans-serif;color:#000">Забрал</div><div style="font-size:13px;line-height:1.45;color:#3C3C43;margin-top:2px">Единственный момент, где уместен bounce: посылка физически ушла.</div></div>
+              <div style="padding:11px 16px;border-bottom:.5px solid #F2F2F5"><div style="font:600 14px/1.3 -apple-system,sans-serif;color:#000">Едет к получателю</div><div style="font-size:13px;line-height:1.45;color:#3C3C43;margin-top:2px">Второй звонок появляется — получателю.</div></div>
+              <div style="padding:11px 16px;border-bottom:.5px solid #F2F2F5"><div style="font:600 14px/1.3 -apple-system,sans-serif;color:#000">Вручено</div><div style="font-size:13px;line-height:1.45;color:#3C3C43;margin-top:2px">Финальное состояние, 4 минуты на экране, затем само уходит.</div></div>
+              <div style="padding:11px 16px"><div style="font:600 14px/1.3 -apple-system,sans-serif;color:#A8341A">Не вручили / отменён</div><div style="font-size:13px;line-height:1.45;color:#3C3C43;margin-top:2px">Тоже финальное, но остаётся до тапа: это то, о чём нужно узнать.</div></div>
+            </div>
+            <div style="background:#FBF7EE;border:1px solid #EFE2CB;border-radius:16px;padding:15px;font-size:13.5px;line-height:1.55;color:#3C3C43">
+              <strong style="color:#000">Обновление.</strong> Push-to-start и ActivityKit-пуши требуют своего сервера — у приложения его нет. Значит: активность стартует локально при создании заказа и обновляется, когда приложение опрашивает журнал; на блокировке время показываем как «в 9:41», а не тикающим таймером, чтобы не изображать точность, которой нет.
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="5b" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">5b</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Widgets — one waiting, one working</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">Two jobs only. <strong>Waiting:</strong> the active delivery, so the Home Screen answers "where is it" without a tap. <strong>Working:</strong> repeat a saved route, so tomorrow's warehouse run starts from the Home Screen — an App Intent that opens the draft pre-filled, never one that orders silently. Money must not move from a widget tap.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Home Screen · small + medium</div>
+            <div style="width:400px;padding:28px 24px;border-radius:34px;background:linear-gradient(150deg,#3A4A5C,#20303F);display:flex;flex-wrap:wrap;gap:20px;box-shadow:0 18px 44px rgba(0,0,0,.2)">
+              <div style="width:158px;height:158px;border-radius:26px;background:#fff;padding:15px;box-sizing:border-box;display:flex;flex-direction:column;gap:6px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-size:15px">🛵</span><span style="font:600 13px/1 -apple-system,sans-serif;color:#8E8E93">№4417</span>
+                </div>
+                <div style="font:700 26px/1 -apple-system,'SF Pro Display',sans-serif;color:#000">9:41</div>
+                <div style="font-size:13px;line-height:1.25;color:#3C3C43;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Едет к получателю</div>
+                <div style="margin-top:auto;display:flex;align-items:center">
+                  <span style="width:8px;height:8px;border-radius:50%;background:#1E8E3E;flex:none"></span>
+                  <span style="flex:1;height:2px;background:#1E8E3E"></span>
+                  <span style="width:14px;height:14px;border-radius:7px;background:#fff;border:2px solid #0A6DD8;flex:none"></span>
+                  <span style="flex:1;height:2px;background:repeating-linear-gradient(90deg,#C4C4C6 0 2px,transparent 2px 6px)"></span>
+                  <span style="width:8px;height:10px;background:#D55E00;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span>
+                </div>
+                <div style="font-size:11px;line-height:1.2;color:#8E8E93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Каширское шоссе, 52</div>
+              </div>
+              <div style="width:158px;height:158px;border-radius:26px;background:#fff;padding:15px;box-sizing:border-box;display:flex;flex-direction:column;gap:9px;overflow:hidden">
+                <div style="font:600 13px/1 -apple-system,sans-serif;color:#8E8E93">Повторить</div>
+                <div style="display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:11px;background:#F2F2F7">
+                  <span style="width:9px;height:11px;background:#8E5A3C;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span>
+                  <span style="font-size:12px;line-height:1.25;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Склад → Арбат</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:11px;background:#F2F2F7">
+                  <span style="width:9px;height:11px;background:#4B4BA8;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span>
+                  <span style="font-size:12px;line-height:1.25;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Дом → ПВЗ</span>
+                </div>
+
+              </div>
+              <div style="width:336px;height:158px;border-radius:26px;background:#fff;padding:16px;box-sizing:border-box;display:flex;gap:16px">
+                <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="display:flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:11px;background:#0A6DD8;color:#fff;font:600 12px/1 -apple-system,sans-serif">◉ Едет</span>
+                    <span style="font-size:13px;color:#8E8E93">Заказ №4417</span>
+                  </div>
+                  <div style="display:flex;align-items:baseline;gap:8px"><span style="font:700 26px/1 -apple-system,'SF Pro Display',sans-serif;color:#000">9:41</span><span style="font-size:13px;color:#8E8E93">~14 мин</span></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;margin-top:2px">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:50%;background:#1E8E3E;flex:none"></span><span style="font-size:13px;color:#3C3C43">Москворечье, 6</span></div>
+                    <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:11px;background:#D55E00;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span><span style="font-size:13px;color:#3C3C43">Каширское шоссе, 52</span></div>
+                  </div>
+                  <div style="margin-top:auto;font-size:12px;color:#8E8E93">Сергей · м 234 ор 77</div>
+                </div>
+                <div style="width:1px;background:#EDEDF0"></div>
+                <div style="width:112px;display:flex;flex-direction:column;gap:7px">
+                  <div style="font:600 12px/1 -apple-system,sans-serif;color:#8E8E93">Ещё в работе</div>
+                  <div style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#8A5A00;flex:none"></span><span style="font-size:12px;color:#3C3C43">№4418 ищем</span></div>
+                  <div style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#1E8E3E;flex:none"></span><span style="font-size:12px;color:#3C3C43">№4416 вручено</span></div>
+                  <div style="margin-top:auto;height:32px;border-radius:9px;background:#E9F0FB;color:#007AFF;display:flex;align-items:center;justify-content:center;font:600 13px/1 -apple-system,sans-serif">Новая</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Экран блокировки · accessory + StandBy</div>
+            <div style="width:340px;padding:26px 22px;border-radius:32px;background:linear-gradient(#101820,#1E2B38);display:flex;flex-direction:column;gap:20px;box-shadow:0 18px 44px rgba(0,0,0,.2)">
+              <div style="display:flex;gap:16px;align-items:center">
+                <div style="width:72px;height:72px;border-radius:36px;border:3px solid rgba(255,255,255,.28);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff">
+                  <span style="font-size:15px;line-height:1">🛵</span>
+                  <span style="font:600 13px/1 -apple-system,sans-serif;margin-top:3px">14м</span>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:5px;color:#fff">
+                  <div style="font:600 14px/1.2 -apple-system,sans-serif">🛵 №4417 · 9:41</div>
+                  <div style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.3">accessoryRectangular: статус + ETA, без графики</div>
+                </div>
+              </div>
+              <div style="height:1px;background:rgba(255,255,255,.14)"></div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="font-size:12px;color:rgba(255,255,255,.55)">StandBy · ночью на зарядке</div>
+                <div style="border-radius:18px;background:rgba(255,255,255,.08);padding:16px;display:flex;align-items:center;gap:14px">
+                  <div style="font:700 34px/1 -apple-system,'SF Pro Display',sans-serif;color:#FF9F0A">9:41</div>
+                  <div style="flex:1"><div style="font:600 14px/1.2 -apple-system,sans-serif;color:#fff">Едет к получателю</div><div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:2px">Заказ №4417</div></div>
+                </div>
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:16px;padding:16px;box-shadow:0 12px 34px rgba(0,0,0,.08);font-size:13.5px;line-height:1.55;color:#3C3C43">
+              <strong style="color:#000">Правило для всех размеров.</strong> Виджет никогда не показывает цену как единственное содержимое и никогда не действует необратимо. Нет активной доставки — вместо пустоты «Повторить», а не «Нет заказов».
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="5c" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">5c</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Notifications — earn each one</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">While a Live Activity is on screen, routine progress needs no push — that's the whole point of it. Push only for what the sender must act on: courier assigned, courier at the door, delivered, and the two failures. Every notification carries the order number in the title, because it will be read next to a customer's message. Actions come from the notification, not from opening the app.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+          <div style="width:400px;padding:26px 20px;border-radius:34px;background:linear-gradient(#26323E,#141C25);display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 44px rgba(0,0,0,.2)">
+            <div style="background:rgba(255,255,255,.92);border-radius:20px;padding:14px;display:flex;gap:11px">
+              <span style="width:38px;height:38px;border-radius:9px;background:#0A6DD8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;flex:none">▣</span>
+              <div style="flex:1">
+                <div style="display:flex;align-items:baseline;gap:6px"><span style="font:600 15px/1.2 -apple-system,sans-serif;color:#000;flex:1">Заказ №4417 · курьер у двери</span><span style="font-size:12px;color:#8E8E93">сейчас</span></div>
+                <div style="font-size:14px;line-height:1.4;color:#3C3C43;margin-top:3px">Сергей на Каширском шоссе, 52. Позвонит в кв. 15.</div>
+              </div>
+              <div style="width:42px;height:42px;border-radius:8px;background:#DCD3C6;flex:none;position:relative;overflow:hidden">
+                <div style="position:absolute;inset:0;background:linear-gradient(135deg,#C9BCA8,#EDE4D6)"></div>
+                <div style="position:absolute;left:9px;top:12px;width:24px;height:18px;border-radius:3px;background:rgba(255,255,255,.72)"></div>
+                <div style="position:absolute;right:3px;bottom:3px;height:14px;padding:0 4px;border-radius:7px;background:rgba(0,0,0,.55);color:#fff;font-size:9px;display:flex;align-items:center">3</div>
+              </div>
+            </div>
+            <div style="background:rgba(255,255,255,.92);border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:11px">
+              <div style="display:flex;gap:11px">
+                <span style="width:38px;height:38px;border-radius:9px;background:#A8341A;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;flex:none">⚠</span>
+                <div style="flex:1">
+                  <div style="display:flex;align-items:baseline;gap:6px"><span style="font:600 15px/1.2 -apple-system,sans-serif;color:#000;flex:1">Заказ №4415 · не смогли вручить</span><span style="font-size:12px;color:#8E8E93">3 мин</span></div>
+                  <div style="font-size:14px;line-height:1.4;color:#3C3C43;margin-top:3px">Получатель не открыл дверь. Посылка у курьера — решите, что делать.</div>
+                </div>
+              </div>
+              <div style="border-radius:12px;overflow:hidden;background:#F2F2F7">
+                <div style="padding:10px 12px;font-size:14px;color:#007AFF;border-bottom:.5px solid #E3E3E8">Позвонить получателю</div>
+                <div style="padding:10px 12px;font-size:14px;color:#007AFF;border-bottom:.5px solid #E3E3E8">Вернуть мне</div>
+                <div style="padding:10px 12px;font-size:14px;color:#3C3C43">Открыть заказ</div>
+              </div>
+            </div>
+            <div style="background:rgba(255,255,255,.92);border-radius:20px;padding:14px;display:flex;gap:11px">
+              <span style="width:38px;height:38px;border-radius:9px;background:#1E8E3E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;flex:none">✓</span>
+              <div style="flex:1">
+                <div style="display:flex;align-items:baseline;gap:6px"><span style="font:600 15px/1.2 -apple-system,sans-serif;color:#000;flex:1">Заказ №4416 · вручено</span><span style="font-size:12px;color:#8E8E93">9:12</span></div>
+                <div style="font-size:14px;line-height:1.4;color:#3C3C43;margin-top:3px">Анна Сидорова получила посылку. 749 ₽.</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="width:360px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Развёрнутое уведомление (long press)</div>
+            <div style="background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,.12)">
+              <div style="padding:15px;display:flex;gap:11px;border-bottom:.5px solid #EDEDF0">
+                <span style="width:36px;height:36px;border-radius:9px;background:#0A6DD8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none">🛵</span>
+                <div style="flex:1"><div style="font:600 15px/1.2 -apple-system,sans-serif;color:#000">Заказ №4417 · курьер назначен</div><div style="font-size:13px;color:#8E8E93;margin-top:2px">Сергей будет на Москворечье к 9:12</div></div>
+              </div>
+              <div style="height:150px;position:relative;background:#EDE8DF">
+                <div style="position:absolute;inset:0;background:repeating-linear-gradient(64deg,#E4DED3 0 2px,transparent 2px 60px),repeating-linear-gradient(-28deg,#E4DED3 0 2px,transparent 2px 74px),#EDE8DF"></div>
+                <svg viewBox="0 0 360 150" style="position:absolute;inset:0;width:360px;height:150px"><path d="M70 104 C 120 96, 160 84, 210 76" fill="none" stroke="#007AFF" stroke-width="5" stroke-linecap="round"></path><path d="M210 76 C 250 68, 276 60, 296 54" fill="none" stroke="#B9C6D4" stroke-width="5" stroke-linecap="round" stroke-dasharray="1 9"></path></svg>
+                <div style="position:absolute;left:62px;top:96px;width:16px;height:16px;border-radius:50%;background:#1E8E3E;box-shadow:0 0 0 3px rgba(255,255,255,.9)"></div>
+                <div style="position:absolute;left:198px;top:64px;width:26px;height:26px;border-radius:13px;background:#fff;box-shadow:0 2px 7px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;font-size:13px">🛵</div>
+                <div style="position:absolute;left:288px;top:40px;width:22px;height:26px;background:#D55E00;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></div>
+              </div>
+              <div style="padding:12px 15px 6px;display:flex;gap:7px">
+                <div style="width:78px;height:78px;border-radius:9px;background:#DCD3C6;flex:none;position:relative;overflow:hidden">
+                  <div style="position:absolute;inset:0;background:linear-gradient(135deg,#C9BCA8,#EDE4D6)"></div>
+                  <div style="position:absolute;left:16px;top:22px;width:46px;height:34px;border-radius:4px;background:rgba(255,255,255,.72)"></div>
+                </div>
+                <div style="width:78px;height:78px;border-radius:9px;background:#D6CFC2;flex:none;position:relative;overflow:hidden">
+                  <div style="position:absolute;inset:0;background:linear-gradient(160deg,#CFC4B2,#E6DCCC)"></div>
+                  <div style="position:absolute;left:22px;top:18px;width:34px;height:42px;border-radius:4px;background:rgba(255,255,255,.66)"></div>
+                </div>
+                <div style="width:78px;height:78px;border-radius:9px;background:#D2CABC;flex:none;position:relative;overflow:hidden">
+                  <div style="position:absolute;inset:0;background:linear-gradient(200deg,#C7BCA9,#E2D8C8)"></div>
+                  <div style="position:absolute;left:14px;top:26px;width:50px;height:26px;border-radius:4px;background:rgba(255,255,255,.7)"></div>
+                </div>
+                <div style="width:34px;height:78px;border-radius:9px;background:#F2F2F7;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8E8E93">＋2</div>
+              </div>
+              <div style="padding:0 15px 12px;font-size:12px;color:#8E8E93">Ваши фото посылки — что именно уехало</div>
+              <div style="padding:0 15px 13px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px;color:#3C3C43;flex:1">Москворечье, 6 → Каширское шоссе, 52</span></div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <span style="height:26px;padding:0 9px;border-radius:13px;background:#F2F2F7;font-size:13px;color:#3C3C43;display:flex;align-items:center">Курьер · 749 ₽</span>
+                  <span style="height:26px;padding:0 9px;border-radius:13px;background:#F2F2F7;font-size:13px;color:#3C3C43;display:flex;align-items:center">1 вещь · 2 кг</span>
+                </div>
+              </div>
+              <div style="border-top:.5px solid #EDEDF0;display:flex">
+                <div style="flex:1;padding:12px;text-align:center;font:600 14px/1 -apple-system,sans-serif;color:#007AFF;border-right:.5px solid #EDEDF0">Позвонить</div>
+                <div style="flex:1;padding:12px;text-align:center;font:600 14px/1 -apple-system,sans-serif;color:#007AFF">Поделиться</div>
+              </div>
+            </div>
+            <div style="background:#FBF7EE;border:1px solid #EFE2CB;border-radius:16px;padding:15px;font-size:13.5px;line-height:1.55;color:#3C3C43">
+              <strong style="color:#000">Реализация.</strong> Карта в развёрнутом виде — notification content extension, снимок маршрута, не живая карта. Фото посылки — <code style="font-size:13px">UNNotificationAttachment</code>: первое становится миниатюрой уже в свёрнутом баннере, остальные каруселью под картой. Провал вручения — <code style="font-size:13px">.timeSensitive</code>; вручено — обычный.<br><br><strong style="color:#000">Обновлять или добавлять.</strong> Одна нить на заказ (<code style="font-size:13px">threadIdentifier</code> = ваш номер заказа). Смена статуса — новое уведомление: о ней нужно узнать. Уточнение внутри статуса (сдвинулся ETA, курьер сменил машину) — тот же <code style="font-size:13px">identifier</code>, то есть замена последнего, без второго звука. Заказ закрыт — снимаем всё лишнее из центра через <code style="font-size:13px">removeDeliveredNotifications</code>, оставляя финальное.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="5d" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">5d</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Ways in, and one way out</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">The Share Sheet is the answer to a question board 2 solved awkwardly: senders receive addresses in chats. Share a Maps place or a plain address into the app and it opens a draft with that point filled — better than any paste affordance, because it's where the address already is. Sharing outward matters just as much: the customer wants to know where their parcel is, and today that's a manual retyping.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Share Extension · адрес из чата</div>
+            <div style="width:393px;height:600px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#F2F2F7;display:flex;flex-direction:column;justify-content:flex-end">
+              <div style="position:absolute;inset:0;background:#E7E9EE"></div>
+              <div style="position:absolute;left:14px;right:14px;top:24px;display:flex;flex-direction:column;gap:8px">
+                <div style="align-self:flex-start;max-width:76%;background:#fff;border-radius:16px;padding:10px 13px;font-size:15px;line-height:1.35;color:#000;box-shadow:0 1px 2px rgba(0,0,0,.07)">Привезите, пожалуйста, на Каширское шоссе, 52, подъезд 2, кв. 15</div>
+                <div style="align-self:flex-end;max-width:70%;background:#0A6DD8;border-radius:16px;padding:10px 13px;font-size:15px;line-height:1.35;color:#fff">Оформляю доставку, скину трек</div>
+              </div>
+              <div style="position:absolute;inset:0;background:rgba(0,0,0,.3)"></div>
+              <div style="position:relative;background:#F7F7F9;border-radius:18px 18px 0 0;padding:8px 0 30px">
+                <div style="width:36px;height:5px;border-radius:3px;background:#D4D4D8;margin:0 auto 12px"></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px 12px">
+                  <span style="font-size:17px;color:#007AFF">Отмена</span>
+                  <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">В доставку</span>
+                  <span style="font-size:17px;font-weight:600;color:#007AFF">Дальше</span>
+                </div>
+                <div style="margin:0 16px 10px;background:#fff;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+                  <div style="font-size:13px;color:#8E8E93">Нашли адрес в тексте</div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="width:14px;height:16px;background:#D55E00;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span>
+                    <span style="flex:1;font-size:17px;color:#000">Каширское шоссе, 52</span>
+                  </div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <span style="height:28px;padding:0 10px;border-radius:14px;background:#F2F2F7;font-size:14px;color:#3C3C43;display:flex;align-items:center">подъезд 2</span>
+                    <span style="height:28px;padding:0 10px;border-radius:14px;background:#F2F2F7;font-size:14px;color:#3C3C43;display:flex;align-items:center">кв. 15</span>
+                  </div>
+                </div>
+                <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;flex:1">Это точка</span><span style="font-size:17px;color:#3C3C43">доставки ⌄</span></div>
+                  <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;flex:1">Откуда</span><span style="font-size:17px;color:#3C3C43">Склад на Невском ⌄</span></div>
+                </div>
+                <div style="padding:9px 32px 0;font-size:13px;line-height:1.4;color:#8E8E93">Точку покажем на карте до заказа — адрес из текста можно понять неверно.</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="width:360px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Исходящая ссылка для получателя</div>
+            <div style="background:#fff;border-radius:18px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px">
+              <div style="background:#F2F2F7;border-radius:14px;padding:13px;display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;align-items:center;gap:8px"><span style="display:flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:11px;background:#0A6DD8;color:#fff;font:600 12px/1 -apple-system,sans-serif">◉ Едет</span><span style="font-size:13px;color:#8E8E93">Заказ №4417</span></div>
+                <div style="font-size:15px;color:#000">Курьер будет у вас к 9:41</div>
+                <div style="font-size:13px;color:#8E8E93">Каширское шоссе, 52 · Сергей, м 234 ор 77</div>
+              </div>
+              <div style="font-size:13.5px;line-height:1.55;color:#3C3C43">Текст, а не ссылка на приложение: получатель ничего не устанавливает. Если у перевозчика есть публичная страница трекинга — добавляем её строкой ниже.</div>
+              <div style="display:flex;gap:8px">
+                <div style="flex:1;height:40px;border-radius:11px;background:#007AFF;color:#fff;display:flex;align-items:center;justify-content:center;font:600 15px/1 -apple-system,sans-serif">Скопировать</div>
+                <div style="flex:1;height:40px;border-radius:11px;background:#E9F0FB;color:#007AFF;display:flex;align-items:center;justify-content:center;font:600 15px/1 -apple-system,sans-serif">Поделиться</div>
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:18px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.08)">
+              <div style="font:600 15px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:9px">App Intents · три, не тридцать</div>
+              <div style="display:flex;flex-direction:column;gap:9px;font-size:13.5px;line-height:1.5;color:#3C3C43">
+                <div><strong style="color:#000">«Где моя доставка»</strong> — Siri and Spotlight read the status aloud; no UI needed.</div>
+                <div><strong style="color:#000">«Повторить доставку в …»</strong> — opens a pre-filled draft. Parameterised by saved place, so it works from a Shortcut.</div>
+                <div><strong style="color:#000">«Отправить по заказу …»</strong> — takes the sender's own order number, which is the identifier they think in.</div>
+              </div>
+              <div style="height:.5px;background:#EDEDF0;margin:13px 0"></div>
+              <div style="font-size:13.5px;line-height:1.55;color:#3C3C43"><strong style="color:#000">Spotlight.</strong> Index completed orders by custom-field values via <code style="font-size:13px">CSSearchableItem</code>: typing «4417» in Spotlight finds the delivery. That is the payoff of <a href="#4b">4b</a> that lives outside the app entirely.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="5e" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">5e</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">The shared set — five components, four targets</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">Widgets and Live Activities can't import the app target, so anything shared must live in a framework or local package below both. The test for membership: <strong>does it render from plain values with no controller, no network, no environment?</strong> Five things pass, and they're the five that appear on every surface above. Everything else stays in the app.</p>
+
+        <div style="background:#fff;border-radius:18px;padding:8px 0;box-shadow:0 12px 34px rgba(0,0,0,.08);max-width:1080px">
+          <div style="display:grid;grid-template-columns:190px 1fr 300px;padding:12px 24px;font-size:12px;font-weight:600;color:#8E8E93;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #EDEDF0">
+            <span>Component</span><span>Renders from</span><span>Used by</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 1fr 300px;padding:13px 24px;border-bottom:.5px solid #F2F2F5;align-items:center">
+            <span style="font-size:15px;color:#000">StatusChip</span>
+            <span style="font-size:14px;color:#3C3C43">status enum → colour, glyph, text. Never colour alone</span>
+            <span style="font-size:14px;color:#3C3C43">app · widget · activity · notification</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 1fr 300px;padding:13px 24px;border-bottom:.5px solid #F2F2F5;align-items:center">
+            <span style="font-size:15px;color:#000">RouteLine</span>
+            <span style="font-size:14px;color:#3C3C43">points + progress → dots, teardrop, solid/dashed segments</span>
+            <span style="font-size:14px;color:#3C3C43">app · widget · activity · notification</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 1fr 300px;padding:13px 24px;border-bottom:.5px solid #F2F2F5;align-items:center">
+            <span style="font-size:15px;color:#000">PointBadge</span>
+            <span style="font-size:14px;color:#3C3C43">role + index → the <a href="#2c">2c</a> shape/glyph pair at three sizes</span>
+            <span style="font-size:14px;color:#3C3C43">app · widget · notification</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 1fr 300px;padding:13px 24px;border-bottom:.5px solid #F2F2F5;align-items:center">
+            <span style="font-size:15px;color:#000">ETALabel</span>
+            <span style="font-size:14px;color:#3C3C43">date + confidence → «в 9:41», «~14 мин», or «обычно 3–7 мин» when there is no estimate</span>
+            <span style="font-size:14px;color:#3C3C43">app · widget · activity</span>
+          </div>
+          <div style="display:grid;grid-template-columns:190px 1fr 300px;padding:13px 24px;align-items:center">
+            <span style="font-size:15px;color:#000">OrderIdentity</span>
+            <span style="font-size:14px;color:#3C3C43">custom fields → the sender's own order number, formatted once</span>
+            <span style="font-size:14px;color:#3C3C43">app · widget · activity · notification · Spotlight</span>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:22px;max-width:1080px">
+          <div style="flex:1;min-width:300px;background:#fff;border-radius:16px;padding:20px;box-shadow:0 12px 34px rgba(0,0,0,.08)">
+            <div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:8px">Sizing, not styling</div>
+            <p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">Each takes a <code style="font-size:13px">size</code> of compact / regular / expanded rather than reading Dynamic Type directly — a widget can't grow, so it must shrink content instead. Same component, three densities, one place to change them.</p>
+          </div>
+          <div style="flex:1;min-width:300px;background:#fff;border-radius:16px;padding:20px;box-shadow:0 12px 34px rgba(0,0,0,.08)">
+            <div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:8px">Colour lives with them</div>
+            <p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">The asset catalog moves into the same package, otherwise the widget's green drifts from the app's. Widgets render on unpredictable backgrounds, so every token needs a light and dark value and none may rely on the app's material.</p>
+          </div>
+          <div style="flex:1;min-width:300px;background:#fff;border-radius:16px;padding:20px;box-shadow:0 12px 34px rgba(0,0,0,.08)">
+            <div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:8px">One store, one truth</div>
+            <p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">Widgets read the order store directly, so it belongs in an App Group from day one. Retrofitting that after Keychain and history exist is the expensive version of this decision.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="5f" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">5f</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">HIG audit — what we're getting wrong</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">Read against the guidelines rather than against my own boards. Six findings, ordered by how much they'd cost to fix later.</p>
+
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:1080px">
+          <div style="background:#fff;border-radius:16px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.08);display:flex;gap:16px;align-items:flex-start">
+            <span style="width:26px;height:26px;border-radius:13px;background:#A8341A;color:#fff;font:700 13px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none;margin-top:2px">1</span>
+            <div><div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:5px">The tab bar is wrong for this app <span style="font-weight:400;font-size:14px;color:#14682F">— confirmed, and already avoided in the demo</span></div><p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">«New Delivery» is an <em>action</em>, and tabs are for peer locations, not verbs. It also means a tab switch destroys the draft. Two tabs — Доставки, Настройки — with a prominent «Новая доставка» on the list, presenting the flow modally: the compose idiom, and the draft's lifetime becomes legible. The regular-width version of the same structure is <a href="#6c">6c</a>, where the list becomes a sidebar and ⌘N replaces the button.</p></div>
+          </div>
+          <div style="background:#fff;border-radius:16px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.08);display:flex;gap:16px;align-items:flex-start">
+            <span style="width:26px;height:26px;border-radius:13px;background:#A8341A;color:#fff;font:700 13px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none;margin-top:2px">2</span>
+            <div><div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:5px">Ordering is irreversible and nothing acknowledges that</div><p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">Money moves and a courier is dispatched. It needs a confirmation step that restates route, price and tariff — and given how <code style="font-size:13px">.confirmationDialog</code> reads on a small screen, a review sheet is the honest form. It's also the natural home for the required-custom-field check from <a href="#4b">4b</a>.</p></div>
+          </div>
+          <div style="background:#fff;border-radius:16px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.08);display:flex;gap:16px;align-items:flex-start">
+            <span style="width:26px;height:26px;border-radius:13px;background:#8A5A00;color:#fff;font:700 13px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none;margin-top:2px">3</span>
+            <div><div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:5px">Phone, address and name fields aren't declaring themselves</div><p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">Every contact field should carry <code style="font-size:13px">textContentType</code> plus the matching keyboard type — <code style="font-size:13px">.phonePad</code> for phone, <code style="font-size:13px">.numberPad</code> for flat and floor, <code style="font-size:13px">.decimalPad</code> for weight and cost — so autofill and the right keys arrive together. Addresses should offer the Contacts picker rather than only typing. A sender entering a customer's details is always copying from somewhere: the same row also carries the camera route from <a href="#6a">6a</a>, whose implementation can be deferred without leaving a hole in the UI, since manual entry stays a complete path.</p></div>
+          </div>
+          <div style="background:#fff;border-radius:16px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.08);display:flex;gap:16px;align-items:flex-start">
+            <span style="width:26px;height:26px;border-radius:13px;background:#8A5A00;color:#fff;font:700 13px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none;margin-top:2px">4</span>
+            <div><div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:5px">Offline is a normal condition, not an error</div><p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">Basements, lifts, loading bays. History and saved places must be fully readable offline; only pricing and ordering need the network, and they should say which one is missing rather than failing generically. A draft must survive being written offline.</p></div>
+          </div>
+          <div style="background:#fff;border-radius:16px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.08);display:flex;gap:16px;align-items:flex-start">
+            <span style="width:26px;height:26px;border-radius:13px;background:#6C6C70;color:#fff;font:700 13px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none;margin-top:2px">5</span>
+            <div><div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:5px">The map needs a VoiceOver equivalent, not a label</div><p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">Callouts in <a href="#4a">4a</a> are a shortcut for people who think in maps; the same content must be reachable through the row's disclosure. Confirm-pin needs a spoken address plus a "point moved" announcement, and the tariff strip needs each card as its own element with limits in the label — otherwise choosing a tariff is guesswork.</p></div>
+          </div>
+          <div style="background:#fff;border-radius:16px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.08);display:flex;gap:16px;align-items:flex-start">
+            <span style="width:26px;height:26px;border-radius:13px;background:#6C6C70;color:#fff;font:700 13px/1 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;flex:none;margin-top:2px">6</span>
+            <div><div style="font:600 16px/1.3 -apple-system,sans-serif;color:#000;margin-bottom:5px">Small wins, and one that isn't small</div><p style="font-size:14px;line-height:1.6;color:#3C3C43;margin:0;text-wrap:pretty">Swipe actions on history rows (повторить, наоборот, удалить) — the standard idiom for a list of records. Context menu on a saved place. <code style="font-size:13px">.searchable</code> on Доставки, since <a href="#4b">4b</a> made orders findable. The regular-width layout is the one that isn't small: designed as <strong>iPad with a keyboard</strong> it yields the Mac app nearly for free, and it's drawn in <a href="#6c">6c</a> with its shortcut set.</p></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>

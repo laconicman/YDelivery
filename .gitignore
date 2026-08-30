@@ -26,3 +26,4 @@ secrets.*
 #   *.xcodeproj      — this repo *is* the app, so the project file is the product.
 #   Package.resolved — an app pins its dependencies; a library lets consumers resolve their
 #                      own. See the workspace CLAUDE.md.
+.thumbnail

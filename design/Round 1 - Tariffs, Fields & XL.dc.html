@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+  body { margin:0; background:#E9E9EC; -webkit-font-smoothing:antialiased; }
+  a { color:#007AFF; } a:hover { color:#0060DF; }
+</style>
+</helmet>
+
+<div style="font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;padding:56px 64px 96px;background:#E9E9EC;box-sizing:border-box">
+
+  <div style="max-width:1160px;margin-bottom:50px">
+    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#8E8E93;font-weight:600">Round 1 · Board 3 · tariffs, fields, accessibility</div>
+    <h1 style="font:700 36px/1.12 -apple-system,'SF Pro Display',sans-serif;margin:10px 0 12px;color:#000">Explaining tariffs, and hiding a large form</h1>
+    <p style="font-size:15px;line-height:1.6;color:#3C3C43;max-width:66ch;margin:0 0 12px;text-wrap:pretty">Three shapes for the beginner explainer, so you can judge them against each other rather than in the abstract. Then the part the dossier under-counts: your demo shows an order carries far more than two addresses — address parts, contacts with extension codes, per-item cost and currency and dimensions and point mapping, loaders bounded by tariff, a due date bounded by a window. The proposal is progressive disclosure with typed, self-formatting rows, not a Borzo wall of fields.</p>
+    <p style="font-size:14px;line-height:1.6;color:#6C6C70;max-width:66ch;margin:0;text-wrap:pretty">Options: <a href="#3a">3a</a> vertical list · <a href="#3b">3b</a> paged cards · <a href="#3c">3c</a> expand-in-strip · <a href="#3d">3d</a> parcel &amp; options · <a href="#3e">3e</a> saved place · <a href="#3f">3f</a> accessibility-XL.</p>
+  </div>
+
+  <section style="display:block">
+    <div style="display:flex;flex-direction:column;gap:66px">
+
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Beginner explainer — three shapes</h2>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">All three read their copy from the provider's <code style="font-size:13px">supported_requirements</code>, so limits and descriptions are data. The auto-open rule is the same in each: it opens itself until the first successful order, then it lives behind the ⓘ.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:30px 26px;align-items:flex-start">
+
+          <div id="3a" style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;padding:0 8px;border-radius:12px;background:#007AFF;color:#fff;font:700 13px/1 -apple-system,sans-serif">3a</span>
+              <span style="font-size:13px;font-weight:600;color:#3C3C43">Вертикальный список — безопаснее всего на XL</span>
+            </div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#3A3A3C;display:flex;flex-direction:column;justify-content:flex-end">
+              <div style="position:absolute;inset:0;background:#EDE8DF"></div>
+              <div style="position:absolute;inset:0;background:rgba(0,0,0,.32)"></div>
+              <div style="position:relative;background:#F7F7F9;border-radius:16px 16px 0 0;padding:8px 0 34px;max-height:760px;overflow:hidden">
+                <div style="width:36px;height:5px;border-radius:3px;background:#D4D4D8;margin:0 auto 14px"></div>
+                <div style="padding:0 18px 4px;display:flex;align-items:center;justify-content:space-between">
+                  <span style="font:700 22px/1.2 -apple-system,'SF Pro Display',sans-serif;color:#000">Как доставить</span>
+                  <span style="font-size:17px;color:#007AFF">Готово</span>
+                </div>
+                <div style="padding:0 18px 14px;font-size:14px;line-height:1.45;color:#8E8E93">Выберите по весу и размеру посылки.</div>
+                <div style="margin:0 16px;background:#fff;border-radius:14px;border:2px solid #007AFF;padding:14px;display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <span style="font-size:27px;line-height:1">🛵</span>
+                    <div style="flex:1"><div style="font:600 18px/1.2 -apple-system,sans-serif;color:#000">Курьер</div><div style="font-size:14px;color:#8E8E93;margin-top:2px">пешком или на самокате</div></div>
+                    <span style="font:700 20px/1 -apple-system,sans-serif;color:#000">749 ₽</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:5px;padding-left:39px">
+                    <div style="font-size:14px;color:#3C3C43">до 10 кг</div>
+                    <div style="font-size:14px;color:#3C3C43">80 см в длину, 50 в ширину, 50 в высоту</div>
+                  </div>
+                  <div style="display:flex;gap:8px;padding-left:39px;flex-wrap:wrap">
+                    <span style="height:30px;padding:0 11px;border-radius:15px;background:#E9F0FB;color:#007AFF;font-size:14px;display:flex;align-items:center">Термосумка</span>
+                    <span style="height:30px;padding:0 11px;border-radius:15px;background:#EDEDF0;color:#3C3C43;font-size:14px;display:flex;align-items:center">На машине</span>
+                  </div>
+                </div>
+                <div style="margin:10px 16px 0;background:#fff;border-radius:14px;border:1px solid #E3E3E8;padding:14px;display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <span style="font-size:27px;line-height:1">🚗</span>
+                    <div style="flex:1"><div style="font:600 18px/1.2 -apple-system,sans-serif;color:#000">Экспресс</div><div style="font-size:14px;color:#8E8E93;margin-top:2px">легковая машина</div></div>
+                    <span style="font:700 20px/1 -apple-system,sans-serif;color:#000">1 190 ₽</span>
+                  </div>
+                  <div style="padding-left:39px;display:flex;flex-direction:column;gap:5px">
+                    <div style="font-size:14px;color:#3C3C43">до 20 кг</div>
+                    <div style="font-size:14px;color:#3C3C43">100 × 60 × 50 см</div>
+                  </div>
+                </div>
+                <div style="margin:10px 16px 0;background:#fff;border-radius:14px;border:1px solid #E3E3E8;padding:14px;display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <span style="font-size:27px;line-height:1">🚚</span>
+                    <div style="flex:1"><div style="font:600 18px/1.2 -apple-system,sans-serif;color:#000">Грузовой</div><div style="font-size:14px;color:#8E8E93;margin-top:2px">фургон, можно с грузчиками</div></div>
+                    <span style="font:700 20px/1 -apple-system,sans-serif;color:#000">3 400 ₽</span>
+                  </div>
+                  <div style="padding-left:39px;display:flex;flex-direction:column;gap:5px">
+                    <div style="font-size:14px;color:#3C3C43">до 300 кг · 170 × 96 × 90 см</div>
+                    <div style="font-size:14px;color:#3C3C43">грузчики — 1 или 2</div>
+                  </div>
+                </div>
+                <div style="margin:14px 16px 0;padding:11px 13px;background:#FDF6F2;border-radius:12px;display:flex;gap:9px;align-items:flex-start">
+                  <span style="font-size:15px;color:#D55E00">⚠</span>
+                  <span style="font-size:14px;line-height:1.45;color:#3C3C43">Ваша посылка 12 кг — в «Курьера» она не поместится.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="3b" style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;padding:0 8px;border-radius:12px;background:#007AFF;color:#fff;font:700 13px/1 -apple-system,sans-serif">3b</span>
+              <span style="font-size:13px;font-weight:600;color:#3C3C43">Карточки листаются — нагляднее, хуже на XL</span>
+            </div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#3A3A3C;display:flex;flex-direction:column;justify-content:flex-end">
+              <div style="position:absolute;inset:0;background:#EDE8DF"></div>
+              <div style="position:absolute;inset:0;background:rgba(0,0,0,.32)"></div>
+              <div style="position:relative;background:#F7F7F9;border-radius:16px 16px 0 0;padding:8px 0 34px">
+                <div style="width:36px;height:5px;border-radius:3px;background:#D4D4D8;margin:0 auto 14px"></div>
+                <div style="padding:0 18px 14px;display:flex;align-items:center;justify-content:space-between">
+                  <span style="font:700 22px/1.2 -apple-system,'SF Pro Display',sans-serif;color:#000">Как доставить</span>
+                  <span style="font-size:17px;color:#007AFF">Готово</span>
+                </div>
+                <div style="display:flex;gap:12px;padding:0 16px 0;align-items:stretch">
+                  <div style="flex:none;width:296px;background:#fff;border-radius:16px;border:2px solid #007AFF;padding:18px;display:flex;flex-direction:column;gap:12px">
+                    <span style="font-size:52px;line-height:1">🛵</span>
+                    <div><div style="font:700 22px/1.2 -apple-system,'SF Pro Display',sans-serif;color:#000">Курьер</div><div style="font-size:15px;color:#8E8E93;margin-top:3px">пешком или на самокате</div></div>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
+                      <div style="display:flex;gap:9px;align-items:center"><span style="font-size:15px;color:#8E8E93;width:74px">Вес</span><span style="font-size:16px;color:#000">до 10 кг</span></div>
+                      <div style="display:flex;gap:9px;align-items:flex-start"><span style="font-size:15px;color:#8E8E93;width:74px">Размер</span><span style="font-size:16px;color:#000;flex:1">80 × 50 × 50 см</span></div>
+                      <div style="display:flex;gap:9px;align-items:center"><span style="font-size:15px;color:#8E8E93;width:74px">Опции</span><span style="font-size:16px;color:#000">термосумка</span></div>
+                    </div>
+                    <div style="margin-top:auto;display:flex;align-items:baseline;gap:8px"><span style="font:700 26px/1.1 -apple-system,'SF Pro Display',sans-serif;color:#000">749 ₽</span><span style="font-size:15px;color:#8E8E93">~40 мин</span></div>
+                  </div>
+                  <div style="flex:none;width:296px;background:#fff;border-radius:16px;border:1px solid #E3E3E8;padding:18px;display:flex;flex-direction:column;gap:12px">
+                    <span style="font-size:52px;line-height:1">🚗</span>
+                    <div><div style="font:700 22px/1.2 -apple-system,'SF Pro Display',sans-serif;color:#000">Экспресс</div><div style="font-size:15px;color:#8E8E93;margin-top:3px">легковая машина</div></div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:6px;justify-content:center;padding:16px 0 4px">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#007AFF"></span>
+                  <span style="width:7px;height:7px;border-radius:50%;background:#D4D4D8"></span>
+                  <span style="width:7px;height:7px;border-radius:50%;background:#D4D4D8"></span>
+                </div>
+                <div style="margin:10px 16px 0;height:50px;border-radius:14px;background:#007AFF;display:flex;align-items:center;justify-content:center;font:600 17px/1 -apple-system,sans-serif;color:#fff">Выбрать «Курьер» · 749 ₽</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="3c" style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;padding:0 8px;border-radius:12px;background:#007AFF;color:#fff;font:700 13px/1 -apple-system,sans-serif">3c</span>
+              <span style="font-size:13px;font-weight:600;color:#3C3C43">Раскрытие в самой полосе — без второго экрана</span>
+            </div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;position:relative;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:250px;position:relative;background:#EDE8DF;flex:none">
+                <div style="position:absolute;inset:0;background:repeating-linear-gradient(64deg,#E4DED3 0 2px,transparent 2px 74px),repeating-linear-gradient(-28deg,#E4DED3 0 2px,transparent 2px 96px),#EDE8DF"></div>
+                <div style="position:absolute;left:82px;top:112px;width:20px;height:20px;border-radius:50%;background:#1E8E3E;box-shadow:0 0 0 4px rgba(255,255,255,.92)"></div>
+                <div style="position:absolute;left:286px;top:210px;width:26px;height:30px;background:#D55E00;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></div>
+                <div style="position:relative;height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              </div>
+              <div style="flex:1;padding:14px 0 0;display:flex;flex-direction:column">
+                <div style="margin:0 16px 14px;background:#fff;border-radius:12px;padding:11px 14px;display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;align-items:center;gap:10px"><span style="width:11px;height:11px;border-radius:50%;background:#1E8E3E;flex:none"></span><span style="font-size:15px;color:#000">ул. Москворечье, 6</span></div>
+                  <div style="display:flex;align-items:center;gap:10px"><span style="width:11px;height:13px;background:#D55E00;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span><span style="font-size:15px;color:#000">Каширское шоссе, 52</span></div>
+                </div>
+                <div style="display:flex;gap:10px;padding:0 16px;align-items:flex-start">
+                  <div style="flex:1;border-radius:16px;background:#fff;border:2px solid #007AFF;padding:14px;display:flex;flex-direction:column;gap:9px">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span style="font-size:30px;line-height:1">🛵</span>
+                      <div style="flex:1"><div style="font:600 18px/1.2 -apple-system,sans-serif;color:#000">Курьер</div><div style="font-size:13px;color:#8E8E93">~40 мин</div></div>
+                      <span style="font:700 20px/1 -apple-system,sans-serif;color:#000">749 ₽</span>
+                    </div>
+                    <div style="height:.5px;background:#EDEDF0"></div>
+                    <div style="display:flex;flex-direction:column;gap:5px">
+                      <div style="font-size:14px;color:#3C3C43">до 10 кг · 80 × 50 × 50 см</div>
+                      <div style="font-size:14px;color:#3C3C43">Ваша посылка: 2 кг, 25 × 18 × 15 см — подходит</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;padding-top:2px">
+                      <span style="flex:1;font-size:15px;color:#000">Термосумка</span>
+                      <span style="width:44px;height:26px;border-radius:13px;background:#E3E3E8;display:flex;align-items:center;padding:0 3px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)"></span></span>
+                    </div>
+                  </div>
+                  <div style="flex:none;width:66px;border-radius:16px;background:#fff;border:1px solid #E3E3E8;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:5px">
+                    <span style="font-size:22px;line-height:1">🚗</span>
+                    <span style="font:600 13px/1.2 -apple-system,sans-serif;color:#000;text-align:center">Экспресс</span>
+                    <span style="font:700 14px/1.1 -apple-system,sans-serif;color:#000">1 190</span>
+                  </div>
+                  <div style="flex:none;width:66px;border-radius:16px;background:#fff;border:1px solid #E3E3E8;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:5px">
+                    <span style="font-size:22px;line-height:1">🚚</span>
+                    <span style="font:600 13px/1.2 -apple-system,sans-serif;color:#000;text-align:center">Груз</span>
+                    <span style="font:700 14px/1.1 -apple-system,sans-serif;color:#000">3 400</span>
+                  </div>
+                </div>
+                <div style="padding:10px 18px 0;font-size:13px;color:#8E8E93">Выбранный тариф раскрыт, остальные сжаты. Одно касание — и раскрывается другой.</div>
+                <div style="margin:auto 16px 34px;height:50px;border-radius:14px;background:#007AFF;display:flex;align-items:center;justify-content:center;font:600 17px/1 -apple-system,sans-serif;color:#fff">Заказать курьера · 749 ₽</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="3d" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">3d</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Parcel and options — the dense part, disclosed</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">The rule: one summary line per group, tappable, expanding to typed rows. Every constrained field states its constraint in place of a hint — loaders 0–2 and only on грузовой, due date inside the provider's window, currency a picker not a text field, dimensions in centimetres in the UI and metres on the wire. Nothing here uses API vocabulary.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:30px 26px;align-items:flex-start">
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Свёрнуто · черновик читается за 3 секунды</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="padding:6px 20px 12px"><div style="font:700 30px/1.15 -apple-system,'SF Pro Display',sans-serif;color:#000">Что везём</div></div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                  <span style="font-size:19px;width:24px;text-align:center">▣</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">Комплект учебников</div><div style="font-size:13px;color:#8E8E93">5 шт · 2 кг · 25 × 18 × 15 см · 2 500 ₽</div></div>
+                  <span style="font-size:14px;color:#C4C4C6">›</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:50px"></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                  <span style="font-size:19px;color:#007AFF;width:24px;text-align:center">＋</span>
+                  <span style="font-size:17px;color:#007AFF">Ещё вещь</span>
+                </div>
+              </div>
+              <div style="padding:8px 32px 20px;font-size:13px;line-height:1.4;color:#8E8E93">Стоимость нужна, чтобы посылку застраховали.</div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                  <span style="font-size:19px;width:24px;text-align:center">⚙</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">Опции</div><div style="font-size:13px;color:#8E8E93">опытный курьер · к двери</div></div>
+                  <span style="font-size:14px;color:#C4C4C6">›</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:50px"></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                  <span style="font-size:19px;width:24px;text-align:center">◷</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">Когда</div><div style="font-size:13px;color:#8E8E93">как можно скорее</div></div>
+                  <span style="font-size:14px;color:#C4C4C6">›</span>
+                </div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:50px"></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                  <span style="font-size:19px;width:24px;text-align:center">✎</span>
+                  <div style="flex:1"><div style="font-size:17px;color:#000">Комментарий курьеру</div><div style="font-size:13px;color:#8E8E93">не указан</div></div>
+                  <span style="font-size:14px;color:#C4C4C6">›</span>
+                </div>
+              </div>
+              <div style="margin:auto 16px 34px;height:50px;border-radius:14px;background:#007AFF;display:flex;align-items:center;justify-content:center;font:600 17px/1 -apple-system,sans-serif;color:#fff">Дальше</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Вещь · типизированные поля с единицами</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 16px 12px">
+                <span style="font-size:17px;color:#007AFF">Отмена</span>
+                <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Вещь</span>
+                <span style="font-size:17px;font-weight:600;color:#007AFF">Готово</span>
+              </div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:104px">Название</span><span style="flex:1;font-size:17px;color:#000">Комплект учебников</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:104px">Сколько</span><span style="flex:1;font-size:17px;color:#000">5</span><span style="display:flex;gap:2px"><span style="width:38px;height:30px;border-radius:8px 0 0 8px;background:#EDEDF0;display:flex;align-items:center;justify-content:center;font-size:17px;color:#3C3C43">−</span><span style="width:38px;height:30px;border-radius:0 8px 8px 0;background:#EDEDF0;display:flex;align-items:center;justify-content:center;font-size:17px;color:#3C3C43">＋</span></span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:104px">Вес</span><span style="flex:1;font-size:17px;color:#000">2,0</span><span style="font-size:16px;color:#8E8E93">кг</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:104px">Стоимость</span><span style="flex:1;font-size:17px;color:#000">2 500,00</span><span style="height:30px;padding:0 10px;border-radius:8px;background:#EDEDF0;display:flex;align-items:center;gap:4px;font-size:15px;color:#3C3C43">₽ RUB ⌄</span></div>
+              </div>
+              <div style="padding:14px 32px 6px;font-size:13px;font-weight:600;color:#8E8E93;text-transform:uppercase;letter-spacing:.02em">Размер</div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:17px;color:#000">Указать размер</span><span style="width:44px;height:26px;border-radius:13px;background:#1E8E3E;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#fff"></span></span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;gap:8px;padding:12px 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-size:13px;color:#8E8E93">Длина</span><span style="height:38px;border-radius:9px;background:#F2F2F7;display:flex;align-items:center;padding:0 10px;font-size:17px;color:#000">25</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-size:13px;color:#8E8E93">Ширина</span><span style="height:38px;border-radius:9px;background:#F2F2F7;display:flex;align-items:center;padding:0 10px;font-size:17px;color:#000">18</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-size:13px;color:#8E8E93">Высота</span><span style="height:38px;border-radius:9px;background:#F2F2F7;display:flex;align-items:center;padding:0 10px;font-size:17px;color:#000">15</span></div>
+                  <div style="display:flex;align-items:flex-end;padding-bottom:9px;font-size:15px;color:#8E8E93">см</div>
+                </div>
+              </div>
+              <div style="padding:8px 32px 0;font-size:13px;line-height:1.4;color:#8E8E93">Помещается в «Курьера»: 80 × 50 × 50 см.</div>
+              <div style="padding:18px 32px 6px;font-size:13px;font-weight:600;color:#8E8E93;text-transform:uppercase;letter-spacing:.02em">Маршрут вещи</div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;flex:1">Забрать в</span><span style="font-size:17px;color:#3C3C43">A · Москворечье, 6 ⌄</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;flex:1">Отдать в</span><span style="font-size:17px;color:#3C3C43">B · Каширское, 52 ⌄</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Опции · ограничения на месте подсказок</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 16px 12px">
+                <span style="font-size:17px;color:#007AFF">Отмена</span>
+                <span style="font:600 17px/1.2 -apple-system,sans-serif;color:#000">Опции</span>
+                <span style="font-size:17px;font-weight:600;color:#007AFF">Готово</span>
+              </div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:17px;color:#000">Опытный курьер</span><span style="width:44px;height:26px;border-radius:13px;background:#1E8E3E;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#fff"></span></span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:17px;color:#000">Донести до двери</span><span style="width:44px;height:26px;border-radius:13px;background:#1E8E3E;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#fff"></span></span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:17px;color:#000">Термосумка</span><span style="width:44px;height:26px;border-radius:13px;background:#E3E3E8;display:flex;align-items:center;padding:0 3px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)"></span></span></div>
+              </div>
+              <div style="padding:8px 32px 20px;font-size:13px;line-height:1.4;color:#8E8E93">Термосумка есть только у «Курьера».</div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden;opacity:.55">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:17px;color:#000">Грузчики</span><span style="font-size:17px;color:#8E8E93">0</span><span style="display:flex;gap:2px"><span style="width:38px;height:30px;border-radius:8px 0 0 8px;background:#EDEDF0;display:flex;align-items:center;justify-content:center;font-size:17px;color:#AEAEB2">−</span><span style="width:38px;height:30px;border-radius:0 8px 8px 0;background:#EDEDF0;display:flex;align-items:center;justify-content:center;font-size:17px;color:#AEAEB2">＋</span></span></div>
+              </div>
+              <div style="padding:8px 32px 20px;font-size:13px;line-height:1.4;color:#8E8E93">Грузчиков можно позвать только в «Грузовой» — там от 1 до 2.</div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:17px;color:#000">Ко времени</span><span style="width:44px;height:26px;border-radius:13px;background:#1E8E3E;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#fff"></span></span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:17px;color:#000">Забрать</span><span style="height:32px;padding:0 11px;border-radius:8px;background:#EDEDF0;font-size:16px;color:#000;display:flex;align-items:center">сегодня 14:30</span></div>
+              </div>
+              <div style="padding:8px 32px 0;font-size:13px;line-height:1.4;color:#8E8E93">От часа вперёд и до 30 дней.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="3e" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">3e</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">Saved place = a whole point, not a coordinate</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">Your note about predefined data changes what a saved place is: address parts, a default contact, a default point type, even default options. Picking «Склад на Невском» then fills a route row completely, and the repeat-last-order path becomes one tap from history. This is the strongest argument for the fixed-card shell — filled rows have two lines, and they need to be visible without gestures.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:30px 26px;align-items:flex-start">
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Место · всё, что подставится</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 16px 14px">
+                <span style="font-size:17px;color:#007AFF">‹ Места</span>
+                <span style="font-size:17px;font-weight:600;color:#007AFF">Готово</span>
+              </div>
+              <div style="padding:0 20px 14px;display:flex;align-items:center;gap:12px">
+                <span style="width:44px;height:44px;border-radius:11px;background:#8E5A3C;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex:none">▤</span>
+                <div><div style="font:700 24px/1.15 -apple-system,'SF Pro Display',sans-serif;color:#000">Склад на Невском</div><div style="font-size:14px;color:#8E8E93">обычно отсюда забирают</div></div>
+              </div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:96px">Адрес</span><span style="flex:1;font-size:16px;color:#000">Невский проспект, 100</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:96px">Город</span><span style="flex:1;font-size:16px;color:#000">Санкт-Петербург</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:96px">Подъезд</span><span style="flex:1;font-size:16px;color:#000">со двора</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:96px">Этаж</span><span style="flex:1;font-size:16px;color:#000">1</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:96px">Комментарий</span><span style="flex:1;font-size:16px;color:#000;line-height:1.4">Склад, работает с 9:00 до 18:00</span></div>
+              </div>
+              <div style="padding:16px 32px 6px;font-size:13px;font-weight:600;color:#8E8E93;text-transform:uppercase;letter-spacing:.02em">Кто встречает</div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:96px">Имя</span><span style="flex:1;font-size:16px;color:#000">Менеджер склада</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="font-size:16px;color:#8E8E93;width:96px">Телефон</span><span style="flex:1;font-size:16px;color:#000">+7 495 123-45-67</span><span style="height:26px;padding:0 8px;border-radius:6px;background:#EDEDF0;font-size:14px;color:#3C3C43;display:flex;align-items:center">доб. 123</span></div>
+              </div>
+              <div style="padding:16px 32px 6px;font-size:13px;font-weight:600;color:#8E8E93;text-transform:uppercase;letter-spacing:.02em">По умолчанию</div>
+              <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:16px;color:#000">Роль в маршруте</span><span style="font-size:16px;color:#8E8E93">забрать ⌄</span></div>
+                <div style="height:.5px;background:#E3E3E8;margin-left:14px"></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 14px"><span style="flex:1;font-size:16px;color:#000">Опытный курьер</span><span style="width:44px;height:26px;border-radius:13px;background:#1E8E3E;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#fff"></span></span></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">История · статус читается фоном и плашкой</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="padding:6px 20px 14px"><div style="font:700 30px/1.15 -apple-system,'SF Pro Display',sans-serif;color:#000">Доставки</div></div>
+              <div style="margin:0 16px 10px;background:#EAF3FB;border:1px solid #CFE3F5;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:12px;background:#0A6DD8;color:#fff;font:600 13px/1 -apple-system,sans-serif">◉ Курьер едет</span>
+                  <span style="margin-left:auto;font-size:14px;color:#3C3C43">749 ₽</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:10px;height:10px;border-radius:50%;background:#1E8E3E;flex:none;display:flex;align-items:center;justify-content:center"><span style="width:4px;height:4px;border-radius:50%;background:#fff"></span></span><span style="font-size:15px;color:#3C3C43">Москворечье, 6</span></div>
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:10px;height:12px;background:#D55E00;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span><span style="font-size:15px;color:#3C3C43">Каширское шоссе, 52</span></div>
+                </div>
+                <div style="font-size:14px;color:#3C3C43">Заказ №4417 · оплачено</div>
+              </div>
+              <div style="margin:0 16px 10px;background:#FBF3E8;border:1px solid #EFDFC6;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:12px;background:#8A5A00;color:#fff;font:600 13px/1 -apple-system,sans-serif">◌ Ищем курьера</span>
+                  <span style="margin-left:auto;font-size:14px;color:#3C3C43">1 190 ₽</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:10px;height:10px;border-radius:50%;background:#1E8E3E;flex:none;display:flex;align-items:center;justify-content:center"><span style="width:4px;height:4px;border-radius:50%;background:#fff"></span></span><span style="font-size:15px;color:#3C3C43">Арбат, 10</span></div>
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:10px;height:12px;background:#D55E00;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span><span style="font-size:15px;color:#3C3C43">Тверская, 6</span></div>
+                </div>
+              </div>
+              <div style="margin:0 16px 10px;background:#fff;border:1px solid #E3E3E8;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:12px;background:#E7F3EA;color:#14682F;font:600 13px/1 -apple-system,sans-serif">✓ Доставлено</span>
+                  <span style="font-size:14px;color:#8E8E93">вчера</span>
+                  <span style="margin-left:auto;font-size:14px;color:#3C3C43">1 190 ₽</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:10px;height:10px;border-radius:50%;background:#1E8E3E;flex:none;display:flex;align-items:center;justify-content:center"><span style="width:4px;height:4px;border-radius:50%;background:#fff"></span></span><span style="font-size:15px;color:#3C3C43">Невский проспект, 100, склад</span></div>
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:10px;height:12px;background:#D55E00;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></span><span style="font-size:15px;color:#3C3C43">Арбат, 10</span></div>
+                </div>
+                <div style="font-size:14px;color:#8E8E93">Ноутбук MacBook Pro · 1,6 кг · Экспресс · Заказ №4390</div>
+                <div style="display:flex;gap:8px;margin-top:2px">
+                  <div style="flex:1;height:40px;border-radius:11px;background:#E9F0FB;color:#007AFF;display:flex;align-items:center;justify-content:center;font:600 15px/1 -apple-system,sans-serif">Повторить</div>
+                  <div style="height:40px;padding:0 14px;border-radius:11px;background:#EDEDF0;color:#3C3C43;display:flex;align-items:center;justify-content:center;font-size:15px">Наоборот</div>
+                </div>
+              </div>
+              <div style="margin:0 16px 10px;background:#F7F7F9;border:1px solid #E3E3E8;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;opacity:.85">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:12px;background:#EDEDF0;color:#6C6C70;font:600 13px/1 -apple-system,sans-serif">✕ Отменён</span>
+                  <span style="font-size:14px;color:#8E8E93">12 августа</span>
+                  <span style="margin-left:auto;font-size:14px;color:#8E8E93">без списания</span>
+                </div>
+                <div style="font-size:15px;color:#3C3C43">Арбат, 10 → Ленинский проспект, 32</div>
+              </div>
+              <div style="margin:0 16px 12px;background:#FDF2F0;border:1px solid #F3D6CF;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:12px;background:#A8341A;color:#fff;font:600 13px/1 -apple-system,sans-serif">⚠ Не вручили</span>
+                  <span style="font-size:14px;color:#8E8E93">10 августа</span>
+                  <span style="margin-left:auto;font-size:14px;color:#3C3C43">890 ₽</span>
+                </div>
+                <div style="font-size:15px;color:#3C3C43">Получатель не открыл дверь — посылка вернулась</div>
+              </div>
+              <div style="padding:4px 32px 0;font-size:13px;line-height:1.45;color:#8E8E93">Фон и плашка говорят об одном — цвет никогда не единственный признак. «Повторить» подставляет маршрут, контакты, вещи и опции — остаётся посмотреть цену.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="3f" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 9px;border-radius:13px;background:#007AFF;color:#fff;font:700 14px/1 -apple-system,sans-serif">3f</span>
+          <h2 style="font:700 25px/1.2 -apple-system,'SF Pro Display',sans-serif;margin:0;color:#000">accessibility-extra-large — the reflow ladder</h2>
+        </div>
+        <p style="font-size:14px;line-height:1.6;color:#3C3C43;max-width:70ch;margin:0;text-wrap:pretty">A ranked ladder, not breakpoints. In order: (1) label and value stack; (2) leading glyph keeps its size but the row grows; (3) the tariff strip becomes a vertical list — the horizontal strip cannot survive, which is why <a href="#3a">3a</a> is the explainer to build; (4) toolbar Cancel/Done wrap to their own row; (5) two-line address rows are allowed to run to three lines rather than truncate. Truncating an address is never acceptable — a wrong address is a failed delivery.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:30px 26px;align-items:flex-start">
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Черновик на XL · полоса стала списком</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="height:150px;position:relative;background:#EDE8DF;flex:none">
+                <div style="position:absolute;inset:0;background:repeating-linear-gradient(64deg,#E4DED3 0 2px,transparent 2px 74px),#EDE8DF"></div>
+                <div style="position:absolute;left:76px;top:46px;width:18px;height:18px;border-radius:50%;background:#1E8E3E;box-shadow:0 0 0 4px rgba(255,255,255,.92)"></div>
+                <div style="position:absolute;left:280px;top:100px;width:24px;height:28px;background:#D55E00;border-radius:50% 50% 50% 0;transform:rotate(-45deg)"></div>
+              </div>
+              <div style="flex:1;overflow:hidden;padding-top:12px">
+                <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden">
+                  <div style="display:flex;gap:12px;padding:14px">
+                    <span style="width:16px;height:16px;border-radius:50%;background:#1E8E3E;flex:none;margin-top:5px"></span>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                      <span style="font-size:23px;line-height:1.25;color:#000">ул. Москворечье, 6</span>
+                      <span style="font-size:19px;line-height:1.3;color:#8E8E93">Иван Петров<br>+7 912 345-67-89</span>
+                    </div>
+                  </div>
+                  <div style="height:.5px;background:#E3E3E8;margin-left:42px"></div>
+                  <div style="display:flex;gap:12px;padding:14px">
+                    <span style="width:16px;height:19px;background:#D55E00;flex:none;border-radius:50% 50% 50% 0;transform:rotate(-45deg);margin-top:5px"></span>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                      <span style="font-size:23px;line-height:1.25;color:#000">Каширское шоссе, 52</span>
+                      <span style="font-size:19px;line-height:1.3;color:#8E8E93">Анна Сидорова<br>+7 998 765-43-21</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="padding:16px 20px 8px;font:600 20px/1.2 -apple-system,sans-serif;color:#000">Как доставить</div>
+                <div style="margin:0 16px;background:#fff;border-radius:12px;overflow:hidden;border:2px solid #007AFF">
+                  <div style="display:flex;align-items:center;gap:12px;padding:14px">
+                    <span style="font-size:28px;line-height:1">🛵</span>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:600 22px/1.2 -apple-system,sans-serif;color:#000">Курьер</span><span style="font-size:18px;color:#8E8E93">до 10 кг</span></div>
+                    <span style="font:700 22px/1 -apple-system,sans-serif;color:#000">749 ₽</span>
+                  </div>
+                </div>
+                <div style="margin:10px 16px 0;background:#fff;border-radius:12px;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:12px;padding:14px">
+                    <span style="font-size:28px;line-height:1">🚗</span>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:600 22px/1.2 -apple-system,sans-serif;color:#000">Экспресс</span><span style="font-size:18px;color:#8E8E93">до 20 кг</span></div>
+                    <span style="font:700 22px/1 -apple-system,sans-serif;color:#000">1 190 ₽</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:13px;font-weight:600;color:#3C3C43">Пикер на XL · Отмена/Готово своей строкой</div>
+            <div style="width:393px;height:852px;border-radius:44px;box-shadow:0 20px 54px rgba(0,0,0,.16);overflow:hidden;background:#F2F2F7;display:flex;flex-direction:column">
+              <div style="height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:15px;font-weight:600;color:#000;flex:none"><span>9:41</span><span style="letter-spacing:2px">▮▮ ⌁ ▰</span></div>
+              <div style="background:rgba(249,249,249,.96);border-bottom:.5px solid #C6C6C8;padding:6px 16px 12px;flex:none">
+                <div style="font:600 24px/1.25 -apple-system,sans-serif;color:#000;padding-bottom:10px">Откуда забрать</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:10px">
+                  <span style="font-size:21px;color:#007AFF">Отмена</span><span style="font-size:21px;color:#C4C4C6">Готово</span>
+                </div>
+                <div style="height:48px;border-radius:11px;background:#E3E3E8;display:flex;align-items:center;gap:8px;padding:0 12px">
+                  <span style="font-size:18px;color:#8E8E93">⌕</span><span style="font-size:21px;color:#8E8E93">Адрес или место</span>
+                </div>
+                <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border-radius:22px;background:#E9E9EC;font-size:20px;color:#000"><span style="font-size:17px">⌂</span>Дом</div>
+                  <div style="display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border-radius:22px;background:#E9E9EC;font-size:20px;color:#000"><span style="font-size:17px">▤</span>Склад на Невском</div>
+                </div>
+              </div>
+              <div style="flex:1;background:#fff">
+                <div style="display:flex;align-items:center;gap:12px;padding:15px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:21px;color:#007AFF;width:26px;text-align:center">➤</span><span style="font-size:21px;color:#007AFF">Моё местоположение</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:15px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:21px;color:#007AFF;width:26px;text-align:center">⊕</span><span style="font-size:21px;color:#007AFF">Выбрать на карте</span>
+                </div>
+                <div style="display:flex;gap:12px;padding:14px 16px;border-bottom:.5px solid #EDEDF0">
+                  <span style="font-size:20px;color:#8E8E93;width:26px;text-align:center;margin-top:2px">◷</span>
+                  <div style="flex:1"><div style="font-size:21px;line-height:1.3;color:#000">ул. Москворечье, 6</div><div style="font-size:18px;line-height:1.3;color:#8E8E93;margin-top:2px">Москва · Иван Петров</div></div>
+                </div>
+                <div style="display:flex;gap:12px;padding:14px 16px">
+                  <span style="font-size:20px;color:#8E8E93;width:26px;text-align:center;margin-top:2px">◷</span>
+                  <div style="flex:1"><div style="font-size:21px;line-height:1.3;color:#000">Арбат, 10, магазин «Электроника»</div><div style="font-size:18px;line-height:1.3;color:#8E8E93;margin-top:2px">Москва</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>
