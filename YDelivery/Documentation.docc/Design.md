@@ -115,6 +115,19 @@ Two framings that settle later arguments: **the unit of work is the order, not t
 app is mostly used while it is closed** (ordering takes ninety seconds; the forty waiting
 minutes happen on the Lock Screen).
 
+## English development language; Russian is the first localization
+
+Source strings are English (author, 2026-08-30): `developmentRegion` en, string catalogs
+with generated symbols already enabled, and the shared package owning its strings against
+`Bundle.module` — so app, widget, and notification say exactly the same words in every
+language. The first shipped localization is a **complete Russian catalog** — the market
+the API serves — and every later language is additive from the same mechanism.
+
+**Rejected:** Russian as the development language. It would read natively in the first
+market sooner, but it bakes the source into one locale; English keys keep the catalogs,
+generated symbols, and each later language on the paved path. The interface vocabulary
+rules (courier, van, stop — never the vendor's words) bind in every language equally.
+
 ## Unofficial, visibly
 
 The name is `YDelivery`, not Yandex-anything; no Yandex logos, colors, or iconography.
