@@ -1,3 +1,4 @@
+import SFSafeSymbols
 import SwiftUI
 
 /// The app's top-level structure: one tab per standing *place*, and the New Delivery flow
@@ -12,9 +13,9 @@ struct RootView: View {
     var body: some View {
         TabView {
             DeliveriesView(compose: { isComposing = true })
-                .tabItem { Label("Deliveries", systemImage: "shippingbox") }
+                .tabItem { Label("Deliveries", systemSymbol: .shippingbox) }
             SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tabItem { Label("Settings", systemSymbol: .gearshape) }
         }
         .sheet(isPresented: $isComposing) {
             NewDeliveryView(draft: draft)

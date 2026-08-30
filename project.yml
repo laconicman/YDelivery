@@ -51,6 +51,14 @@ packages:
   YandexDeliveryExpress:
     url: https://github.com/laconicman/YandexDeliveryExpress
     minorVersion: 0.2.0
+  # The shared foundation below app + future widget/activity (DESIGN-HANDOFF §6):
+  # the semantic color set, StatusChip, and — from the store PR on — the order store.
+  YDeliveryKit:
+    path: YDeliveryKit
+  # Compile-checked SF Symbol names (TechDebt → YD-3).
+  SFSafeSymbols:
+    url: https://github.com/SFSafeSymbols/SFSafeSymbols
+    from: 7.0.0
 
 targets:
   YDelivery:
@@ -61,9 +69,16 @@ targets:
     dependencies:
       - package: YandexDeliveryExpress
         product: YandexDeliveryExpressAPI
+      - package: YDeliveryKit
+        product: YDeliveryKit
+      - package: SFSafeSymbols
+        product: SFSafeSymbols
     settings:
       groups: [signing]
       base:
+        # The order store lives in the App Group container from day one — widgets read
+        # it directly (DESIGN-HANDOFF §6). File at the repo root per the house precedent.
+        CODE_SIGN_ENTITLEMENTS: YDelivery.entitlements
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         ENABLE_PREVIEWS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -89,6 +104,9 @@ targets:
       - YDeliveryTests
     dependencies:
       - target: YDelivery
+      # The entitlement test speaks the store's own group ID rather than respelling it.
+      - package: YDeliveryKit
+        product: YDeliveryKit
     settings:
       groups: [signing]
       base:
