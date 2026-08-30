@@ -23,7 +23,7 @@ What the API offers, mapped to user-facing features. "In package" = present in
 | Order lifecycle (create → accept → cancel with price) | `claims/create` `info` `accept` `cancel-info` `cancel` | ✅ | 1 |
 | **Local order history, statuses kept fresh** | `claims/search` (backfill), **`claims/journal`** (cursor feed — the sync primitive) | ❌ | 2 |
 | **Courier on the map, ETA, share link** | `claims/performer-position`, `claims/points-eta`, `claims/tracking-links` | ❌ | 3 |
-| — *Division of labour, checked against the reference 2026-08-30:* the journal carries **no coordinates** — only status/price events plus `current_point_id`, which gives route progress at *stop* granularity for free (Live Activity dots, background refresh). The *moving* marker requires polling `performer-position`, foreground-only until a push relay exists. | | | |
+| — *Division of labour, checked 2026-08-30 against [the journal reference](https://yandex.ru/support/delivery-profile/ru/api/express/openapi/IntegrationV2ClaimsJournal):* the journal carries **no coordinates** — only status/price events plus `current_point_id`, which gives route progress at *stop* granularity for free (Live Activity dots, background refresh). The *moving* marker requires polling `performer-position`, foreground-only until a push relay exists. | | | |
 | Call the courier | `driver-voiceforwarding` | ❌ | 3 |
 | Handoff codes, proof of delivery | `claims/confirmation_code`, `proof-of-delivery/info` | ❌ | 4 |
 | Edit before/after confirm; initiate return | `claims/edit`, `apply-changes/*`, `claims/return` | ❌ | 4 |

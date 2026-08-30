@@ -305,8 +305,9 @@ and find more than a mock will show. The design intent to check against:
    route progress (`5a`). If it is status-only, both degrade cleanly to status — but know
    before building.
 
-   > **Answered 2026-08-30, from the API reference** (`IntegrationV2ClaimsJournal`, checked
-   > that date): **no coordinates, ever.** A journal `Event` carries exactly `change_type`
+   > **Answered 2026-08-30, from the API reference** (`IntegrationV2ClaimsJournal`,
+   > https://yandex.ru/support/delivery-profile/ru/api/express/openapi/IntegrationV2ClaimsJournal
+   > — checked that date): **no coordinates, ever.** A journal `Event` carries exactly `change_type`
    > (only `status_changed` | `price_changed`), `claim_id`, `operation_id`, `revision`,
    > `updated_ts`, and optionally `client_id`, `current_point_id`, `new_price`,
    > `new_currency`, `new_status`, `resolution`. Courier position exists only on
