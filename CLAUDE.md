@@ -47,7 +47,10 @@ Concurrency — all deliberate, see `Design`.
 9. **Swift Testing for logic, XCTest only for `XCUIApplication`.** Test the pure functions
    and controllers, not SwiftUI views.
 10. **Everything lands via PR.** Devin Review runs automatically on push; `REVIEW.md`
-    steers it. No AI attribution in commit messages or PR descriptions.
+    steers it. No AI attribution in commit messages or PR descriptions. For peripheral
+    files (the design boards' JS, generated artifacts), applying the reviewer's inline
+    suggestion via GitHub's "Apply suggestion" is an accepted cheap path — hand-crafted
+    commits are for the code this repo exists to ship.
 
 ## Author's standing preferences
 

@@ -28,6 +28,23 @@ is for *decisions* — a network failure is a retry, not attention. Values run d
 darker than `.systemGreen`/`.systemRed` where text sits on them; verify AA at 13 px, the
 tight case.
 
+### Implementation approach (house precedent)
+
+Per the author's `SwiftUI/Themes` project (Multi-Theme App with Namespaces; the
+controller-owned selection traces to Manferdini's SettingsController note in the vault):
+**asset-catalog compile safety needs no third-party generator.** Colorset folders marked
+`provides-namespace` plus Xcode's generated asset symbols
+(`ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS`, already on in this project)
+yield nested compile-time symbols — `.Blaze.Text.primary` in that project; here, a flat
+single-theme set reads `Color(.statusActive)` with a typo being a build error, not a blank.
+
+For `YDeliveryKit`: the catalog lives in the package (generated symbols work in SwiftPM
+targets since Xcode 15, resolving against `Bundle.module` — which is exactly what keeps the
+widget's green identical to the app's), tokens stay flat while there is one theme, and the
+namespace mechanism is the growth path if theming ever becomes a feature — the Themes
+project shows that shape working, `ThemeManager` modernizing to an `@Observable` controller
+per this app's rules.
+
 ## Pin & badge taxonomy (board `2c`)
 
 Shape and glyph carry the role; **color only reinforces**. The grayscale column is the test:
