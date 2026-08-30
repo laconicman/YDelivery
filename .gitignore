@@ -32,3 +32,6 @@ YDelivery.xcodeproj/xcshareddata/xcschemes/
 #   Package.resolved — an app pins its dependencies; a library lets consumers resolve their
 #                      own. See the workspace CLAUDE.md.
 .thumbnail
+
+# The Kit is a library: consumers pin the graph (the app does, in its xcodeproj).
+YDeliveryKit/Package.resolved
