@@ -5,6 +5,9 @@
 name: YDelivery
 
 options:
+  # The floor for syncedFolder sources below; older XcodeGen stops with a clear error
+  # instead of generating a wrong project.
+  minimumXcodeGenVersion: "2.44"
   bundleIdPrefix: com.learnable
   deploymentTarget:
     iOS: "17.0"

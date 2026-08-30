@@ -35,9 +35,10 @@ Render locally:
 
 ## Building
 
-Requires iOS 17 / Xcode 26, and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-(`brew install xcodegen`): the Xcode project is generated from `project.yml` and stays out
-of version control, so generate it after cloning (and after editing the spec).
+Requires iOS 17 / Xcode 26, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) 2.44 or
+newer (`brew install xcodegen`; the spec enforces the minimum): the Xcode project is
+generated from `project.yml` and stays out of version control, so generate it after
+cloning (and after editing the spec).
 
 The package dependency is by URL at `0.2.x`; `Package.resolved` is committed. For
 cross-editing the package locally, drag its folder into the project — a local package
