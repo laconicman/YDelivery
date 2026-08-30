@@ -11,29 +11,15 @@ The shell and composition root (tabs, injected controllers, Keychain auth as ren
 state — PR #1) and route picking (search / tap-to-pin / editable resolved address — PR #2).
 Every view carries a running `#Preview`.
 
-## Now — design Phase 1: structure (touches shipped code)
+**Design Phase 1 — structure (PRs #6–#10, 2026-08-30):** two tabs and the modal draft
+flow whose draft survives dismissal (`RootView` owns it, above the sheet); the project
+generated from `project.yml` (YD-4); `YDeliveryKit` with the <doc:DesignSystem> color set
+and `StatusChip`; the provisional order store — one substrate for recents, saved places
+and repeat — born in the App Group so a widget target could read it the day it exists
+(its *stack* still awaits the Phase-2 research below); `textContentType` on the one field
+missing it; SFSafeSymbols across the app (YD-3). Nothing looks new, by design.
 
-Deliberately unglamorous, and first because both later phases assume it:
-
-- **The tab bar goes** — two tabs (Доставки, Настройки), «Новая доставка» presents the flow
-  modally, and the draft survives dismissal instead of dying with a tab switch
-  (handoff §2.3; touches `RootView.swift`).
-- **The order store lands in an App Group from day one** — widgets will read it directly,
-  and retrofitting after Keychain and history exist is the expensive version (handoff §6,
-  "the single most consequential line"). The store's *location* is decided now; its *stack*
-  still awaits the Phase-2 research below.
-- **`YDeliveryKit` created** (local package below app + future widget/activity) with the
-  <doc:DesignSystem> color set and `StatusChip`.
-- **One local substrate** for completed orders and points — recents, saved places and
-  repeat-order are one store, not three features.
-- **`textContentType` + keyboard types** on every existing field.
-- **Chores fold in here:** SFSafeSymbols adoption (YD-3) rides the `YDeliveryKit`/badge
-  work; the XcodeGen conversion (YD-4) lands *before* the widget target Phase 3 needs.
-
-*Done when:* nothing looks new, the draft cannot be destroyed by navigation, and a widget
-target could read the store if it existed.
-
-## Next — design Phase 2: the draft screen (boards `1b`, `2a`, `2c`, `3a`, `3d`)
+## Now — design Phase 2: the draft screen (boards `1b`, `2a`, `2c`, `3a`, `3d`)
 
 - Fixed route card: map above, rows with `pointStart`/`pointEnd` badges per
   <doc:DesignSystem>, collapsed contact rows, swap, add point.

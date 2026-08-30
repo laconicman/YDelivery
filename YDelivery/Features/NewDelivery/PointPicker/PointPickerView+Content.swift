@@ -1,4 +1,5 @@
 import MapKit
+import SFSafeSymbols
 import SwiftUI
 
 extension PointPickerView {
@@ -51,7 +52,9 @@ extension PointPickerView {
             MapReader { proxy in
                 Map(position: $camera) {
                     if let pin {
-                        Marker(pin.displayAddress, systemImage: "mappin", coordinate: pin.coordinate)
+                        // Marker has no SFSafeSymbols overload; the raw value keeps the
+                        // name compile-checked all the same.
+                        Marker(pin.displayAddress, systemImage: SFSymbol.mappin.rawValue, coordinate: pin.coordinate)
                     }
                 }
                 .onTapGesture { screenPoint in
@@ -117,6 +120,7 @@ extension PointPickerView.Content {
                     HStack {
                         TextField("Address", text: $address, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
+                            .textContentType(.fullStreetAddress)
                         if isResolving {
                             ProgressView()
                         }
