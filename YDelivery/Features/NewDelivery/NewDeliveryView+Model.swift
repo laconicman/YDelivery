@@ -1,8 +1,10 @@
 import Observation
 
 extension NewDeliveryView {
-    /// The screen's draft: which places bound the route. Screen-local by design (R7) — an
-    /// abandoned draft should die with the screen, not haunt a shared controller.
+    /// The flow's draft: which places bound the route. Owned by `RootView`, one level
+    /// above the sheet that renders it (R7: one owner, as low as the lifetime allows) —
+    /// dismissing the flow parks the draft, because navigation must never destroy one
+    /// (Design → "The tab bar goes").
     @Observable @MainActor
     final class Model {
         var pickup: PickedPlace?
