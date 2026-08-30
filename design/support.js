@@ -1934,6 +1934,7 @@
   };
   if (typeof document !== "undefined") {
     document.addEventListener("click", function (e) {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       var a = e.target && e.target.closest ? e.target.closest("a[href^=\"#\"]") : null;
       if (!a) return;
       var id = a.getAttribute("href").slice(1);
