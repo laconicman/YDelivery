@@ -45,7 +45,9 @@ ambitions: private sync, and an organization sharing one Yandex token whose empl
 create, and edit orders by role — plausibly a shared record zone. SwiftData's CloudKit sync
 has no sharing story; `NSPersistentCloudKitContainer` does (<doc:Design> — reopened). Schema
 first (relational discipline — Codd, not vibes; the LearnWords sessions record how a rushed
-CloudKit schema went), stack second, provider-plurality in the schema from day one.
+CloudKit schema went), stack second, provider-plurality in the schema from day one. One
+more input since 2026-08-30: the container stays **exclusive to this app** and its design
+assumes a possible account transfer (<doc:Design> → "Surviving an account transfer").
 
 ## Then — design Phase 3: while closed (boards `5a`–`5d`, `4b`)
 
