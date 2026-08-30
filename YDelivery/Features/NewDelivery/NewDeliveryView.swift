@@ -2,53 +2,67 @@ import SwiftUI
 
 /// Root view of the New Delivery flow, presented as a sheet — the compose idiom. The draft
 /// arrives from `RootView`, which owns it: Close parks the draft rather than destroying
-/// it, so the button says Close, not Cancel. Parcel details and offers arrive with the
-/// draft screen (Roadmap → Phase 2).
+/// it, so the button says Close, not Cancel. Offers and parcel details arrive with the
+/// later Phase-2 slices (Roadmap → Phase 2).
 struct NewDeliveryView: View {
     let draft: Model
-    @State private var pickingEnd: RouteEnd?
+    @State private var pickingPoint: Model.Point?
+    @State private var editingContactPoint: Model.Point?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Content(
-                pickupAddress: draft.pickup?.displayAddress,
-                dropoffAddress: draft.dropoff?.displayAddress,
-                canSwap: draft.canSwap,
-                pick: { pickingEnd = $0 },
-                swapEnds: { draft.swapEnds() }
+                draft: draft,
+                pick: { pickingPoint = draft.point(withID: $0) },
+                editContact: { editingContactPoint = draft.point(withID: $0) },
+                setRole: { draft.setRole($1, for: $0) },
+                swapEnds: { draft.swapEnds() },
+                addStop: { pickingPoint = draft.point(withID: draft.addStop()) },
+                removeRows: { draft.removePoints(at: $0) },
+                moveRows: { draft.movePoints(from: $0, to: $1) }
             )
             .navigationTitle("New Delivery")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                 }
             }
-            .sheet(item: $pickingEnd) { end in
+            .sheet(item: $pickingPoint) { point in
                 PointPickerView(
-                    prompt: end.prompt,
-                    initialPlace: draft[end],
-                    confirm: { draft[end] = $0 }
+                    prompt: point.role.pickerPrompt,
+                    initialPlace: point.place,
+                    confirm: { draft.setPlace($0, for: point.id) }
+                )
+            }
+            .sheet(item: $editingContactPoint) { point in
+                ContactEditor(
+                    title: point.role.contactPrompt,
+                    contact: point.contact ?? Contact(),
+                    save: { draft.setContact($0, for: point.id) }
                 )
             }
         }
     }
 }
 
-/// Which end of the route a picker session is choosing. `Identifiable` so it can drive
-/// `sheet(item:)` directly.
-nonisolated enum RouteEnd: Identifiable, CaseIterable, Sendable {
-    case pickup
-    case dropoff
-
-    var id: Self { self }
-}
-
-extension RouteEnd {
-    var prompt: LocalizedStringKey {
+extension NewDeliveryView.Model.Role {
+    /// The picker sheet's question, in the sender's words.
+    var pickerPrompt: LocalizedStringKey {
         switch self {
         case .pickup: "Where to pick up?"
         case .dropoff: "Where to deliver?"
+        case .return: "Where to return?"
+        }
+    }
+
+    /// The collapsed contact row's invitation — who stands at this door.
+    var contactPrompt: LocalizedStringKey {
+        switch self {
+        case .pickup: "Who hands over"
+        case .dropoff: "Who receives"
+        case .return: "Who takes the return"
         }
     }
 }
@@ -59,15 +73,50 @@ extension RouteEnd {
 
 #Preview("Route complete") {
     let draft = NewDeliveryView.Model()
-    draft.pickup = PickedPlace(
-        latitude: 55.646068,
-        longitude: 37.668176,
-        address: "Москва, ул Москворечье, 6"
+    draft.setPlace(
+        PickedPlace(latitude: 55.646068, longitude: 37.668176, address: "Москва, ул Москворечье, 6"),
+        for: draft.points[0].id
     )
-    draft.dropoff = PickedPlace(
-        latitude: 55.652212,
-        longitude: 37.648210,
-        address: "Москва, Каширское шоссе, 52"
+    draft.setContact(
+        Contact(name: "Иван Петров", phone: "+7 912 345-67-89"),
+        for: draft.points[0].id
+    )
+    draft.setPlace(
+        PickedPlace(latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52"),
+        for: draft.points[1].id
+    )
+    return NewDeliveryView(draft: draft)
+}
+
+#Preview("Five stops with a return") {
+    let draft = NewDeliveryView.Model()
+    draft.setPlace(
+        PickedPlace(latitude: 59.932720, longitude: 30.349709, address: "Санкт-Петербург, Невский проспект, 100"),
+        for: draft.points[0].id
+    )
+    draft.setContact(
+        Contact(name: "Менеджер склада", phone: "+7 495 123-45-67", phoneExtension: "123"),
+        for: draft.points[0].id
+    )
+    draft.setPlace(
+        PickedPlace(latitude: 55.749917, longitude: 37.593450, address: "Москва, Арбат, 10"),
+        for: draft.points[1].id
+    )
+    let third = draft.addStop()
+    draft.setPlace(
+        PickedPlace(latitude: 55.646068, longitude: 37.668176, address: "Москва, ул Москворечье, 6"),
+        for: third
+    )
+    let fourth = draft.addStop()
+    draft.setPlace(
+        PickedPlace(latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52"),
+        for: fourth
+    )
+    let returnStop = draft.addStop()
+    draft.setRole(.return, for: returnStop)
+    draft.setPlace(
+        PickedPlace(latitude: 59.932720, longitude: 30.349709, address: "Санкт-Петербург, Невский проспект, 100"),
+        for: returnStop
     )
     return NewDeliveryView(draft: draft)
 }
