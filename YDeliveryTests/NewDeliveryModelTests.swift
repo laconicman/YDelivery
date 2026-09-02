@@ -92,6 +92,38 @@ struct NewDeliveryModelTests {
         #expect(model.points.last?.role == .return)
     }
 
+    @Test("The route's only delivery can never become the return")
+    func soleDeliveryStaysDelivery() {
+        let model = filledDraft()
+        #expect(model.availableRoles(for: model.points[1].id) == [],
+                "pickup → return delivers nothing (review, PR #17)")
+    }
+
+    @Test("The last delivery cannot be removed out from beside a return")
+    func lastDeliveryCannotBeRemoved() {
+        let model = filledDraft()
+        let stop = model.addStop()
+        model.setPlace(shop, for: stop)
+        model.setRole(.return, for: stop)
+
+        model.removePoints(at: IndexSet(integer: 1))
+        #expect(model.points.map(\.role) == [.pickup, .dropoff, .return],
+                "removing the sole delivery would leave a route that delivers nothing")
+    }
+
+    @Test("An extension without a phone does not survive saving")
+    func extensionAloneIsNoise() {
+        let model = filledDraft()
+        let id = model.points[0].id
+
+        model.setContact(Contact(phoneExtension: "123"), for: id)
+        #expect(model.points[0].contact == nil, "nothing dialable, nothing kept")
+
+        model.setContact(Contact(name: "Иван", phoneExtension: "123"), for: id)
+        #expect(model.points[0].contact == Contact(name: "Иван"),
+                "the name survives; the undialable extension does not")
+    }
+
     @Test("Only one return point can exist")
     func singleReturn() {
         let model = filledDraft()

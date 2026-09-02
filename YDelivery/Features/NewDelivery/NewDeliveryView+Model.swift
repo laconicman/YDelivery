@@ -76,17 +76,22 @@ extension NewDeliveryView {
         }
 
         /// Roles a stop may switch to. The first row is the route's start and never
-        /// changes; the return role is offered while no return point exists, so a second
-        /// one cannot be created; a return point may step back to being a delivery.
+        /// changes; the return role is offered while no return point exists — and never
+        /// to the route's only delivery, because a route that delivers nothing is not a
+        /// route (review, PR #17); a return point may step back to being a delivery.
         func availableRoles(for id: Point.ID) -> [Role] {
             guard let index = points.firstIndex(where: { $0.id == id }), index > 0 else {
                 return []
             }
             switch points[index].role {
             case .pickup: return [.dropoff]
-            case .dropoff: return hasReturnPoint ? [] : [.return]
+            case .dropoff: return hasReturnPoint || dropoffCount < 2 ? [] : [.return]
             case .return: return [.dropoff]
             }
+        }
+
+        private var dropoffCount: Int {
+            points.count { $0.role == .dropoff }
         }
 
         /// Exchanges what stands at the two ends — places and the people at the door.
@@ -114,10 +119,16 @@ extension NewDeliveryView {
         }
 
         /// Removes stops. The pickup row is the route's start and stays; the route never
-        /// shrinks below two rows — an A→B draft with a row missing is not a route.
+        /// shrinks below two rows — an A→B draft with a row missing is not a route —
+        /// and the last delivery cannot be removed out from beside a return point
+        /// (review, PR #17: pickup → return delivers nothing).
         func removePoints(at offsets: IndexSet) {
             guard !offsets.contains(0), points.count - offsets.count >= 2 else { return }
-            points.remove(atOffsets: offsets)
+            let remaining = points.indices
+                .filter { !offsets.contains($0) }
+                .map { points[$0] }
+            guard remaining.contains(where: { $0.role == .dropoff }) else { return }
+            points = remaining
         }
 
         /// Reorders stops. The pickup is pinned first and the return last; a move that
@@ -135,11 +146,11 @@ extension NewDeliveryView {
             points[index].place = place
         }
 
-        /// An all-empty contact stores as none — the row's invitation returns rather
-        /// than showing a blank card.
+        /// Stores what ``Contact/storable`` says deserves keeping — an emptied card
+        /// returns the row's invitation rather than a blank line.
         func setContact(_ contact: Contact?, for id: Point.ID) {
             guard let index = points.firstIndex(where: { $0.id == id }) else { return }
-            points[index].contact = contact.flatMap { $0.isEmpty ? nil : $0 }
+            points[index].contact = contact.flatMap(\.storable)
         }
 
         /// Changes what happens at a stop's door. The first row is the route's start and

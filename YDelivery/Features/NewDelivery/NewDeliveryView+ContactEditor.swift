@@ -30,6 +30,8 @@ extension NewDeliveryView {
                         TextField("Phone", text: $contact.phone)
                             .textContentType(.telephoneNumber)
                             .keyboardType(.phonePad)
+                        // No `textContentType`: UIKit has no content type for a dial
+                        // extension — the number pad is all the system can offer here.
                         TextField("Extension", text: $contact.phoneExtension)
                             .keyboardType(.numberPad)
                     } footer: {

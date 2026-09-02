@@ -75,6 +75,12 @@ extension NewDeliveryView {
                 }
             }
             .environment(\.editMode, $editMode)
+            .onChange(of: rows.count) {
+                // Deleting down to the founding pair hides the Reorder control while
+                // edit mode is on — leave it too, or the list is trapped editing with
+                // no exit (review, PR #17).
+                if rows.count <= 2 { editMode = .inactive }
+            }
         }
 
         /// The card's own affordances (board `2b`): two points swap; three or more
@@ -348,7 +354,7 @@ private extension MKCoordinateRegion {
                 placeholder: "Where to deliver?",
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
-                availableRoles: [.return],
+                availableRoles: [],
                 isDeletable: false,
                 isMovable: true
             ),
@@ -389,7 +395,7 @@ private extension MKCoordinateRegion {
                 placeholder: "Where to deliver?",
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
-                availableRoles: [.return],
+                availableRoles: [],
                 isDeletable: false,
                 isMovable: true
             ),
@@ -407,6 +413,18 @@ private extension MKCoordinateRegion {
         addStop: {},
         removeRows: { _ in },
         moveRows: { _, _ in }
+    )
+}
+
+#Preview("Route map: pins framed") {
+    @Previewable @State var camera = MapCameraPosition.automatic
+    NewDeliveryView.Content.RouteMap(
+        pins: [
+            .init(id: UUID(), latitude: 55.646068, longitude: 37.668176, badge: .start),
+            .init(id: UUID(), latitude: 55.749917, longitude: 37.593450, badge: .stop(number: 2)),
+            .init(id: UUID(), latitude: 55.652212, longitude: 37.648210, badge: .end),
+        ],
+        camera: $camera
     )
 }
 
