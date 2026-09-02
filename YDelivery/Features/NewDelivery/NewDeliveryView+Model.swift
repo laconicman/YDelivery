@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 import Observation
 // SwiftUI supplies `remove(atOffsets:)` / `move(fromOffsets:toOffset:)` — the exact
 // semantics `onDelete`/`onMove` hand this model; reimplementing them here would be the
@@ -42,10 +43,30 @@ extension NewDeliveryView {
             case `return`
         }
 
-        private(set) var points: [Point]
+        /// The whole route's distance and time, from the map's own routing — the states
+        /// of the estimate bar (board `1b`). Failure keeps its place: the bar renders
+        /// it at the same height rather than collapsing the layout (decision #13).
+        enum Estimate: Hashable {
+            /// No complete route to estimate — the bar is absent, not empty.
+            case idle
+            case calculating
+            case ready(RouteEstimate)
+            case failed
+        }
 
-        init() {
+        /// Waypoints in travel order → an estimate. Defaults to `MKDirections`, one
+        /// request per leg; injected so the state machine tests offline.
+        typealias RouteEstimator =
+            @Sendable (_ waypoints: [RouteEstimate.Coordinate]) async throws -> RouteEstimate
+
+        private(set) var points: [Point]
+        private(set) var estimate: Estimate = .idle
+
+        private let estimateRoute: RouteEstimator
+
+        init(estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
             points = [Point(role: .pickup), Point(role: .dropoff)]
+            self.estimateRoute = estimateRoute
         }
 
         /// Every stop chosen, nothing pending — the gate for everything downstream
@@ -162,6 +183,39 @@ extension NewDeliveryView {
             points[index].contact = contact.flatMap(\.storable)
         }
 
+        // MARK: Estimate
+
+        /// The route as coordinates, in travel order — what the estimate answers to.
+        /// The root view re-runs the calculation whenever this changes (`.task(id:)`),
+        /// so an edited route cancels the stale estimate structurally.
+        var routeWaypoints: [RouteEstimate.Coordinate] {
+            guard isRouteComplete else { return [] }
+            return points.compactMap { point in
+                point.place.map { RouteEstimate.Coordinate(latitude: $0.latitude, longitude: $0.longitude) }
+            }
+        }
+
+        /// Estimates the current route, publishing every state the bar renders. An
+        /// incomplete route clears to `.idle` — no bar, not a stale number. Cancellation
+        /// (a route edit mid-flight) leaves the state to the next run.
+        func calculateEstimate() async {
+            let waypoints = routeWaypoints
+            guard waypoints.count >= 2 else {
+                estimate = .idle
+                return
+            }
+            estimate = .calculating
+            do {
+                let result = try await estimateRoute(waypoints)
+                guard !Task.isCancelled else { return }
+                estimate = .ready(result)
+            } catch is CancellationError {
+            } catch {
+                guard !Task.isCancelled else { return }
+                estimate = .failed
+            }
+        }
+
         /// Changes what happens at a stop's door. ``availableRoles(for:)`` is the single
         /// source of truth for what a stop may become, so a role it does not offer is
         /// refused here too — the pinned pickup keeps its role, a second return is
@@ -177,5 +231,48 @@ extension NewDeliveryView {
                 points.append(points.remove(at: index))
             }
         }
+    }
+}
+
+// MARK: - Live seam
+
+extension NewDeliveryView.Model {
+    /// `MKDirections`, one request per leg, summed — the map's honest guess until
+    /// provider figures replace it (decision #14). Any leg without a route fails the
+    /// whole estimate: a number covering half the route would be a lie.
+    nonisolated static let mkDirectionsEstimator: RouteEstimator = { waypoints in
+        var distance: Double = 0
+        var time: TimeInterval = 0
+        var legs: [[RouteEstimate.Coordinate]] = []
+        for (from, to) in zip(waypoints, waypoints.dropFirst()) {
+            let request = MKDirections.Request()
+            request.source = MKMapItem(placemark: MKPlacemark(
+                coordinate: CLLocationCoordinate2D(latitude: from.latitude, longitude: from.longitude)
+            ))
+            request.destination = MKMapItem(placemark: MKPlacemark(
+                coordinate: CLLocationCoordinate2D(latitude: to.latitude, longitude: to.longitude)
+            ))
+            request.transportType = .automobile
+            let response = try await MKDirections(request: request).calculate()
+            guard let route = response.routes.first else { throw NoRouteFound() }
+            distance += route.distance
+            time += route.expectedTravelTime
+            legs.append(route.polyline.coordinateRun)
+        }
+        return RouteEstimate(distanceMeters: distance, travelTime: time, legs: legs)
+    }
+
+    nonisolated struct NoRouteFound: Error {}
+}
+
+private nonisolated extension MKPolyline {
+    /// The polyline's points as plain values — what crosses back to the main actor.
+    var coordinateRun: [RouteEstimate.Coordinate] {
+        var coordinates = [CLLocationCoordinate2D](
+            repeating: CLLocationCoordinate2D(),
+            count: pointCount
+        )
+        getCoordinates(&coordinates, range: NSRange(location: 0, length: pointCount))
+        return coordinates.map { RouteEstimate.Coordinate(latitude: $0.latitude, longitude: $0.longitude) }
     }
 }

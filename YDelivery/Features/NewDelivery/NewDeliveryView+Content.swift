@@ -32,6 +32,7 @@ extension NewDeliveryView {
 
         let rows: [Row]
         let pins: [Pin]
+        let estimate: NewDeliveryView.Model.Estimate
         let canSwap: Bool
         let canReorder: Bool
         let pick: (UUID) -> Void
@@ -41,16 +42,28 @@ extension NewDeliveryView {
         let addStop: () -> Void
         let removeRows: (IndexSet) -> Void
         let moveRows: (IndexSet, Int) -> Void
+        let retryEstimate: () -> Void
 
         @State private var camera: MapCameraPosition = .automatic
         @State private var editMode: EditMode = .inactive
 
         var body: some View {
             VStack(spacing: 0) {
-                RouteMap(pins: pins, camera: $camera)
+                RouteMap(pins: pins, legs: estimateLegs, camera: $camera)
+                    // An inset, not an overlay: the map's automatic framing then keeps
+                    // every mark clear of the bar instead of hiding the end pin under it.
+                    .safeAreaInset(edge: .bottom) {
+                        EstimateBar(estimate: estimate, retry: retryEstimate)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 10)
+                    }
                     .containerRelativeFrame(.vertical) { length, _ in length * 0.33 }
                 routeCard
             }
+        }
+
+        private var estimateLegs: [[RouteEstimate.Coordinate]] {
+            if case .ready(let estimate) = estimate { estimate.legs } else { [] }
         }
 
         private var routeCard: some View {
@@ -118,14 +131,22 @@ extension NewDeliveryView {
 // MARK: - Route map
 
 extension NewDeliveryView.Content {
-    /// The map above the card: chosen points as `2c` marks. An accelerator, never the
-    /// only route — everything on it is reachable through the rows below (handoff §8).
+    /// The map above the card: chosen points as `2c` marks, the estimated path between
+    /// them. An accelerator, never the only route — everything on it is reachable
+    /// through the rows below (handoff §8).
     struct RouteMap: View {
         let pins: [Pin]
+        let legs: [[RouteEstimate.Coordinate]]
         @Binding var camera: MapCameraPosition
 
         var body: some View {
             Map(position: $camera) {
+                ForEach(Array(legs.enumerated()), id: \.offset) { _, leg in
+                    MapPolyline(coordinates: leg.map {
+                        CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                    })
+                    .stroke(.tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                }
                 ForEach(pins) { pin in
                     Annotation(
                         coordinate: CLLocationCoordinate2D(
@@ -149,6 +170,52 @@ extension NewDeliveryView.Content {
                 // A route edit reframes the map to the new route — search results and
                 // added stops arrive from off-screen and deserve the camera.
                 camera = .automatic
+            }
+        }
+    }
+}
+
+// MARK: - Estimate bar
+
+extension NewDeliveryView.Content {
+    /// The route's numbers, on the map's bottom edge: information, never the CTA
+    /// (decision #13). Every state keeps the same height — a failure that collapses the
+    /// layout would punish exactly the moment that needs calm. Failure is a retry, not
+    /// attention (DesignSystem → the `statusAttention` rule).
+    struct EstimateBar: View {
+        let estimate: NewDeliveryView.Model.Estimate
+        let retry: () -> Void
+
+        var body: some View {
+            if estimate != .idle {
+                HStack(spacing: 6) {
+                    switch estimate {
+                    case .idle:
+                        EmptyView()
+                    case .calculating:
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Estimating the route…")
+                            .foregroundStyle(.secondary)
+                    case .ready(let estimate):
+                        Image(systemSymbol: .arrowTurnUpRight)
+                            .foregroundStyle(.secondary)
+                        Text(estimate.summary)
+                            .fontWeight(.semibold)
+                        Text("route estimate")
+                            .foregroundStyle(.secondary)
+                    case .failed:
+                        Image(systemSymbol: .exclamationmarkTriangle)
+                            .foregroundStyle(.secondary)
+                        Text("Couldn't estimate the route")
+                        Button("Retry", action: retry)
+                    }
+                }
+                .font(.subheadline)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }
@@ -244,70 +311,6 @@ extension NewDeliveryView.Model.Role {
     }
 }
 
-// MARK: - Bridging
-
-extension NewDeliveryView.Content {
-    /// Builds the plain-value interface from the draft (R2): the parent stays terse, the
-    /// content stays decoupled and previewable from literals.
-    init(
-        draft: NewDeliveryView.Model,
-        pick: @escaping (UUID) -> Void,
-        editContact: @escaping (UUID) -> Void,
-        setRole: @escaping (UUID, NewDeliveryView.Model.Role) -> Void,
-        swapEnds: @escaping () -> Void,
-        addStop: @escaping () -> Void,
-        removeRows: @escaping (IndexSet) -> Void,
-        moveRows: @escaping (IndexSet, Int) -> Void
-    ) {
-        let points = draft.points
-        let rows = points.enumerated().map { index, point in
-            let badge = PointBadge.Role(
-                role: point.role,
-                index: index,
-                isLast: index == points.count - 1
-            )
-            return Row(
-                id: point.id,
-                badge: badge,
-                address: point.place?.displayAddress,
-                placeholder: point.role.pickerPrompt,
-                contactSummary: point.contact?.summary,
-                contactInvitation: point.role.contactInvitation,
-                availableRoles: draft.availableRoles(for: point.id),
-                isDeletable: index > 0 && points.count > 2,
-                isMovable: index > 0 && point.role != .return
-            )
-        }
-        let pins = points.enumerated().compactMap { index, point in
-            point.place.map { place in
-                Pin(
-                    id: point.id,
-                    latitude: place.latitude,
-                    longitude: place.longitude,
-                    badge: PointBadge.Role(
-                        role: point.role,
-                        index: index,
-                        isLast: index == points.count - 1
-                    )
-                )
-            }
-        }
-        self.init(
-            rows: rows,
-            pins: pins,
-            canSwap: draft.canSwap,
-            canReorder: draft.canReorder,
-            pick: pick,
-            editContact: editContact,
-            setRole: setRole,
-            swapEnds: swapEnds,
-            addStop: addStop,
-            removeRows: removeRows,
-            moveRows: moveRows
-        )
-    }
-}
-
 extension PointBadge.Role {
     /// The `2c` mapping from a draft row to its mark: the route starts with the ring and
     /// ends with the teardrop; stops between are numbered by position, so the numbers
@@ -360,6 +363,7 @@ private extension MKCoordinateRegion {
             ),
         ],
         pins: [],
+        estimate: .idle,
         canSwap: false,
         canReorder: false,
         pick: { _ in },
@@ -368,7 +372,8 @@ private extension MKCoordinateRegion {
         swapEnds: {},
         addStop: {},
         removeRows: { _ in },
-        moveRows: { _, _ in }
+        moveRows: { _, _ in },
+        retryEstimate: {}
     )
 }
 
@@ -404,6 +409,7 @@ private extension MKCoordinateRegion {
             .init(id: start, latitude: 55.646068, longitude: 37.668176, badge: .start),
             .init(id: end, latitude: 55.652212, longitude: 37.648210, badge: .end),
         ],
+        estimate: .ready(RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])),
         canSwap: true,
         canReorder: false,
         pick: { _ in },
@@ -412,8 +418,21 @@ private extension MKCoordinateRegion {
         swapEnds: {},
         addStop: {},
         removeRows: { _ in },
-        moveRows: { _, _ in }
+        moveRows: { _, _ in },
+        retryEstimate: {}
     )
+}
+
+#Preview("Estimate bar: every state keeps its height") {
+    VStack(spacing: 12) {
+        NewDeliveryView.Content.EstimateBar(estimate: .calculating, retry: {})
+        NewDeliveryView.Content.EstimateBar(
+            estimate: .ready(RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])),
+            retry: {}
+        )
+        NewDeliveryView.Content.EstimateBar(estimate: .failed, retry: {})
+    }
+    .padding()
 }
 
 #Preview("Route map: pins framed") {
@@ -424,6 +443,11 @@ private extension MKCoordinateRegion {
             .init(id: UUID(), latitude: 55.749917, longitude: 37.593450, badge: .stop(number: 2)),
             .init(id: UUID(), latitude: 55.652212, longitude: 37.648210, badge: .end),
         ],
+        legs: [[
+            .init(latitude: 55.646068, longitude: 37.668176),
+            .init(latitude: 55.700000, longitude: 37.630000),
+            .init(latitude: 55.749917, longitude: 37.593450),
+        ]],
         camera: $camera
     )
 }
