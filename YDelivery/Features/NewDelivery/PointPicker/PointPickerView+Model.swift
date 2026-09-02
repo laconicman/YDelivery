@@ -157,6 +157,31 @@ extension PointPickerView {
             return place
         }
 
+        /// Where an empty map starts when the sender's position is unavailable — the
+        /// Settings start city, resolved once per picker (Roadmap → Phase 2's fallback).
+        private(set) var startRegion: MKCoordinateRegion?
+
+        /// Resolves the Settings start city through the search seam. Failure keeps the
+        /// built-in fallback silently — a wrong Settings entry must not block picking.
+        /// The resolved region also biases the completer, so searches lean toward the
+        /// sender's market before any map is shown.
+        func resolveStartCity(_ city: String) async {
+            let city = city.trimmingCharacters(in: .whitespaces)
+            guard !city.isEmpty else {
+                startRegion = nil
+                return
+            }
+            guard let place = try? await searchPlace(city, nil), !Task.isCancelled else { return }
+            let region = MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude),
+                span: MKCoordinateSpan(latitudeDelta: 0.35, longitudeDelta: 0.35)
+            )
+            startRegion = region
+            if visibleRegion == nil {
+                visibleRegion = region
+            }
+        }
+
         /// Consumes completer batches for as long as the screen lives. Run it from the root
         /// view's `.task`: structured concurrency, so SwiftUI cancels it on dismiss and the
         /// bridge (with its stream) releases with the screen — no stored task, no custom

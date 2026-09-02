@@ -18,6 +18,9 @@ extension PointPickerView {
         /// Why keeping this place is unavailable, or `nil` when it is available —
         /// the reason is the input, so the view never has to invent one.
         let saveUnavailableReason: String?
+        /// Where an empty map starts — the Settings start city when set; the built-in
+        /// anchor otherwise.
+        let fallbackRegion: MKCoordinateRegion?
         let onTap: (_ latitude: Double, _ longitude: Double) -> Void
         let onVisibleRegionChange: (MKCoordinateRegion) -> Void
         let savePlace: () -> Void
@@ -43,6 +46,7 @@ extension PointPickerView {
             isApproximate: Bool = false,
             errorText: String?,
             saveUnavailableReason: String? = nil,
+            fallbackRegion: MKCoordinateRegion? = nil,
             onTap: @escaping (_ latitude: Double, _ longitude: Double) -> Void,
             onVisibleRegionChange: @escaping (MKCoordinateRegion) -> Void,
             savePlace: @escaping () -> Void = {},
@@ -55,6 +59,7 @@ extension PointPickerView {
             self.isApproximate = isApproximate
             self.errorText = errorText
             self.saveUnavailableReason = saveUnavailableReason
+            self.fallbackRegion = fallbackRegion
             self.onTap = onTap
             self.onVisibleRegionChange = onVisibleRegionChange
             self.savePlace = savePlace
@@ -63,7 +68,9 @@ extension PointPickerView {
             // editing would reframe on every tap-moved marker, defeating the suppression
             // below. A fresh picker starts over the service's home market; editing starts
             // on the place being edited.
-            let region = pin.map { MKCoordinateRegion(center: $0.coordinate, span: .addressLevel) } ?? .moscow
+            let region = pin.map { MKCoordinateRegion(center: $0.coordinate, span: .addressLevel) }
+                ?? fallbackRegion
+                ?? .moscow
             initialRegion = region
             _camera = State(initialValue: .region(region))
         }

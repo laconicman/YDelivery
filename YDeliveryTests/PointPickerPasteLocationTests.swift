@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 import Testing
 import YDeliveryKit
 @testable import YDelivery
@@ -159,6 +160,34 @@ struct PointPickerPasteLocationTests {
         #expect(model.locationDenied)
         #expect(model.lookupError == nil)
         #expect(!model.isRefining, "nothing was placed, so there is nothing to refine")
+    }
+
+    @Test("The Settings start city becomes the empty map's start and biases the search")
+    func startCityResolves() async {
+        let model = PointPickerView.Model(
+            resolveAddress: { _, _ in throw Unexpected() },
+            searchPlace: { query, _ in
+                #expect(query == "Санкт-Петербург")
+                return PickedPlace(latitude: 59.93, longitude: 30.31, address: "Санкт-Петербург")
+            },
+            expandLink: { _ in throw Unexpected() },
+            locateOnce: { throw Unexpected() }
+        )
+
+        await model.resolveStartCity("Санкт-Петербург")
+        #expect(model.startRegion?.center.latitude == 59.93)
+        #expect(model.visibleRegion?.center.latitude == 59.93, "searches lean toward the market")
+
+        await model.resolveStartCity("  ")
+        #expect(model.startRegion == nil, "clearing the setting clears the fallback")
+    }
+
+    @Test("A wrong start city keeps the built-in fallback silently")
+    func startCityFailureIsSilent() async {
+        let model = model()
+        await model.resolveStartCity("Кудыкина гора")
+        #expect(model.startRegion == nil)
+        #expect(model.lookupError == nil, "a Settings typo must not block picking")
     }
 
     @Test("The confirmed place carries its parts; empty parts stay absent")

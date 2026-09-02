@@ -6,6 +6,7 @@ extension SettingsView {
         let isSignedIn: Bool
         let errorText: String?
         @Binding var draftToken: String
+        @Binding var startCity: String
         let signIn: () -> Void
         let signOut: () -> Void
 
@@ -32,6 +33,15 @@ extension SettingsView {
                         Text("The long-lived OAuth token from your Yandex Delivery profile. Stored in the Keychain, on this device only.")
                     }
                 }
+
+                Section {
+                    TextField("Start city", text: $startCity)
+                        .textContentType(.addressCity)
+                } header: {
+                    Text("New delivery")
+                } footer: {
+                    Text("Where an empty map starts when your location is unavailable.")
+                }
             }
         }
     }
@@ -39,10 +49,12 @@ extension SettingsView {
 
 #Preview("Signed out") {
     @Previewable @State var token = ""
+    @Previewable @State var city = ""
     SettingsView.Content(
         isSignedIn: false,
         errorText: nil,
         draftToken: $token,
+        startCity: $city,
         signIn: {},
         signOut: {}
     )
@@ -50,10 +62,12 @@ extension SettingsView {
 
 #Preview("Signed in") {
     @Previewable @State var token = ""
+    @Previewable @State var city = "Санкт-Петербург"
     SettingsView.Content(
         isSignedIn: true,
         errorText: nil,
         draftToken: $token,
+        startCity: $city,
         signIn: {},
         signOut: {}
     )
@@ -61,10 +75,12 @@ extension SettingsView {
 
 #Preview("Failed sign-in") {
     @Previewable @State var token = "not-a-token"
+    @Previewable @State var city = ""
     SettingsView.Content(
         isSignedIn: false,
         errorText: "The token could not be saved to the Keychain.",
         draftToken: $token,
+        startCity: $city,
         signIn: {},
         signOut: {}
     )
