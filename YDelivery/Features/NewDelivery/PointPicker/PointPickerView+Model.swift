@@ -1,6 +1,7 @@
 import CoreLocation
 import MapKit
 import Observation
+import YDeliveryKit
 
 extension PointPickerView {
     /// The picker's screen logic: autocomplete, tap-to-pin, and address resolution.
@@ -27,10 +28,35 @@ extension PointPickerView {
         typealias PlaceSearcher =
             @Sendable (_ query: String, _ region: MKCoordinateRegion?) async throws -> PickedPlace
 
+        /// Short link → the full URL it redirects to. Defaults to one `URLSession` HEAD.
+        typealias LinkExpander = @Sendable (_ url: URL) async throws -> URL
+
+        /// One position fix. Defaults to `CLLocationUpdate.liveUpdates()`, whose first
+        /// update also raises the system prompt when authorization is undetermined.
+        typealias LocationFix = @Sendable () async throws -> (latitude: Double, longitude: Double, accuracy: Double)
+
         private(set) var suggestions: [AddressSuggestion] = []
         private(set) var pin: PickedPlace?
         private(set) var isResolving = false
         private(set) var lookupError: (any Error)?
+
+        /// Whether the refine stage (the map, «Уточните точку») is showing. Search is
+        /// the picker's home; the map is one row away, never a mode (board `2a`).
+        var isRefining = false
+
+        /// The parts of the address the pin cannot know — edited on the refine stage,
+        /// carried out with the confirmed place.
+        var addressParts = AddressParts()
+
+        /// The paste affordance's card, when active (board `2a`, frames 4–5).
+        private(set) var pasteState: PasteState?
+
+        /// The considerate-acquisition explainer, shown before the system's own prompt.
+        var locationPromptVisible = false
+        private(set) var isLocating = false
+        private(set) var locationDenied = false
+        /// True when the fix is coarse (~1 km) — the map invites correcting the pin.
+        private(set) var locationIsApproximate = false
 
         /// The map's visible region, reported by the view; biases the autocomplete and the
         /// final place search toward what the user is looking at.
@@ -48,8 +74,14 @@ extension PointPickerView {
             }
         }
 
-        /// Screen-level derivation for the confirm bar (R5).
-        var lookupErrorText: String? { lookupError?.localizedDescription }
+        /// Screen-level derivation for the confirm bar (R5). Crafted errors speak for
+        /// themselves; system errors (geocoder offline, dead network) collapse to one
+        /// honest sentence — `kCLErrorDomain` is not a thing to render.
+        var lookupErrorText: String? {
+            guard let lookupError else { return nil }
+            return (lookupError as? LocalizedError)?.errorDescription
+                ?? String(localized: "Couldn't name this point. Check the address, type it in, or move the pin.")
+        }
 
         var pinAddress: String {
             get { pin?.address ?? "" }
@@ -70,16 +102,35 @@ extension PointPickerView {
         private var completerBridge: CompleterBridge?
         private let resolveAddress: AddressResolver
         private let searchPlace: PlaceSearcher
+        private let expandLink: LinkExpander
+        private let locateOnce: LocationFix
         private var lookupTask: Task<Void, Never>?
+        private var pasteTask: Task<Void, Never>?
+        private var locationTask: Task<Void, Never>?
 
         init(
             initialPlace: PickedPlace? = nil,
             resolveAddress: @escaping AddressResolver = Model.geocoderResolver,
-            searchPlace: @escaping PlaceSearcher = Model.localSearcher
+            searchPlace: @escaping PlaceSearcher = Model.localSearcher,
+            expandLink: @escaping LinkExpander = Model.urlSessionExpander,
+            locateOnce: @escaping LocationFix = Model.liveUpdatesFix
         ) {
             pin = initialPlace
             self.resolveAddress = resolveAddress
             self.searchPlace = searchPlace
+            self.expandLink = expandLink
+            self.locateOnce = locateOnce
+            // Editing an already-chosen place starts on the map, at the place.
+            isRefining = initialPlace != nil
+            addressParts = initialPlace?.parts ?? AddressParts()
+        }
+
+        /// The confirmed result: the pin plus whatever parts were filled on the refine
+        /// stage. `nil` while nothing is confirmed-able.
+        var confirmedPlace: PickedPlace? {
+            guard var place = pin else { return nil }
+            place.parts = addressParts.isEmpty ? nil : addressParts
+            return place
         }
 
         /// Consumes completer batches for as long as the screen lives. Run it from the root
@@ -101,9 +152,16 @@ extension PointPickerView {
             }
         }
 
+        /// «Выбрать на карте» — the refine stage with nothing placed yet; a tap will
+        /// place the pin.
+        func chooseOnMap() {
+            isRefining = true
+        }
+
         /// A tap on the map: the pin moves immediately, the address arrives asynchronously
         /// and stays editable. A stale in-flight lookup is cancelled rather than raced.
         func dropPin(latitude: Double, longitude: Double) {
+            isRefining = true
             pin = PickedPlace(latitude: latitude, longitude: longitude, address: "")
             beginLookup { [resolveAddress] in
                 let address = try await resolveAddress(latitude, longitude)
@@ -111,12 +169,21 @@ extension PointPickerView {
             }
         }
 
-        /// A tapped completion: resolve it to coordinates through the search seam.
+        /// A tapped completion: resolve it to coordinates through the search seam and
+        /// land on the map for the one Done (board `2a`, «Уточните точку»).
         func select(_ suggestion: AddressSuggestion) {
             searchText = ""
             let query = suggestion.subtitle.isEmpty
                 ? suggestion.title
                 : "\(suggestion.title), \(suggestion.subtitle)"
+            searchAsAddress(query)
+        }
+
+        /// The nothing-found escape hatch: run the raw text through the place search —
+        /// «Искать … как адрес».
+        func searchAsAddress(_ query: String) {
+            searchText = ""
+            isRefining = true
             beginLookup { [searchPlace, visibleRegion] in
                 try await searchPlace(query, visibleRegion)
             }
@@ -146,6 +213,164 @@ extension PointPickerView {
             }
         }
 
+        // MARK: Paste
+
+        /// What a pasted string became — the states of board `2a`'s paste frames. The
+        /// point is *always* previewed before it may join the route: coordinate order
+        /// flips per provider, and a silent swap puts the pin in the Barents Sea
+        /// (<doc:LinkGrammars>, the two traps).
+        nonisolated enum PasteState: Hashable {
+            /// Following a short link — the one network-dependent class.
+            case expanding
+            /// Naming the parsed coordinates so the preview is verifiable.
+            case resolving
+            case preview(PickedPlace, source: MapLink.Source)
+            case routePreview(from: PickedPlace, to: PickedPlace, source: MapLink.Source)
+            case failed(PasteFailure)
+        }
+
+        nonisolated enum PasteFailure: Hashable {
+            /// The short link could not be expanded — offline copy, original kept so the
+            /// sender can open it in a maps app instead.
+            case couldNotExpand(original: URL)
+            /// A recognizable provider link that names a place without coordinates.
+            case noCoordinates
+            /// Not a map link at all.
+            case notALink
+        }
+
+        /// Runs pasted text through the <doc:LinkGrammars> rules.
+        func paste(_ text: String) {
+            pasteTask?.cancel()
+            guard let link = MapLink(pasted: text) else {
+                pasteState = .failed(.notALink)
+                return
+            }
+            handle(link, mayExpand: true)
+        }
+
+        func dismissPaste() {
+            pasteTask?.cancel()
+            pasteState = nil
+        }
+
+        /// «Поставить точку» — the previewed point moves to the map for the one Done.
+        func placePreviewedPoint() {
+            guard case .preview(let place, _) = pasteState else { return }
+            pasteState = nil
+            addressParts = AddressParts()
+            pin = place
+            isRefining = true
+        }
+
+        /// Both ends of a previewed route link, for the caller to fill in one action
+        /// (decision #9).
+        var previewedRoute: (from: PickedPlace, to: PickedPlace)? {
+            guard case .routePreview(let from, let to, _) = pasteState else { return nil }
+            return (from, to)
+        }
+
+        private func handle(_ link: MapLink, mayExpand: Bool) {
+            switch link {
+            case .point(let parsed, let source):
+                pasteState = .resolving
+                pasteTask = Task { [weak self, resolveAddress] in
+                    let address = (try? await resolveAddress(parsed.latitude, parsed.longitude)) ?? ""
+                    guard !Task.isCancelled else { return }
+                    self?.pasteState = .preview(
+                        PickedPlace(latitude: parsed.latitude, longitude: parsed.longitude, address: address),
+                        source: source
+                    )
+                }
+            case .route(let from, let to, let source):
+                pasteState = .resolving
+                pasteTask = Task { [weak self, resolveAddress] in
+                    let fromAddress = (try? await resolveAddress(from.latitude, from.longitude)) ?? ""
+                    let toAddress = (try? await resolveAddress(to.latitude, to.longitude)) ?? ""
+                    guard !Task.isCancelled else { return }
+                    self?.pasteState = .routePreview(
+                        from: PickedPlace(latitude: from.latitude, longitude: from.longitude, address: fromAddress),
+                        to: PickedPlace(latitude: to.latitude, longitude: to.longitude, address: toAddress),
+                        source: source
+                    )
+                }
+            case .shortLink(let url, _):
+                guard mayExpand else {
+                    // An expansion that yields another short link is a loop, not a point.
+                    pasteState = .failed(.noCoordinates)
+                    return
+                }
+                pasteState = .expanding
+                pasteTask = Task { [weak self, expandLink] in
+                    do {
+                        let expanded = try await expandLink(url)
+                        guard !Task.isCancelled else { return }
+                        if let followUp = MapLink(pasted: expanded.absoluteString) {
+                            self?.handle(followUp, mayExpand: false)
+                        } else {
+                            self?.pasteState = .failed(.noCoordinates)
+                        }
+                    } catch {
+                        guard !Task.isCancelled else { return }
+                        self?.pasteState = .failed(.couldNotExpand(original: url))
+                    }
+                }
+            case .noCoordinates:
+                pasteState = .failed(.noCoordinates)
+            }
+        }
+
+        // MARK: Location
+
+        /// «Моё местоположение». Undetermined authorization shows the considerate
+        /// explainer first — the system prompt appears only after the sender says
+        /// continue (Roadmap → Phase 2, the NetworkObserverSample pattern). Denial is
+        /// a rendered state, not an error.
+        func useMyLocation() {
+            locationDenied = false
+            switch CLLocationManager().authorizationStatus {
+            case .notDetermined:
+                locationPromptVisible = true
+            case .denied, .restricted:
+                locationDenied = true
+            default:
+                acquireLocation()
+            }
+        }
+
+        /// The explainer's «Continue»: now the system may ask.
+        func continueAfterLocationPrompt() {
+            locationPromptVisible = false
+            acquireLocation()
+        }
+
+        nonisolated struct LocationDenied: Error {}
+
+        private func acquireLocation() {
+            locationTask?.cancel()
+            isLocating = true
+            locationTask = Task { [weak self, locateOnce] in
+                defer { if !Task.isCancelled { self?.isLocating = false } }
+                do {
+                    let fix = try await locateOnce()
+                    guard !Task.isCancelled else { return }
+                    // Coarser than ~500 m (Reduced Accuracy is ~1–20 km) cannot name a
+                    // door: say so, and invite correcting the pin (board `2a`).
+                    self?.locationIsApproximate = fix.accuracy > 500
+                    self?.dropPin(latitude: fix.latitude, longitude: fix.longitude)
+                } catch is LocationDenied {
+                    guard !Task.isCancelled else { return }
+                    self?.locationDenied = true
+                } catch let error as CLError where error.code == .denied {
+                    // liveUpdates can also answer denial as its own thrown error.
+                    guard !Task.isCancelled else { return }
+                    self?.locationDenied = true
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self?.lookupError = error
+                }
+            }
+        }
     }
 }
 
@@ -175,6 +400,38 @@ extension PointPickerView.Model {
             longitude: coordinate.longitude,
             address: item.placemark.deliveryAddress
         )
+    }
+
+    /// One HEAD request; `URLSession` follows the redirect chain and hands back where it
+    /// landed — the only network step the paste affordance ever takes.
+    nonisolated static let urlSessionExpander: LinkExpander = { url in
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let final = response.url else { throw URLError(.badServerResponse) }
+        return final
+    }
+
+    /// The first usable fix from `CLLocationUpdate.liveUpdates()`, which also raises the
+    /// system authorization prompt when it is still undetermined. Denial and restriction
+    /// surface as ``Model/LocationDenied`` so the caller renders the state — read from
+    /// the manager, because the update's own convenience flags are iOS 18-only and the
+    /// floor is 17.
+    nonisolated static let liveUpdatesFix: LocationFix = {
+        for try await update in CLLocationUpdate.liveUpdates() {
+            if let location = update.location {
+                return (
+                    location.coordinate.latitude,
+                    location.coordinate.longitude,
+                    location.horizontalAccuracy
+                )
+            }
+            switch CLLocationManager().authorizationStatus {
+            case .denied, .restricted: throw LocationDenied()
+            default: continue // undetermined (prompt showing) or a fix still warming up
+            }
+        }
+        throw CancellationError()
     }
 
     /// `LocalizedError`, so the confirm bar's red footer reads "No address found." rather

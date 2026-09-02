@@ -182,6 +182,22 @@ struct NewDeliveryModelTests {
         #expect(model.points[0].contact == nil)
     }
 
+    @Test("A route link fills the pickup and the last delivery — never the return")
+    func fillEndsRespectsRoles() {
+        let model = NewDeliveryView.Model()
+        let stop = model.addStop()
+        model.setPlace(shop, for: stop)
+        model.setRole(.return, for: stop)
+        model.setContact(ivan, for: model.points[0].id)
+
+        model.fillEnds(from: office, to: home)
+
+        #expect(model.points[0].place == office)
+        #expect(model.points[1].place == home, "the last delivery takes the link's end")
+        #expect(model.points[2].place == shop, "the return keeps its own place")
+        #expect(model.points[0].contact == ivan, "a link knows places, not people")
+    }
+
     @Test("Reordering keeps identities — a moved stop is the same stop")
     func reorderKeepsIdentity() {
         let model = filledDraft()

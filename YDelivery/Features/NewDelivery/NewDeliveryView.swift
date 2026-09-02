@@ -33,7 +33,15 @@ struct NewDeliveryView: View {
                 PointPickerView(
                     prompt: point.role.pickerPrompt,
                     initialPlace: point.place,
-                    confirm: { draft.setPlace($0, for: point.id) }
+                    confirm: { place, contact in
+                        draft.setPlace(place, for: point.id)
+                        // A chip or recent brings its person along; a bare place never
+                        // erases somebody already standing at the door.
+                        if let contact {
+                            draft.setContact(contact, for: point.id)
+                        }
+                    },
+                    fillEnds: { draft.fillEnds(from: $0, to: $1) }
                 )
             }
             .sheet(item: $editingContactPoint) { point in
