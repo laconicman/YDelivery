@@ -56,7 +56,11 @@ Concurrency — all deliberate, see `Design`.
 
 Clarity over brevity. Prefer a vetted SPM when the dependency is smaller than the problem;
 say so explicitly when it is not. Cite sources in prose and code comments. DRY, separation
-of concerns, low coupling / high cohesion first.
+of concerns, low coupling / high cohesion first. Error types conform to `LocalizedError`
+with a filled `errorDescription` where they could ever surface — a properly filled error
+can be passed around and displayed as is (author, 2026-09-02). Prefer implicit returns
+wherever the compiler allows, including single-expression `switch`/`if` expressions
+(author, 2026-09-02).
 
 ## Related skills
 

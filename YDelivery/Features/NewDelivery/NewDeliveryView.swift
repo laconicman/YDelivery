@@ -12,6 +12,12 @@ struct NewDeliveryView: View {
     /// retry cancellable by the next route edit instead of outliving it.
     @State private var estimateAttempt = 0
     @State private var editingContactPoint: Model.Point?
+    @State private var showsExplainer = false
+    /// The explainer opens itself once per compose session until the first order exists
+    /// (board `3a`); after that it lives behind the ⓘ.
+    @State private var hasAutoOpenedExplainer = false
+    @Environment(ClientController.self) private var session
+    @Environment(StoreController.self) private var store
     @Environment(\.dismiss) private var dismiss
 
     /// What one estimate run answers to. Route edits and retries both change it, so
@@ -28,6 +34,8 @@ struct NewDeliveryView: View {
                 rows: contentRows,
                 pins: contentPins,
                 estimate: draft.estimate,
+                offers: draft.offers,
+                selectedOfferID: draft.selectedOfferID,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
@@ -37,14 +45,34 @@ struct NewDeliveryView: View {
                 addStop: { pickingPoint = draft.point(withID: draft.addStop()) },
                 removeRows: { draft.removePoints(at: $0) },
                 moveRows: { draft.movePoints(from: $0, to: $1) },
-                retryEstimate: { estimateAttempt += 1 }
+                retryEstimate: { estimateAttempt += 1 },
+                selectOffer: { draft.selectedOfferID = $0 },
+                retryOffers: {
+                    Task { await draft.loadOffers { try await session.offers(for: $0) } }
+                },
+                openExplainer: { showsExplainer = true }
             )
-            // Structured re-estimation: the id is the route plus which attempt at it, so
-            // any edit cancels the stale run and starts the right one, dismissal cancels
-            // outright — and a retry is the same owned task run again rather than a loose
-            // one racing it (review, PR #19).
+            // Structured re-pricing: the ids are the route itself, so any edit cancels
+            // the stale runs and starts the right ones; dismissal cancels outright. The
+            // estimate's id also carries its attempt count, so Retry re-runs the same
+            // owned task rather than a loose one racing it (review, PR #19).
             .task(id: EstimateRun(waypoints: draft.routeWaypoints, attempt: estimateAttempt)) {
                 await draft.calculateEstimate()
+            }
+            .task(id: draft.routeWaypoints) {
+                await draft.loadOffers { try await session.offers(for: $0) }
+            }
+            .task { await store.refresh() }
+            .onChange(of: draft.offers) {
+                // The first prices a beginner ever sees arrive with the explainer open
+                // (board 3a) — until the store holds a single completed order.
+                if case .ready = draft.offers, !hasAutoOpenedExplainer, store.orders.isEmpty {
+                    hasAutoOpenedExplainer = true
+                    showsExplainer = true
+                }
+            }
+            .sheet(isPresented: $showsExplainer) {
+                TariffExplainer(cards: explainerCards)
             }
             .navigationTitle("New Delivery")
             .navigationBarTitleDisplayMode(.inline)
@@ -123,6 +151,17 @@ private extension NewDeliveryView {
             }
         }
     }
+
+    /// Every class the app knows, priced where the strip has a price — the explainer
+    /// teaches the vocabulary even for classes the route was not offered.
+    var explainerCards: [TariffExplainer.Card] {
+        let offers: [Offer] = if case .ready(let offers) = draft.offers { offers } else { [] }
+        let known: [TariffClass] = [.courier, .express, .cargo]
+        let extra = offers.map(\.tariff).filter { !known.contains($0) }
+        return (known + extra).map { tariff in
+            TariffExplainer.Card(tariff: tariff, offer: offers.first { $0.tariff == tariff })
+        }
+    }
 }
 
 extension NewDeliveryView.Model.Role {
@@ -147,6 +186,8 @@ extension NewDeliveryView.Model.Role {
 
 #Preview("Empty draft") {
     NewDeliveryView(draft: NewDeliveryView.Model())
+        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
+        .environment(StoreController(orderStore: nil, placeStore: nil))
 }
 
 #Preview("Route complete") {
@@ -164,6 +205,8 @@ extension NewDeliveryView.Model.Role {
         for: draft.points[1].id
     )
     return NewDeliveryView(draft: draft)
+        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
+        .environment(StoreController(orderStore: nil, placeStore: nil))
 }
 
 #Preview("Five stops with a return") {
@@ -197,4 +240,6 @@ extension NewDeliveryView.Model.Role {
         for: returnStop
     )
     return NewDeliveryView(draft: draft)
+        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
+        .environment(StoreController(orderStore: nil, placeStore: nil))
 }

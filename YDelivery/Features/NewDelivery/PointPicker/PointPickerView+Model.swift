@@ -407,7 +407,11 @@ extension PointPickerView {
             acquireLocation()
         }
 
-        nonisolated struct LocationDenied: Error {}
+        nonisolated struct LocationDenied: LocalizedError {
+            var errorDescription: String? {
+                String(localized: "Location access is off — your position can't be used as a point.")
+            }
+        }
 
         private func acquireLocation() {
             locationTask?.cancel()

@@ -59,8 +59,25 @@ extension NewDeliveryView {
         typealias RouteEstimator =
             @Sendable (_ waypoints: [RouteEstimate.Coordinate]) async throws -> RouteEstimate
 
+        /// The tariff strip's states (board `1b`): waiting is a drawn state, failure
+        /// keeps the strip's place, and signed-out is an invitation — never an error.
+        enum Offers: Hashable {
+            /// No complete route — the strip is absent, not empty.
+            case idle
+            case loading
+            case ready([Offer])
+            case failed
+            /// No session: prices need a token; drafting never did.
+            case signedOut
+        }
+
         private(set) var points: [Point]
         private(set) var estimate: Estimate = .idle
+        private(set) var offers: Offers = .idle
+
+        /// The card the order button will spend — auto-selected to the first offer when
+        /// prices land, switchable by tapping the strip.
+        var selectedOfferID: Offer.ID?
 
         private let estimateRoute: RouteEstimator
 
@@ -104,10 +121,10 @@ extension NewDeliveryView {
             guard let index = points.firstIndex(where: { $0.id == id }), index > 0 else {
                 return []
             }
-            switch points[index].role {
-            case .pickup: return [.dropoff]
-            case .dropoff: return hasReturnPoint || dropoffCount < 2 ? [] : [.return]
-            case .return: return [.dropoff]
+            return switch points[index].role {
+            case .pickup: [.dropoff]
+            case .dropoff: hasReturnPoint || dropoffCount < 2 ? [] : [.return]
+            case .return: [.dropoff]
             }
         }
 
@@ -119,13 +136,11 @@ extension NewDeliveryView {
         /// Roles and row identities stay put: the route still starts with a pickup, and
         /// SwiftUI sees the same rows with exchanged content, not new rows.
         func swapEnds() {
-            guard canSwap else { return }
-            var first = points[0]
-            var second = points[1]
+            guard canSwap, var first = points.first, var second = points.last else { return }
             (first.place, second.place) = (second.place, first.place)
             (first.contact, second.contact) = (second.contact, first.contact)
-            points[0] = first
-            points[1] = second
+            // `canSwap` means exactly two points, so first and last are the whole route.
+            points = [first, second]
         }
 
         /// Adds an unfilled drop-off and returns its id so the caller can open the
@@ -216,6 +231,56 @@ extension NewDeliveryView {
             }
         }
 
+        // MARK: Offers
+
+        /// The route as an offers request sees it — address included, since the provider
+        /// wants `fullname` beside every coordinate pair.
+        var offerWaypoints: [OfferWaypoint] {
+            guard isRouteComplete else { return [] }
+            return points.compactMap { point in
+                point.place.map {
+                    OfferWaypoint(latitude: $0.latitude, longitude: $0.longitude, address: $0.address)
+                }
+            }
+        }
+
+        /// Loads priced offers through the caller's fetch — the root view hands in the
+        /// session controller's call, so this model never learns the transport. The
+        /// selection survives a reload when the same offer returns; otherwise the first
+        /// offer is selected, so the strip always has an answer for the order button.
+        func loadOffers(
+            _ fetch: ([OfferWaypoint]) async throws -> [Offer]
+        ) async {
+            let waypoints = offerWaypoints
+            guard waypoints.count >= 2 else {
+                offers = .idle
+                selectedOfferID = nil
+                return
+            }
+            offers = .loading
+            do {
+                let loaded = try await fetch(waypoints)
+                guard !Task.isCancelled else { return }
+                offers = .ready(loaded)
+                if !loaded.contains(where: { $0.id == selectedOfferID }) {
+                    selectedOfferID = loaded.first?.id
+                }
+            } catch is CancellationError {
+            } catch is OffersUnavailable {
+                guard !Task.isCancelled else { return }
+                offers = .signedOut
+                selectedOfferID = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                offers = .failed
+            }
+        }
+
+        var selectedOffer: Offer? {
+            guard case .ready(let offers) = offers else { return nil }
+            return offers.first { $0.id == selectedOfferID }
+        }
+
         /// Changes what happens at a stop's door. ``availableRoles(for:)`` is the single
         /// source of truth for what a stop may become, so a role it does not offer is
         /// refused here too — the pinned pickup keeps its role, a second return is
@@ -262,7 +327,11 @@ extension NewDeliveryView.Model {
         return RouteEstimate(distanceMeters: distance, travelTime: time, legs: legs)
     }
 
-    nonisolated struct NoRouteFound: Error {}
+    nonisolated struct NoRouteFound: LocalizedError {
+        var errorDescription: String? {
+            String(localized: "No drivable route between these points.")
+        }
+    }
 }
 
 private nonisolated extension MKPolyline {
