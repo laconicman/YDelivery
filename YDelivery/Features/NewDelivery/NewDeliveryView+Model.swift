@@ -153,20 +153,19 @@ extension NewDeliveryView {
             points[index].contact = contact.flatMap(\.storable)
         }
 
-        /// Changes what happens at a stop's door. The first row is the route's start and
-        /// keeps its pickup role; only one return point may exist, and becoming the
-        /// return moves the stop to the end of the run — leaving the role also leaves
-        /// the pinned seat.
+        /// Changes what happens at a stop's door. ``availableRoles(for:)`` is the single
+        /// source of truth for what a stop may become, so a role it does not offer is
+        /// refused here too — the pinned pickup keeps its role, a second return is
+        /// declined, and the route's only delivery stays a delivery (review, PR #17).
+        /// Becoming the return moves the stop to the end of the run; leaving the role
+        /// also leaves the pinned seat.
         func setRole(_ role: Role, for id: Point.ID) {
-            guard let index = points.firstIndex(where: { $0.id == id }), index > 0,
-                  points[index].role != role
+            guard let index = points.firstIndex(where: { $0.id == id }),
+                  availableRoles(for: id).contains(role)
             else { return }
+            points[index].role = role
             if role == .return {
-                guard !hasReturnPoint else { return }
-                points[index].role = role
                 points.append(points.remove(at: index))
-            } else {
-                points[index].role = role
             }
         }
     }

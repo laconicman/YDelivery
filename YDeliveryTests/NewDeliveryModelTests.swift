@@ -95,8 +95,13 @@ struct NewDeliveryModelTests {
     @Test("The route's only delivery can never become the return")
     func soleDeliveryStaysDelivery() {
         let model = filledDraft()
-        #expect(model.availableRoles(for: model.points[1].id) == [],
+        let delivery = model.points[1].id
+        #expect(model.availableRoles(for: delivery) == [],
                 "pickup → return delivers nothing (review, PR #17)")
+
+        model.setRole(.return, for: delivery)
+        #expect(model.points.map(\.role) == [.pickup, .dropoff],
+                "the menu and the mutation refuse it alike — a caller cannot route around the offer")
     }
 
     @Test("The last delivery cannot be removed out from beside a return")
@@ -144,6 +149,9 @@ struct NewDeliveryModelTests {
         let pickupID = model.points[0].id
 
         #expect(model.availableRoles(for: pickupID) == [])
+
+        model.setRole(.dropoff, for: pickupID)
+        #expect(model.points[0].role == .pickup, "the start keeps its role however it is asked")
 
         model.movePoints(from: IndexSet(integer: 0), to: 2)
         #expect(model.points[0].id == pickupID, "the pickup cannot be dragged off the start")
