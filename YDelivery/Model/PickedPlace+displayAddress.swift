@@ -1,6 +1,11 @@
 import Foundation
 
-extension PickedPlace {
+// `nonisolated` is load-bearing, not decoration: an extension does not inherit it from the
+// type it extends, so under this target's MainActor default isolation an unannotated
+// extension would pin pure formatting to the main actor — and the failure is a runtime
+// SIGTRAP from a nonisolated caller, not a compile error (REVIEW.md; MapLink, 2026-08-30).
+
+nonisolated extension PickedPlace {
     /// What a row or a marker calls this place when the user has not named it: the address
     /// when present, otherwise the coordinates to five decimals (≈1 m) — honest about being
     /// a bare pin, and precise enough to recognize on a map. A confirmed place must never
