@@ -92,10 +92,18 @@ nonisolated extension MapLink {
             }
         }
         if let rtext = query["rtext"] {
-            let ends = rtext.components(separatedBy: "~").compactMap { Parsed(latLon: $0) }
-            if ends.count >= 2, ends.allSatisfy(\.isPlausible) {
+            let segments = rtext.components(separatedBy: "~")
+            let ends = segments.compactMap { Parsed(latLon: $0) }
+            // Every segment must parse. Dropping one silently promotes an intermediate
+            // stop to an endpoint — a route that looks right and delivers somewhere else,
+            // which is the failure this grammar exists to prevent (review, PR #18).
+            if ends.count == segments.count, ends.count >= 2, ends.allSatisfy(\.isPlausible) {
                 return .route(from: ends[0], to: ends[ends.count - 1], source: .yandexMaps)
             }
+            // A route we recognise but cannot read declines as itself. Falling through
+            // would end at "not a map link", which is untrue of a link the user really
+            // did copy from Yandex Maps.
+            return .noCoordinates(source: .yandexMaps)
         }
         if let text = query["text"].flatMap({ Parsed(latLon: $0) }), text.isPlausible {
             return .point(text, source: .yandexMaps)
@@ -148,15 +156,17 @@ nonisolated extension MapLink {
         // Decoded: the `|` between directions points arrives percent-encoded.
         let path = url.path(percentEncoded: false)
         if path.contains("/directions/points/") {
-            let points = path
-                .components(separatedBy: "/points/").last.map {
-                    $0.components(separatedBy: "|").compactMap { segment in
-                        Parsed(lonLat: segment.components(separatedBy: ";")[0])
-                    }
-                } ?? []
-            if points.count >= 2, points.allSatisfy(\.isPlausible) {
+            let segments = path
+                .components(separatedBy: "/points/").last?
+                .components(separatedBy: "|") ?? []
+            let points = segments.compactMap { segment in
+                Parsed(lonLat: segment.components(separatedBy: ";")[0])
+            }
+            // As with `rtext`: a dropped segment would hand the route a different end.
+            if points.count == segments.count, points.count >= 2, points.allSatisfy(\.isPlausible) {
                 return .route(from: points[0], to: points[points.count - 1], source: .twoGIS)
             }
+            return .noCoordinates(source: .twoGIS)
         }
         if let geo = path.firstMatch(of: #//geo/(-?[0-9.]+),(-?[0-9.]+)/#),
            let longitude = Double(geo.1), let latitude = Double(geo.2) {

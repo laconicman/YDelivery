@@ -357,9 +357,9 @@ extension PointPickerView.SearchContent {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         case .noCoordinates:
-                            Text("The link names a place, but carries no point")
+                            Text("The link carries no point we can use")
                                 .font(.headline)
-                            Text("That's a listing card — there are no coordinates in the address. Open it and copy the street address instead.")
+                            Text("A listing card has no coordinates in it, and a route with a stop we can't read would put the pin somewhere else. Open it and copy the address instead.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         case .notALink:

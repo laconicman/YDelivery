@@ -50,6 +50,33 @@ struct MapLinkTests {
         ))
     }
 
+    @Test(
+        "A route with an unreadable stop is no route — a dropped one would move an end",
+        arguments: [
+            "broken~59.967870,30.242658~59.898495,30.299559",
+            "59.967870,30.242658~broken~59.898495,30.299559",
+            "59.967870,30.242658~59.898495,30.299559~broken",
+        ]
+    )
+    func yandexRouteRejectsUnreadableStop(rtext: String) {
+        let link = MapLink(pasted: "https://yandex.ru/maps/?rtext=\(rtext)&rtt=auto")
+        #expect(link == .noCoordinates(source: .yandexMaps),
+                "compactMap would have promoted an intermediate stop to an endpoint")
+    }
+
+    @Test(
+        "2GIS directions reject an unreadable point for the same reason",
+        arguments: [
+            "broken|37.531542,55.736291|37.665247,55.759725",
+            "37.531542,55.736291|broken|37.665247,55.759725",
+            "37.531542,55.736291|37.665247,55.759725|broken",
+        ]
+    )
+    func twoGISDirectionsRejectUnreadablePoint(points: String) {
+        let link = MapLink(pasted: "https://2gis.ru/directions/points/\(points)")
+        #expect(link == .noCoordinates(source: .twoGIS))
+    }
+
     @Test("Yandex text may hold a bare lat,lon pair")
     func yandexSearchTextCoordinates() {
         let link = MapLink(pasted: "https://yandex.ru/maps/?text=55.762611,36.982528")
