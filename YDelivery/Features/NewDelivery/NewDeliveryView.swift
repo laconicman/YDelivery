@@ -8,8 +8,19 @@ import YDeliveryKit
 struct NewDeliveryView: View {
     let draft: Model
     @State private var pickingPoint: Model.Point?
+    /// Bumped by Retry. It is part of the estimate task's id, which is what makes a
+    /// retry cancellable by the next route edit instead of outliving it.
+    @State private var estimateAttempt = 0
     @State private var editingContactPoint: Model.Point?
     @Environment(\.dismiss) private var dismiss
+
+    /// What one estimate run answers to. Route edits and retries both change it, so
+    /// exactly one calculation is ever live and the last one to start is the one that
+    /// publishes.
+    private struct EstimateRun: Equatable {
+        let waypoints: [RouteEstimate.Coordinate]
+        let attempt: Int
+    }
 
     var body: some View {
         NavigationStack {
@@ -26,14 +37,15 @@ struct NewDeliveryView: View {
                 addStop: { pickingPoint = draft.point(withID: draft.addStop()) },
                 removeRows: { draft.removePoints(at: $0) },
                 moveRows: { draft.movePoints(from: $0, to: $1) },
-                retryEstimate: {
-                    // Errors land in the draft's estimate state; nothing to await here.
-                    Task { await draft.calculateEstimate() }
-                }
+                retryEstimate: { estimateAttempt += 1 }
             )
-            // Structured re-estimation: the id is the route itself, so any edit cancels
-            // the stale run and starts the right one; dismissal cancels outright.
-            .task(id: draft.routeWaypoints) { await draft.calculateEstimate() }
+            // Structured re-estimation: the id is the route plus which attempt at it, so
+            // any edit cancels the stale run and starts the right one, dismissal cancels
+            // outright — and a retry is the same owned task run again rather than a loose
+            // one racing it (review, PR #19).
+            .task(id: EstimateRun(waypoints: draft.routeWaypoints, attempt: estimateAttempt)) {
+                await draft.calculateEstimate()
+            }
             .navigationTitle("New Delivery")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

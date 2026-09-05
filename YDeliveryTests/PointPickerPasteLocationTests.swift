@@ -182,6 +182,27 @@ struct PointPickerPasteLocationTests {
         #expect(model.startRegion == nil, "clearing the setting clears the fallback")
     }
 
+    @Test("A start city that lands after the map opened still publishes its region")
+    func startCityArrivesLate() async {
+        let model = PointPickerView.Model(
+            resolveAddress: { _, _ in "Resolved" },
+            searchPlace: { _, _ in PickedPlace(latitude: 59.93, longitude: 30.31, address: "Санкт-Петербург") },
+            expandLink: { _ in throw Unexpected() },
+            locateOnce: { throw Unexpected() }
+        )
+        // The refine map opened first and reported where it landed: the built-in anchor,
+        // which is a default nobody chose rather than a place the sender navigated to.
+        model.visibleRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 55.7558, longitude: 37.6173),
+            span: MKCoordinateSpan(latitudeDelta: 0.35, longitudeDelta: 0.35)
+        )
+
+        await model.resolveStartCity("Санкт-Петербург")
+
+        #expect(model.startRegion?.center.latitude == 59.93,
+                "an empty, undriven map watches this and follows it (review, PR #19)")
+    }
+
     @Test("A wrong start city keeps the built-in fallback silently")
     func startCityFailureIsSilent() async {
         let model = model()

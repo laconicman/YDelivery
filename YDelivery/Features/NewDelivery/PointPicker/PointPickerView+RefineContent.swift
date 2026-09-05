@@ -27,6 +27,9 @@ extension PointPickerView {
         let done: () -> Void
 
         @State private var camera: MapCameraPosition
+        /// How many times the camera has settled. The first is this view arriving at the
+        /// region it was seeded with; anything beyond that is the sender driving.
+        @State private var cameraSettles = 0
 
         /// What the map shows before any interaction — reported on appear so the first
         /// search is region-biased too; `.onMapCameraChange(.onEnd)` only fires after a move.
@@ -102,9 +105,20 @@ extension PointPickerView {
             }
             .onMapCameraChange(frequency: .onEnd) { context in
                 onVisibleRegionChange(context.region)
+                cameraSettles += 1
             }
             .onAppear {
                 onVisibleRegionChange(initialRegion)
+            }
+            .onChange(of: fallbackRegion?.centerOnly) { _, _ in
+                // The start city is resolved by a search, so it can land after this map
+                // is already open — and then the sender is looking at a default nobody
+                // chose, with the completer biased to it too. An empty map they have not
+                // driven yet follows the answer when it arrives; a placed pin or a moved
+                // camera is theirs and is left alone (review, PR #19).
+                guard let region = fallbackRegion, pin == nil, cameraSettles <= 1 else { return }
+                camera = .region(region)
+                onVisibleRegionChange(region)
             }
             .onChange(of: pin?.coordinateOnly) { previous, current in
                 // Recenter when the pin arrives from search — not on address-only edits
@@ -312,6 +326,15 @@ private extension MKCoordinateRegion {
 private extension MKCoordinateSpan {
     /// Tight enough to read house numbers, loose enough to keep the block in view.
     static let addressLevel = MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+}
+
+private extension MKCoordinateRegion {
+    /// `MKCoordinateRegion` is not `Equatable` and `onChange` needs it to be. The centre
+    /// is the whole of what changes here — the start city's span is fixed where it is
+    /// resolved — so it is the identity worth watching.
+    var centerOnly: PickedPlace.Coordinate {
+        PickedPlace.Coordinate(latitude: center.latitude, longitude: center.longitude)
+    }
 }
 
 private extension PickedPlace {
