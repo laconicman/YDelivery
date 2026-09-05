@@ -642,6 +642,29 @@ private extension MKCoordinateRegion {
     )
 }
 
+#Preview("Tariff card: selected shows its bounds, unselected stays scannable") {
+    HStack(alignment: .top, spacing: 12) {
+        NewDeliveryView.Content.TariffCard(
+            emoji: "🛵",
+            name: "Courier",
+            limits: "Up to 10 kg · 80 × 50 × 50 cm",
+            priceText: "749 ₽",
+            isSelected: true,
+            select: {}
+        )
+        NewDeliveryView.Content.TariffCard(
+            emoji: "🚚",
+            name: "Cargo",
+            limits: nil,
+            priceText: "3 480 ₽",
+            isSelected: false,
+            select: {}
+        )
+    }
+    .padding()
+    .background(Color(.systemGroupedBackground))
+}
+
 #Preview("Point row: unfilled, no contact") {
     List {
         NewDeliveryView.Content.PointRow(

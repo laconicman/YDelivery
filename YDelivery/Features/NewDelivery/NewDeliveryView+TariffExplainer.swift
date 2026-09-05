@@ -95,6 +95,29 @@ extension NewDeliveryView.TariffExplainer.Card {
     }
 }
 
+#Preview("Card row: priced, and a class the route was not offered") {
+    List {
+        NewDeliveryView.TariffExplainer.CardRow(
+            card: .init(
+                name: "Courier",
+                emoji: "🛵",
+                explanation: "On foot or a scooter",
+                limits: ["Up to 10 kg", "80 × 50 × 50 cm"],
+                priceText: "749 ₽"
+            )
+        )
+        NewDeliveryView.TariffExplainer.CardRow(
+            card: .init(
+                name: "Cargo",
+                emoji: "🚚",
+                explanation: "A van, with loaders if you ask",
+                limits: ["Up to 700 kg", "260 × 160 × 150 cm"],
+                priceText: nil
+            )
+        )
+    }
+}
+
 #Preview("Priced") {
     Color.clear.sheet(isPresented: .constant(true)) {
         NewDeliveryView.TariffExplainer(cards: [
