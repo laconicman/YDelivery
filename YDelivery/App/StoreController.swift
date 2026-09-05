@@ -37,22 +37,37 @@ final class StoreController {
     /// The recent points the picker offers: one per address, newest first — an address
     /// delivered to twice is one memory, not two rows (Design → one substrate).
     var recentPoints: [RoutePoint] {
-        Self.recentPoints(in: orders)
+        Self.recentPoints(in: orders, saved: savedPlaces)
     }
 
     /// Pure and `nonisolated` so the derivation is testable without a controller.
     /// Orders arrive newest-first from the store; the cap keeps the empty-query list
     /// one screen tall (board `2a`).
-    nonisolated static func recentPoints(in orders: [Order], limit: Int = 8) -> [RoutePoint] {
-        var seen = Set<String>()
+    ///
+    /// Saved places are excluded rather than repeated. Chips and recents are one list
+    /// on board `2a`, and a place the sender has named is the same memory with more in
+    /// it — offering it again as an anonymous clock row is the "two rows" this
+    /// derivation already refuses between recents (review, PR #18).
+    nonisolated static func recentPoints(
+        in orders: [Order],
+        saved: [SavedPlace] = [],
+        limit: Int = 8
+    ) -> [RoutePoint] {
+        var seen = Set(saved.map { addressKey($0.point.address) })
         var recents: [RoutePoint] = []
         for point in orders.flatMap(\.route) {
-            let key = point.address.lowercased().trimmingCharacters(in: .whitespaces)
+            let key = addressKey(point.address)
             guard !key.isEmpty, seen.insert(key).inserted else { continue }
             recents.append(point)
             if recents.count == limit { break }
         }
         return recents
+    }
+
+    /// One spelling of "the same address", so the two things that dedupe against each
+    /// other agree on what same means.
+    private nonisolated static func addressKey(_ address: String) -> String {
+        address.lowercased().trimmingCharacters(in: .whitespaces)
     }
 
     /// Reads both files off the main actor and publishes the result here.
@@ -67,20 +82,19 @@ final class StoreController {
         }
     }
 
-    /// Keeps a place and republishes the set. Throws into ``storeError`` — history that
-    /// did not persist is a state the sender must see.
-    func save(_ place: SavedPlace) async {
-        guard let placeStore else {
-            storeError = StoreUnavailable()
-            return
-        }
-        do {
-            try await Self.write(place, to: placeStore)
-            savedPlaces = try await Self.readPlaces(placeStore)
-            storeError = nil
-        } catch {
-            storeError = error
-        }
+    /// Keeps a place and republishes the set.
+    ///
+    /// This one throws rather than absorbing into ``storeError``, because unlike a refresh
+    /// it has a caller standing in front of the sender: the naming sheet, which can stay
+    /// open, say what went wrong, and offer the write again. A bookmark that did not
+    /// persist must never look like one that did (review, PR #18). The error is a filled
+    /// `LocalizedError`, so the sheet renders it as it arrives.
+    func save(_ place: SavedPlace) async throws {
+        guard let placeStore else { throw StoreUnavailable() }
+        try await Self.write(place, to: placeStore)
+        savedPlaces = try await Self.readPlaces(placeStore)
+        // That re-read succeeded, so whatever the last refresh recorded is stale news.
+        storeError = nil
     }
 
     struct StoreUnavailable: LocalizedError {

@@ -15,7 +15,9 @@ extension PointPickerView {
         let isResolving: Bool
         let isApproximate: Bool
         let errorText: String?
-        let canSavePlace: Bool
+        /// Why keeping this place is unavailable, or `nil` when it is available —
+        /// the reason is the input, so the view never has to invent one.
+        let saveUnavailableReason: String?
         let onTap: (_ latitude: Double, _ longitude: Double) -> Void
         let onVisibleRegionChange: (MKCoordinateRegion) -> Void
         let savePlace: () -> Void
@@ -40,7 +42,7 @@ extension PointPickerView {
             isResolving: Bool,
             isApproximate: Bool = false,
             errorText: String?,
-            canSavePlace: Bool = false,
+            saveUnavailableReason: String? = nil,
             onTap: @escaping (_ latitude: Double, _ longitude: Double) -> Void,
             onVisibleRegionChange: @escaping (MKCoordinateRegion) -> Void,
             savePlace: @escaping () -> Void = {},
@@ -52,7 +54,7 @@ extension PointPickerView {
             self.isResolving = isResolving
             self.isApproximate = isApproximate
             self.errorText = errorText
-            self.canSavePlace = canSavePlace
+            self.saveUnavailableReason = saveUnavailableReason
             self.onTap = onTap
             self.onVisibleRegionChange = onVisibleRegionChange
             self.savePlace = savePlace
@@ -118,7 +120,7 @@ extension PointPickerView {
                     isResolving: isResolving,
                     isApproximate: isApproximate,
                     errorText: errorText,
-                    canSavePlace: canSavePlace,
+                    saveUnavailableReason: saveUnavailableReason,
                     savePlace: savePlace,
                     done: done
                 )
@@ -139,7 +141,9 @@ extension PointPickerView.RefineContent {
         let isResolving: Bool
         let isApproximate: Bool
         let errorText: String?
-        let canSavePlace: Bool
+        /// Why keeping this place is unavailable, or `nil` when it is available —
+        /// the reason is the input, so the view never has to invent one.
+        let saveUnavailableReason: String?
         let savePlace: () -> Void
         let done: () -> Void
 
@@ -189,16 +193,23 @@ extension PointPickerView.RefineContent {
                     .controlSize(.large)
                     .disabled(!hasPin || isResolving)
 
-                    if canSavePlace {
-                        Button(action: savePlace) {
-                            Image(systemSymbol: .bookmark)
-                                .font(.headline)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .disabled(!hasPin || isResolving)
-                        .accessibilityLabel(Text("Save as a place"))
+                    // Unavailable renders disabled with its reason, never absent —
+                    // a vocabulary the sender cannot see is one they cannot learn
+                    // (DESIGN-HANDOFF §4.2; review, PR #18).
+                    Button(action: savePlace) {
+                        Image(systemSymbol: .bookmark)
+                            .font(.headline)
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .disabled(!hasPin || isResolving || saveUnavailableReason != nil)
+                    .accessibilityLabel(Text("Save as a place"))
+                    .accessibilityHint(saveUnavailableReason.map(Text.init) ?? Text(""))
+                }
+                if let saveUnavailableReason {
+                    Text(saveUnavailableReason)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding()
@@ -244,7 +255,7 @@ extension PointPickerView.RefineContent {
         isResolving: true,
         isApproximate: false,
         errorText: nil,
-        canSavePlace: false,
+        saveUnavailableReason: nil,
         savePlace: {},
         done: {}
     )
@@ -260,7 +271,7 @@ extension PointPickerView.RefineContent {
         isResolving: false,
         isApproximate: false,
         errorText: "No address found.",
-        canSavePlace: false,
+        saveUnavailableReason: nil,
         savePlace: {},
         done: {}
     )
@@ -276,7 +287,7 @@ extension PointPickerView.RefineContent {
         isResolving: false,
         isApproximate: true,
         errorText: nil,
-        canSavePlace: true,
+        saveUnavailableReason: nil,
         savePlace: {},
         done: {}
     )
@@ -351,7 +362,7 @@ private extension PickedPlace {
         parts: $parts,
         isResolving: false,
         errorText: nil,
-        canSavePlace: true,
+        saveUnavailableReason: nil,
         onTap: { _, _ in },
         onVisibleRegionChange: { _ in }
     )

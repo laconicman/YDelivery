@@ -33,6 +33,7 @@ struct NewDeliveryView: View {
                 PointPickerView(
                     prompt: point.role.pickerPrompt,
                     initialPlace: point.place,
+                    initialContact: point.contact,
                     confirm: { place, contact in
                         draft.setPlace(place, for: point.id)
                         // A chip or recent brings its person along; a bare place never

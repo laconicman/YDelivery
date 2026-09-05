@@ -48,6 +48,23 @@ struct StoreControllerTests {
         #expect(recents[0].contactName == "Иван Петров")
     }
 
+    @Test("A place the sender named is a chip, not also an anonymous recent")
+    func savedPlacesLeaveTheRecents() {
+        let orders = [order(created: .now, addresses: ["Невский, 100", "Каширское шоссе, 52"])]
+        let saved = [
+            SavedPlace(
+                name: "Склад",
+                kind: .warehouse,
+                // Same place, spelled the way the sender typed it into the chip.
+                point: RoutePoint(latitude: 55, longitude: 37, address: "  невский, 100  ")
+            )
+        ]
+
+        let recents = StoreController.recentPoints(in: orders, saved: saved)
+        #expect(recents.map(\.address) == ["Каширское шоссе, 52"],
+                "the chip already carries that point, with its name and its contact")
+    }
+
     @Test("Recents cap at the limit — the empty-query list stays one screen tall")
     func recentsRespectLimit() {
         let orders = (0..<20).map { index in
@@ -74,7 +91,7 @@ struct StoreControllerTests {
     @Test("Saving a place persists and republishes")
     func savePersists() async throws {
         let controller = controller
-        await controller.save(
+        try await controller.save(
             SavedPlace(name: "Склад", kind: .warehouse, point: RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100"))
         )
 
@@ -83,16 +100,36 @@ struct StoreControllerTests {
     }
 
     @Test("No container is a rendered state: saving reports, never crashes")
-    func unavailableStoreReports() async {
+    func unavailableStoreReports() async throws {
         let controller = StoreController(orderStore: nil, placeStore: nil)
         #expect(!controller.canSavePlaces)
 
-        await controller.save(
-            SavedPlace(name: "Дом", kind: .home, point: RoutePoint(latitude: 55, longitude: 37, address: "Дом"))
-        )
-        #expect(controller.storeError is StoreController.StoreUnavailable)
+        // It throws rather than absorbing, so the sheet that asked can stay open and
+        // say so — and the error arrives already worded for the sender.
+        await #expect(throws: StoreController.StoreUnavailable.self) {
+            try await controller.save(
+                SavedPlace(name: "Дом", kind: .home, point: RoutePoint(latitude: 55, longitude: 37, address: "Дом"))
+            )
+        }
+        #expect(!StoreController.StoreUnavailable().localizedDescription.isEmpty,
+                "a disabled affordance renders this as its reason")
 
         await controller.refresh()
         #expect(controller.orders.isEmpty)
+    }
+
+    @Test("A saved place keeps the person at its door")
+    func savedPlaceKeepsItsContact() async throws {
+        let controller = controller
+        let place = PickedPlace(latitude: 59, longitude: 30, address: "Невский, 100")
+        let ivan = Contact(name: "Иван Петров", phone: "+7 912 345-67-89", phoneExtension: "12")
+
+        try await controller.save(
+            SavedPlace(name: "Склад", kind: .warehouse, point: RoutePoint(place, contact: ivan))
+        )
+
+        let chip = try #require(controller.savedPlaces.first)
+        #expect(Contact(at: chip.point) == ivan,
+                "the chip restores the whole point — picking it is chip → done, contact included")
     }
 }

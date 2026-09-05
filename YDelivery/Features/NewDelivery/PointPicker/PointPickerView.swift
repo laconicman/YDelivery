@@ -16,6 +16,8 @@ struct PointPickerView: View {
     /// A pasted route link fills both ends in one action (decision #9); `nil` hides
     /// that offer.
     let fillEnds: ((PickedPlace, PickedPlace) -> Void)?
+    /// Who already stands at this point's door, so bookmarking it keeps them.
+    let initialContact: Contact?
 
     @State private var model: Model
     @State private var pendingSave: PendingSave?
@@ -26,19 +28,25 @@ struct PointPickerView: View {
     init(
         prompt: LocalizedStringKey,
         initialPlace: PickedPlace? = nil,
+        initialContact: Contact? = nil,
         confirm: @escaping (PickedPlace, Contact?) -> Void,
         fillEnds: ((PickedPlace, PickedPlace) -> Void)? = nil
     ) {
         self.prompt = prompt
         self.confirm = confirm
         self.fillEnds = fillEnds
+        self.initialContact = initialContact
         _model = State(initialValue: Model(initialPlace: initialPlace))
     }
 
-    /// The place being named for the chips — `sheet(item:)` wants identity.
+    /// The point being named for the chips — `sheet(item:)` wants identity. It carries
+    /// the contact as well as the place: a saved place is a whole point, and the chip
+    /// that restores it hands back the person at its door (Design → "a point carries
+    /// data, not coordinates"; review, PR #18).
     private struct PendingSave: Identifiable {
         let id = UUID()
         let place: PickedPlace
+        let contact: Contact?
     }
 
     var body: some View {
@@ -102,12 +110,14 @@ struct PointPickerView: View {
                     isResolving: model.isResolving,
                     isApproximate: model.locationIsApproximate,
                     errorText: model.lookupErrorText,
-                    canSavePlace: store.canSavePlaces,
+                    saveUnavailableReason: store.canSavePlaces
+                        ? nil
+                        : StoreController.StoreUnavailable().localizedDescription,
                     onTap: { model.dropPin(latitude: $0, longitude: $1) },
                     onVisibleRegionChange: { model.visibleRegion = $0 },
                     savePlace: {
                         if let place = model.confirmedPlace {
-                            pendingSave = PendingSave(place: place)
+                            pendingSave = PendingSave(place: place, contact: initialContact)
                         }
                     },
                     done: {
@@ -124,9 +134,13 @@ struct PointPickerView: View {
         }
         .sheet(item: $pendingSave) { pending in
             SavePlaceSheet(address: pending.place.displayAddress) { name, kind in
-                Task {
-                    await store.save(SavedPlace(name: name, kind: kind, point: RoutePoint(pending.place)))
-                }
+                try await store.save(
+                    SavedPlace(
+                        name: name,
+                        kind: kind,
+                        point: RoutePoint(pending.place, contact: pending.contact)
+                    )
+                )
             }
         }
     }
