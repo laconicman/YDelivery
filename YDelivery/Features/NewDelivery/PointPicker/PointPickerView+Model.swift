@@ -125,6 +125,19 @@ extension PointPickerView {
             addressParts = initialPlace?.parts ?? AddressParts()
         }
 
+        /// Everything that describes *this* pin and must not outlive it: the door details
+        /// typed against it, and whether the fix that placed it was too coarse to name a
+        /// door. Every path that chooses a genuinely new point calls this, so an entrance
+        /// and floor cannot ride along to a different address and a corrected pin cannot
+        /// keep an approximation warning it no longer earns (review, PR #18).
+        ///
+        /// Opening the picker on an already-chosen place does *not* call it — that place
+        /// arrives with its own parts, and editing it is not choosing a new point.
+        private func adoptNewPoint(isApproximate: Bool = false) {
+            addressParts = AddressParts()
+            locationIsApproximate = isApproximate
+        }
+
         /// The confirmed result: the pin plus whatever parts were filled on the refine
         /// stage. `nil` while nothing is confirmed-able.
         var confirmedPlace: PickedPlace? {
@@ -160,8 +173,13 @@ extension PointPickerView {
 
         /// A tap on the map: the pin moves immediately, the address arrives asynchronously
         /// and stays editable. A stale in-flight lookup is cancelled rather than raced.
-        func dropPin(latitude: Double, longitude: Double) {
+        ///
+        /// `isApproximate` travels with the call that places the pin rather than being set
+        /// around it, so a coarse fix cannot leave its warning behind on a point the
+        /// sender later corrected by hand (review, PR #18).
+        func dropPin(latitude: Double, longitude: Double, isApproximate: Bool = false) {
             isRefining = true
+            adoptNewPoint(isApproximate: isApproximate)
             pin = PickedPlace(latitude: latitude, longitude: longitude, address: "")
             beginLookup { [resolveAddress] in
                 let address = try await resolveAddress(latitude, longitude)
@@ -184,6 +202,7 @@ extension PointPickerView {
         func searchAsAddress(_ query: String) {
             searchText = ""
             isRefining = true
+            adoptNewPoint()
             beginLookup { [searchPlace, visibleRegion] in
                 try await searchPlace(query, visibleRegion)
             }
@@ -258,7 +277,7 @@ extension PointPickerView {
         func placePreviewedPoint() {
             guard case .preview(let place, _) = pasteState else { return }
             pasteState = nil
-            addressParts = AddressParts()
+            adoptNewPoint()
             pin = place
             isRefining = true
         }
@@ -354,10 +373,14 @@ extension PointPickerView {
                 do {
                     let fix = try await locateOnce()
                     guard !Task.isCancelled else { return }
-                    // Coarser than ~500 m (Reduced Accuracy is ~1–20 km) cannot name a
-                    // door: say so, and invite correcting the pin (board `2a`).
-                    self?.locationIsApproximate = fix.accuracy > 500
-                    self?.dropPin(latitude: fix.latitude, longitude: fix.longitude)
+                    // Say so, and invite correcting the pin (board `2a`).
+                    self?.dropPin(
+                        latitude: fix.latitude,
+                        longitude: fix.longitude,
+                        // Coarser than ~500 m (Reduced Accuracy is ~1–20 km) cannot name
+                        // a door.
+                        isApproximate: fix.accuracy > 500
+                    )
                 } catch is LocationDenied {
                     guard !Task.isCancelled else { return }
                     self?.locationDenied = true

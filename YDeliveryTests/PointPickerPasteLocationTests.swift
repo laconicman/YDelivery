@@ -143,6 +143,54 @@ struct PointPickerPasteLocationTests {
         #expect(model.confirmedPlace?.parts == AddressParts(entrance: "А", apartment: "301"))
     }
 
+    @Test("Door details belong to the address they were typed against")
+    func partsDoNotFollowANewAddress() async throws {
+        let model = PointPickerView.Model(
+            initialPlace: PickedPlace(
+                latitude: 55.75, longitude: 37.61,
+                address: "Москва, Тверская, 6",
+                parts: AddressParts(entrance: "А", floor: "3", apartment: "301")
+            ),
+            resolveAddress: { _, _ in "Москва, Каширское шоссе, 52" },
+            searchPlace: { _, _ in PickedPlace(latitude: 55.64, longitude: 37.66, address: "Найдено") },
+            expandLink: { _ in throw Unexpected() },
+            locateOnce: { throw Unexpected() }
+        )
+        #expect(model.addressParts.entrance == "А", "editing the point it opened on keeps them")
+
+        model.dropPin(latitude: 55.64, longitude: 37.66)
+        #expect(model.addressParts.isEmpty,
+                "entrance 3, flat 301 of a different building is a failed delivery")
+        try await waitUntil { !model.isResolving }
+        #expect(model.confirmedPlace?.parts == nil)
+    }
+
+    @Test("A searched address does not inherit the previous point's door details")
+    func partsDoNotSurviveASearch() async throws {
+        let model = model()
+        model.dropPin(latitude: 55.75, longitude: 37.61)
+        try await waitUntil { !model.isResolving }
+        model.addressParts.apartment = "301"
+
+        model.searchAsAddress("Каширское шоссе 52")
+        #expect(model.addressParts.isEmpty)
+    }
+
+    @Test("Correcting a coarse fix by hand drops the approximation warning")
+    func approximationDiesWithItsPin() async throws {
+        let model = model(
+            resolve: { _, _ in "Москва, где-то рядом" },
+            locate: { (55.7558, 37.6173, 1200) }
+        )
+        model.continueAfterLocationPrompt()
+        try await waitUntil { !model.isLocating && !model.isResolving }
+        #expect(model.locationIsApproximate)
+
+        model.dropPin(latitude: 55.646068, longitude: 37.668176)
+        #expect(!model.locationIsApproximate,
+                "the sender placed this one; the warning belonged to the fix, not the map")
+    }
+
     @Test("System lookup errors collapse to one honest sentence, not kCLErrorDomain")
     func systemErrorsReadHuman() async throws {
         let model = model(resolve: { _, _ in throw URLError(.notConnectedToInternet) })
