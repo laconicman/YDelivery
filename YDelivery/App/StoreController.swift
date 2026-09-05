@@ -19,6 +19,12 @@ final class StoreController {
     /// *nothing there*.
     private(set) var storeError: (any Error)?
 
+    /// Whether the store has been read through at least once, successfully. Until it
+    /// has, an empty ``orders`` means *not looked yet*, not *nothing there* — and a
+    /// first-run surface that reads emptiness as "this sender is new" would greet a
+    /// returning one (review, PR #20).
+    private(set) var hasLoaded = false
+
     private let orderStore: OrderStore?
     private let placeStore: SavedPlaceStore?
 
@@ -105,6 +111,7 @@ final class StoreController {
             self.orders = orders
             savedPlaces = places
             storeError = nil
+            hasLoaded = true
         } catch {
             storeError = error
         }

@@ -8,9 +8,10 @@ import YDeliveryKit
 struct NewDeliveryView: View {
     let draft: Model
     @State private var pickingPoint: Model.Point?
-    /// Bumped by Retry. It is part of the estimate task's id, which is what makes a
-    /// retry cancellable by the next route edit instead of outliving it.
+    /// Bumped by the two Retry buttons. Each is part of its task's id, which is what
+    /// makes a retry cancellable by the next edit instead of outliving it.
     @State private var estimateAttempt = 0
+    @State private var offersAttempt = 0
     @State private var editingContactPoint: Model.Point?
     @State private var showsExplainer = false
     /// The explainer opens itself once per compose session until the first order exists
@@ -20,11 +21,11 @@ struct NewDeliveryView: View {
     @Environment(StoreController.self) private var store
     @Environment(\.dismiss) private var dismiss
 
-    /// What one estimate run answers to. Route edits and retries both change it, so
-    /// exactly one calculation is ever live and the last one to start is the one that
-    /// publishes.
-    private struct EstimateRun: Equatable {
-        let waypoints: [RouteEstimate.Coordinate]
+    /// What one priced run answers to: the inputs it prices, and which attempt at them.
+    /// Both live tasks are keyed this way, so an edit cancels the stale run and a Retry
+    /// is the same owned task run again — never a loose one racing it.
+    private struct Run<Inputs: Equatable>: Equatable {
+        let inputs: Inputs
         let attempt: Int
     }
 
@@ -47,26 +48,32 @@ struct NewDeliveryView: View {
                 moveRows: { draft.movePoints(from: $0, to: $1) },
                 retryEstimate: { estimateAttempt += 1 },
                 selectOffer: { draft.selectedOfferID = $0 },
-                retryOffers: {
-                    Task { await draft.loadOffers { try await session.offers(for: $0) } }
-                },
+                retryOffers: { offersAttempt += 1 },
                 openExplainer: { showsExplainer = true }
             )
             // Structured re-pricing: the ids are the route itself, so any edit cancels
             // the stale runs and starts the right ones; dismissal cancels outright. The
             // estimate's id also carries its attempt count, so Retry re-runs the same
             // owned task rather than a loose one racing it (review, PR #19).
-            .task(id: EstimateRun(waypoints: draft.routeWaypoints, attempt: estimateAttempt)) {
+            .task(id: Run(inputs: draft.routeWaypoints, attempt: estimateAttempt)) {
                 await draft.calculateEstimate()
             }
-            .task(id: draft.routeWaypoints) {
+            // Offers answer to `offerWaypoints`, not the coordinates: the provider is
+            // sent `fullname` beside every pair, so correcting an address without moving
+            // the pin changes the price it would quote. Keying on coordinates alone let
+            // an edited address keep the old quote, and an order spend it (review, PR #20).
+            .task(id: Run(inputs: draft.offerWaypoints, attempt: offersAttempt)) {
                 await draft.loadOffers { try await session.offers(for: $0) }
             }
             .task { await store.refresh() }
             .onChange(of: draft.offers) {
                 // The first prices a beginner ever sees arrive with the explainer open
                 // (board 3a) — until the store holds a single completed order.
-                if case .ready = draft.offers, !hasAutoOpenedExplainer, store.orders.isEmpty {
+                // `store.hasLoaded` is the point: pricing can finish before the first
+                // store read does, and an unread store is empty. Without it the explainer
+                // greets a returning sender as a beginner (review, PR #20).
+                if case .ready = draft.offers, !hasAutoOpenedExplainer,
+                   store.hasLoaded, store.orders.isEmpty {
                     hasAutoOpenedExplainer = true
                     showsExplainer = true
                 }

@@ -149,6 +149,16 @@ struct StoreControllerTests {
         #expect(controller.storeError == nil)
     }
 
+    @Test("An unread store is not an empty one — first-run surfaces wait for the read")
+    func emptinessIsNotKnownBeforeTheRead() async throws {
+        let controller = controller
+        #expect(!controller.hasLoaded)
+        #expect(controller.orders.isEmpty, "empty, but only because nobody has looked")
+
+        await controller.refresh()
+        #expect(controller.hasLoaded, "now emptiness means something")
+    }
+
     @Test("Saving a place persists and republishes")
     func savePersists() async throws {
         let controller = controller
