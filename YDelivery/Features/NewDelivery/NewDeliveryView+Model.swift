@@ -86,8 +86,19 @@ extension NewDeliveryView {
         /// but a courier, loaders only ride the cargo van — enforced here, never
         /// discovered via API errors.
         var selectedOfferID: Offer.ID? {
-            didSet { normalizeOptions() }
+            didSet {
+                if let tariff = selectedOffer?.tariff { chosenTariff = tariff }
+                normalizeOptions()
+            }
         }
+
+        /// The class the sender last chose, kept independently of ``offers``.
+        /// `selectedOffer` reads through that state and goes nil the moment repricing
+        /// starts — which is not the sender changing their mind, and everything that asks
+        /// "which class is this for" got the wrong answer during a reload: the options
+        /// editor clamped a multi-day cargo pickup into four hours, the item editor's
+        /// bounds went blank (review, PR #21).
+        private(set) var chosenTariff: TariffClass?
 
         private func normalizeOptions() {
             guard let tariff = selectedOffer?.tariff else { return }
@@ -357,9 +368,6 @@ extension NewDeliveryView {
                 selectedOfferID = nil
                 return
             }
-            // Captured before the state leaves `.ready`: `selectedOffer` reads through
-            // `offers`, so asking after `.loading` would always answer nil.
-            let chosenTariff = selectedOffer?.tariff
             offers = .loading
             do {
                 let loaded = try await fetch(request)

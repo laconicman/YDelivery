@@ -287,6 +287,35 @@ struct ParcelOptionsTests {
         #expect(model.pricingInputs == before, "a changed identity would restart the task in a loop")
     }
 
+    @Test("The chosen class outlives a repricing, so editors opened mid-load are right")
+    func chosenTariffSurvivesLoading() async {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "А"), for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Б"), for: model.points[1].id)
+
+        await model.loadOffers { _ in
+            [Offer(tariff: .cargo, price: 1, currency: "RUB",
+                   pickupInterval: nil, deliveryInterval: nil, payload: "c1")]
+        }
+        #expect(model.chosenTariff == .cargo)
+
+        // Mid-reload, `selectedOffer` is nil — the options editor used to read that as
+        // "no class" and clamp a multi-day pickup into the four-hour default.
+        let due = Date.now.addingTimeInterval(3 * 24 * 3600)
+        model.options.due = due
+        var seen: TariffClass?
+        await model.loadOffers { _ in
+            seen = model.chosenTariff
+            #expect(model.selectedOffer == nil, "the transient state really is nil here")
+            return [Offer(tariff: .cargo, price: 1, currency: "RUB",
+                          pickupInterval: nil, deliveryInterval: nil, payload: "c2")]
+        }
+
+        #expect(seen == .cargo, "the class the sender chose does not vanish while prices reload")
+        #expect(DeliveryOptions.dueWindow(for: seen).contains(due),
+                "so a van's multi-day pickup stays inside the window it is judged against")
+    }
+
     @Test("A class judges the whole parcel, not one row at a time")
     func parcelWeightIsJudgedTogether() {
         func box(_ kg: Double, quantity: Int = 1) -> ParcelItem {

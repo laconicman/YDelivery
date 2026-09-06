@@ -147,14 +147,14 @@ struct NewDeliveryView: View {
                 ItemEditor(
                     item: item,
                     stops: itemStops,
-                    selectedTariff: draft.selectedOffer?.tariff,
+                    selectedTariff: draft.chosenTariff,
                     save: { draft.setItem($0) }
                 )
             }
             .sheet(isPresented: $isEditingOptions) {
                 OptionsEditor(
                     options: draft.options,
-                    selectedTariff: draft.selectedOffer?.tariff,
+                    selectedTariff: draft.chosenTariff,
                     save: { draft.options = $0 }
                 )
             }
