@@ -520,6 +520,19 @@ extension NewDeliveryView {
         /// while anything is in flight is a no-op — the task id changing is what retries.
         func confirmOrder() {
             guard let request = orderRequest else { return }
+            // The sheet renders `effective()` once and nothing re-renders it, so it can
+            // sit open past the pickup time still showing it. Rather than quietly sending
+            // an immediate order under a schedule the sender is reading, drop the lapsed
+            // time and stop here: the «When» line changes under their finger, and the
+            // next press orders what it now says (review, PR #22).
+            //
+            // A timer refreshing the line would also close this, at the cost of a
+            // repeating render for a rare case — and it would still be a silent downgrade
+            // if the lapse fell between two ticks. This closes the window outright.
+            if options.scheduleHasLapsed() {
+                options = options.effective()
+                return
+            }
             switch ordering {
             case .idle, .failed:
                 // Safe to rotate here and only here: `.failed` is the state that promises

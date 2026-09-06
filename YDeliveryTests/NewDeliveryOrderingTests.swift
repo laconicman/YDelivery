@@ -162,6 +162,22 @@ struct NewDeliveryOrderingTests {
         #expect(reason.contains("cargo_on_hold"), "the status is named so it can be looked up")
     }
 
+    @Test("A schedule that lapses while the sheet is open is shown before it is sent")
+    func lapseAtConfirmIsNotSilent() async {
+        let model = readyDraft()
+        await priced(model)
+        model.options.due = Date.now.addingTimeInterval(-60) // passed while they read
+
+        model.confirmOrder()
+
+        #expect(model.ordering == .idle,
+                "the first press must not send an immediate order under a schedule on screen")
+        #expect(model.options.due == nil, "and the «When» line now says what will be sent")
+
+        model.confirmOrder()
+        #expect(model.ordering == .queued, "the second press orders what it now says")
+    }
+
     @Test("An edited retry mints a new token; an unchanged one keeps it")
     func tokenFollowsTheRequest() async {
         struct Offline: Error {}
