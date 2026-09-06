@@ -35,7 +35,9 @@ struct NewDeliveryView: View {
     }
 
     private var onboarding: Onboarding {
-        let pricesReady = if case .ready = draft.offers { true } else { false }
+        // An empty answer is priced but has nothing to teach: opening the explainer over
+        // a strip with no classes in it would explain nothing (review, PR #20).
+        let pricesReady = if case .ready(let offers) = draft.offers { !offers.isEmpty } else { false }
         return Onboarding(
             pricesReady: pricesReady,
             historyKnown: store.hasLoaded,

@@ -287,6 +287,18 @@ extension NewDeliveryView.Content {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            case .ready(let offers) where offers.isEmpty:
+                // A successful answer with nothing in it is not a blank strip: the
+                // provider priced the route and offered no class for it, which the sender
+                // can act on by changing the route or the parcel (review, PR #20).
+                HStack(spacing: 8) {
+                    Image(systemSymbol: .questionmarkCircle)
+                        .foregroundStyle(.secondary)
+                    Text("No delivery classes for this route yet")
+                    Button("Retry", action: retry)
+                }
+                .font(.subheadline)
+                .frame(minHeight: 88)
             case .ready(let offers):
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 10) {
