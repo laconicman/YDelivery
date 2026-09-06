@@ -1,4 +1,5 @@
 import SwiftUI
+import YDeliveryKit
 
 /// Root view of the New Delivery flow, presented as a sheet — the compose idiom. The draft
 /// arrives from `RootView`, which owns it: Close parks the draft rather than destroying
@@ -7,21 +8,44 @@ import SwiftUI
 struct NewDeliveryView: View {
     let draft: Model
     @State private var pickingPoint: Model.Point?
+    /// Bumped by Retry. It is part of the estimate task's id, which is what makes a
+    /// retry cancellable by the next route edit instead of outliving it.
+    @State private var estimateAttempt = 0
     @State private var editingContactPoint: Model.Point?
     @Environment(\.dismiss) private var dismiss
+
+    /// What one estimate run answers to. Route edits and retries both change it, so
+    /// exactly one calculation is ever live and the last one to start is the one that
+    /// publishes.
+    private struct EstimateRun: Equatable {
+        let waypoints: [RouteEstimate.Coordinate]
+        let attempt: Int
+    }
 
     var body: some View {
         NavigationStack {
             Content(
-                draft: draft,
+                rows: contentRows,
+                pins: contentPins,
+                estimate: draft.estimate,
+                canSwap: draft.canSwap,
+                canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
                 editContact: { editingContactPoint = draft.point(withID: $0) },
                 setRole: { draft.setRole($1, for: $0) },
                 swapEnds: { draft.swapEnds() },
                 addStop: { pickingPoint = draft.point(withID: draft.addStop()) },
                 removeRows: { draft.removePoints(at: $0) },
-                moveRows: { draft.movePoints(from: $0, to: $1) }
+                moveRows: { draft.movePoints(from: $0, to: $1) },
+                retryEstimate: { estimateAttempt += 1 }
             )
+            // Structured re-estimation: the id is the route plus which attempt at it, so
+            // any edit cancels the stale run and starts the right one, dismissal cancels
+            // outright — and a retry is the same owned task run again rather than a loose
+            // one racing it (review, PR #19).
+            .task(id: EstimateRun(waypoints: draft.routeWaypoints, attempt: estimateAttempt)) {
+                await draft.calculateEstimate()
+            }
             .navigationTitle("New Delivery")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -51,6 +75,50 @@ struct NewDeliveryView: View {
                     title: point.role.contactPrompt,
                     contact: point.contact ?? Contact(),
                     save: { draft.setContact($0, for: point.id) }
+                )
+            }
+        }
+    }
+}
+
+// MARK: - Bridging
+
+private extension NewDeliveryView {
+    /// The draft, reduced to what the card renders — bridging lives on the root's side
+    /// of the seam, so the content view takes plain values only (review, PR #17).
+    var contentRows: [Content.Row] {
+        let points = draft.points
+        return points.enumerated().map { index, point in
+            Content.Row(
+                id: point.id,
+                badge: PointBadge.Role(
+                    role: point.role,
+                    index: index,
+                    isLast: index == points.count - 1
+                ),
+                address: point.place?.displayAddress,
+                placeholder: point.role.pickerPrompt,
+                contactSummary: point.contact?.summary,
+                contactInvitation: point.role.contactInvitation,
+                availableRoles: draft.availableRoles(for: point.id),
+                isDeletable: index > 0 && points.count > 2,
+                isMovable: index > 0 && point.role != .return
+            )
+        }
+    }
+
+    var contentPins: [Content.Pin] {
+        draft.points.enumerated().compactMap { index, point in
+            point.place.map { place in
+                Content.Pin(
+                    id: point.id,
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    badge: PointBadge.Role(
+                        role: point.role,
+                        index: index,
+                        isLast: index == draft.points.count - 1
+                    )
                 )
             }
         }

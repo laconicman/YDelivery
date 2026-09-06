@@ -21,6 +21,9 @@ struct PointPickerView: View {
 
     @State private var model: Model
     @State private var pendingSave: PendingSave?
+    /// Where an empty map starts when location is unavailable — set in Settings, plain
+    /// preference, not a secret.
+    @AppStorage("startCity") private var startCity = ""
     @Environment(StoreController.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -126,6 +129,7 @@ struct PointPickerView: View {
                     saveUnavailableReason: store.canSavePlaces
                         ? nil
                         : StoreController.StoreUnavailable().localizedDescription,
+                    fallbackRegion: model.startRegion,
                     onTap: { model.dropPin(latitude: $0, longitude: $1) },
                     onVisibleRegionChange: { model.visibleRegion = $0 },
                     savePlace: {
@@ -145,6 +149,7 @@ struct PointPickerView: View {
             }
             .task { await model.streamSuggestions() }
             .task { await store.refresh() }
+            .task(id: startCity) { await model.resolveStartCity(startCity) }
         }
         .sheet(item: $pendingSave) { pending in
             SavePlaceSheet(address: pending.place.displayAddress) { name, kind in
