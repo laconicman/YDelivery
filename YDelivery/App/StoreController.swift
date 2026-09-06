@@ -56,8 +56,12 @@ final class StoreController {
     /// precisely an order that was never placed, so counting rows would retire the
     /// explainer for someone who has only ever started one (review, PR #20).
     ///
-    /// A cancelled or undelivered order still counts: the sender went through the strip
-    /// and chose a class, which is the vocabulary this teaches.
+    /// «Successful» means **accepted by the system**, settled by the author 2026-09-06:
+    /// a placed order is part of history whatever becomes of it afterwards, and whether it
+    /// was later cancelled or failed to deliver is a question about its status, not about
+    /// whether the sender has ordered before. So a cancelled or undelivered order still
+    /// counts — they went through the strip and chose a class, which is the vocabulary
+    /// this teaches.
     var hasPlacedAnOrder: Bool {
         orders.contains { $0.status != .draft }
     }
