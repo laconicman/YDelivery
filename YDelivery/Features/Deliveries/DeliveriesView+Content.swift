@@ -23,6 +23,10 @@ extension DeliveriesView {
 
         let isSignedIn: Bool
         let rows: [Row]
+        /// Why history is missing, when it is missing for a reason rather than because
+        /// nothing was sent. An unreadable store rendered as "No deliveries yet", which
+        /// tells a sender with a year of orders that they have none (review, PR #22).
+        var historyUnavailable: String? = nil
         let compose: () -> Void
 
         var body: some View {
@@ -30,6 +34,14 @@ extension DeliveriesView {
                 if !rows.isEmpty {
                     List(rows) { row in
                         OrderRow(row: row)
+                    }
+                } else if let historyUnavailable {
+                    // Checked before the empty states: *could not look* is not *nothing
+                    // there*, and only this branch knows the difference.
+                    ContentUnavailableView {
+                        Label("Deliveries can't be read", systemSymbol: .exclamationmarkTriangle)
+                    } description: {
+                        Text(historyUnavailable)
                     }
                 } else if isSignedIn {
                     ContentUnavailableView {

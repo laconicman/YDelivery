@@ -11,7 +11,12 @@ struct DeliveriesView: View {
 
     var body: some View {
         NavigationStack {
-            Content(isSignedIn: session.isSignedIn, rows: rows, compose: compose)
+            Content(
+                isSignedIn: session.isSignedIn,
+                rows: rows,
+                historyUnavailable: store.historyUnavailable,
+                compose: compose
+            )
                 .navigationTitle("Deliveries")
                 .task { await store.refresh() }
         }

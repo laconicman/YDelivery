@@ -86,7 +86,7 @@ extension NewDeliveryView {
                 routeCard
             }
             .safeAreaInset(edge: .bottom) {
-                OrderBar(offers: offers, selectedOfferID: selectedOfferID, openReview: openReview)
+                OrderBar(title: orderBarTitle, canOrder: selectedOffer != nil, openReview: openReview)
             }
         }
 
@@ -115,6 +115,20 @@ extension NewDeliveryView {
                     .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
+        }
+
+        /// The bar's words, or `nil` when it has no place on screen. Derived once here
+        /// rather than inside the bar, which now takes only what it renders.
+        private var orderBarTitle: String? {
+            guard offers != .idle else { return nil }
+            return selectedOffer.map {
+                String(localized: "Order \($0.tariff.words) · \($0.priceText)")
+            } ?? String(localized: "Order")
+        }
+
+        private var selectedOffer: Offer? {
+            guard case .ready(let offers) = offers else { return nil }
+            return offers.first { $0.id == selectedOfferID }
         }
 
         private var routeCard: some View {
@@ -368,13 +382,17 @@ extension NewDeliveryView.Content {
     /// The one CTA (board `1b`): named and priced once a class is chosen, visibly
     /// waiting otherwise — never confused with the estimate bar above, which informs and
     /// never acts (decision #13). Ordering itself happens behind the review sheet.
+    /// The one CTA. Plain values only: it renders a title and whether it may be pressed,
+    /// and knows nothing about offer states — the root view reduces those, since deriving
+    /// them here coupled the bar to the model's `Offers` (R1; review, PR #22).
     struct OrderBar: View {
-        let offers: NewDeliveryView.Model.Offers
-        let selectedOfferID: Offer.ID?
+        /// Absent while the bar has no place on screen at all — no route, no prices asked.
+        let title: String?
+        let canOrder: Bool
         let openReview: () -> Void
 
         var body: some View {
-            if offers != .idle {
+            if let title {
                 Button(action: openReview) {
                     Text(title)
                         .font(.headline)
@@ -382,21 +400,11 @@ extension NewDeliveryView.Content {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(selectedOffer == nil)
+                .disabled(!canOrder)
                 .padding(.horizontal, Layout.Spacing.edge)
                 .padding(.vertical, Layout.Spacing.unit)
                 .background(.bar)
             }
-        }
-
-        private var selectedOffer: Offer? {
-            guard case .ready(let offers) = offers else { return nil }
-            return offers.first { $0.id == selectedOfferID }
-        }
-
-        private var title: String {
-            selectedOffer.map { String(localized: "Order \($0.tariff.words) · \($0.priceText)") }
-                ?? String(localized: "Order")
         }
     }
 }

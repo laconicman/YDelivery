@@ -207,7 +207,11 @@ struct NewDeliveryView: View {
                     done: {
                         showsReview = false
                         placed()
-                    }
+                    },
+                    // Closes the sheet and nothing else: the draft stays parked with its
+                    // token, so a later attempt reuses it rather than buying a second
+                    // delivery.
+                    unresolvedDone: { showsReview = false }
                 )
             }
         }

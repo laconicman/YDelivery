@@ -439,10 +439,19 @@ extension NewDeliveryView {
         /// says so instead of pretending either way.
         private(set) var recordWarning: String?
 
-        /// One idempotency token per draft: the provider replays the same create for the
-        /// same token, so a retried confirm cannot dispatch two couriers. A fresh draft
-        /// mints a fresh token.
-        let orderRequestID = UUID()
+        /// The idempotency token, and the request it was minted for. The provider replays
+        /// the same create for the same token, which is what makes a retry safe — and what
+        /// makes an *edited* retry dangerous: after a pre-acceptance failure the sender can
+        /// change the route or the parcel and press Order again, and an unrotated token
+        /// would have the provider replay the earlier claim instead of creating the one
+        /// they just described (review, PR #22).
+        ///
+        /// So it is bound to the request rather than to the draft's lifetime: kept while
+        /// the request is unchanged, and rotated only when the inputs differ *and* nothing
+        /// has been accepted. An unresolved acceptance keeps its token, because that
+        /// claim may exist and a second token would buy a second delivery.
+        private(set) var orderRequestID = UUID()
+        private var tokenedRequest: OrderRequest?
 
         /// Everything that must be true before the confirm button exists — every bound
         /// stated as a sentence the review sheet renders (the wire would otherwise say
@@ -495,10 +504,18 @@ extension NewDeliveryView {
         /// The review sheet's confirm: queue the run for the owned task. A repeat tap
         /// while anything is in flight is a no-op — the task id changing is what retries.
         func confirmOrder() {
-            guard orderRequest != nil else { return }
+            guard let request = orderRequest else { return }
             switch ordering {
-            case .idle, .failed: ordering = .queued
-            default: break
+            case .idle, .failed:
+                // Safe to rotate here and only here: `.failed` is the state that promises
+                // acceptance was never attempted.
+                if let tokenedRequest, tokenedRequest != request {
+                    orderRequestID = UUID()
+                }
+                tokenedRequest = request
+                ordering = .queued
+            default:
+                break
             }
         }
 
@@ -545,6 +562,12 @@ extension NewDeliveryView {
                     ordering = .accepting
                     acceptAttempted = true
                     claim = try await accept(claim.id, claim.version)
+                    // The answer is not assumed. Anything but a claim now being worked
+                    // means the acceptance did not land the way this flow believes, and
+                    // guessing "placed" would record a delivery that may not exist.
+                    guard claim.status == .searching else {
+                        throw OrderingUnknownState(status: String(describing: claim.status))
+                    }
                 case .estimating:
                     throw OrderingTimedOut()
                 case .other(let raw):

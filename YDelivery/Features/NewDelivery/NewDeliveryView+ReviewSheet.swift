@@ -28,6 +28,11 @@ extension NewDeliveryView {
         let recordWarning: String?
         let confirm: () -> Void
         let done: () -> Void
+        /// Leaving an unresolved acceptance. Deliberately *not* `done`: nothing has been
+        /// confirmed or recorded, so the draft, its idempotency token and its claim
+        /// context all have to survive — retiring the draft here would let the next
+        /// attempt mint a fresh token and dispatch a second courier (review, PR #22).
+        var unresolvedDone: () -> Void = {}
 
         @Environment(\.dismiss) private var dismiss
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -90,7 +95,12 @@ extension NewDeliveryView {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        if ordering != .placed {
+                        // Gesture dismissal is already disabled while busy; Back was the
+                        // way around it. Edits made during creation or acceptance would
+                        // change the points this run later writes into history, so history
+                        // would describe a route the courier was never given (review,
+                        // PR #22).
+                        if ordering != .placed, !isBusy {
                             Button("Back") { dismiss() }
                         }
                     }
@@ -171,8 +181,8 @@ extension NewDeliveryView {
                         Text("Check Deliveries before ordering again — this one may have gone through.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                        Button(action: done) {
-                            Text("Check deliveries")
+                        Button(action: unresolvedDone) {
+                            Text("Close")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
                         }

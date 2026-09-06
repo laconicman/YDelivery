@@ -162,6 +162,59 @@ struct NewDeliveryOrderingTests {
         #expect(reason.contains("cargo_on_hold"), "the status is named so it can be looked up")
     }
 
+    @Test("An edited retry mints a new token; an unchanged one keeps it")
+    func tokenFollowsTheRequest() async {
+        struct Offline: Error {}
+        let model = readyDraft()
+        await priced(model)
+
+        /// Confirm, then fail before acceptance — the only state that may rotate a token.
+        func attemptAndFail() async {
+            model.confirmOrder()
+            await model.placeOrder(
+                create: { _, _ in throw Offline() },
+                watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+                accept: { id, v in PlacedClaim(id: id, version: v, status: .searching, failureText: nil) },
+                clock: TestClock()
+            )
+        }
+
+        await attemptAndFail()
+        let first = model.orderRequestID
+
+        // Order again, unchanged.
+        await attemptAndFail()
+        #expect(model.orderRequestID == first,
+                "the same request must replay, not create a second claim")
+
+        // Now the sender changes the order and presses Order again.
+        model.options.proCourier = true
+        model.confirmOrder()
+        #expect(model.orderRequestID != first,
+                "replaying the old claim would send the order they just changed away from")
+    }
+
+    @Test("An accept that answers something unexpected is not a placement")
+    func acceptIsValidated() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            // The provider answers, but not with a claim being worked.
+            accept: { id, version in PlacedClaim(id: id, version: version, status: .estimating, failureText: nil) },
+            clock: TestClock()
+        )
+
+        #expect(model.placedOrder == nil, "recording this would claim a delivery that may not exist")
+        guard case .unresolved = model.ordering else {
+            Issue.record("acceptance was attempted and did not land: \(model.ordering)")
+            return
+        }
+    }
+
     @Test("Without a confirm, the owned task's appear-run is a no-op")
     func appearRunIsNoOp() async {
         let model = readyDraft()
