@@ -8,17 +8,48 @@ import YDeliveryKit
 struct NewDeliveryView: View {
     let draft: Model
     @State private var pickingPoint: Model.Point?
-    /// Bumped by Retry. It is part of the estimate task's id, which is what makes a
-    /// retry cancellable by the next route edit instead of outliving it.
+    /// Bumped by the two Retry buttons. Each is part of its task's id, which is what
+    /// makes a retry cancellable by the next edit instead of outliving it.
     @State private var estimateAttempt = 0
+    @State private var offersAttempt = 0
     @State private var editingContactPoint: Model.Point?
+    @State private var showsExplainer = false
+    /// The explainer opens itself once per compose session until the first order exists
+    /// (board `3a`); after that it lives behind the ⓘ.
+    @State private var hasAutoOpenedExplainer = false
+    @Environment(ClientController.self) private var session
+    @Environment(StoreController.self) private var store
     @Environment(\.dismiss) private var dismiss
 
-    /// What one estimate run answers to. Route edits and retries both change it, so
-    /// exactly one calculation is ever live and the last one to start is the one that
-    /// publishes.
-    private struct EstimateRun: Equatable {
-        let waypoints: [RouteEstimate.Coordinate]
+    /// The two answers the auto-open needs, so it can be re-asked when either arrives.
+    /// Store emptiness is trusted only after a successful read — not knowing is not the
+    /// same as knowing there is nothing.
+    private struct Onboarding: Equatable {
+        let pricesReady: Bool
+        let historyKnown: Bool
+        let hasOrderedBefore: Bool
+
+        var isBeginnerSeeingPrices: Bool {
+            pricesReady && historyKnown && !hasOrderedBefore
+        }
+    }
+
+    private var onboarding: Onboarding {
+        // An empty answer is priced but has nothing to teach: opening the explainer over
+        // a strip with no classes in it would explain nothing (review, PR #20).
+        let pricesReady = if case .ready(let offers) = draft.offers { !offers.isEmpty } else { false }
+        return Onboarding(
+            pricesReady: pricesReady,
+            historyKnown: store.hasLoaded,
+            hasOrderedBefore: store.hasPlacedAnOrder
+        )
+    }
+
+    /// What one priced run answers to: the inputs it prices, and which attempt at them.
+    /// Both live tasks are keyed this way, so an edit cancels the stale run and a Retry
+    /// is the same owned task run again — never a loose one racing it.
+    private struct Run<Inputs: Equatable>: Equatable {
+        let inputs: Inputs
         let attempt: Int
     }
 
@@ -28,6 +59,8 @@ struct NewDeliveryView: View {
                 rows: contentRows,
                 pins: contentPins,
                 estimate: draft.estimate,
+                offers: draft.offers,
+                selectedOfferID: draft.selectedOfferID,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
@@ -37,14 +70,38 @@ struct NewDeliveryView: View {
                 addStop: { pickingPoint = draft.point(withID: draft.addStop()) },
                 removeRows: { draft.removePoints(at: $0) },
                 moveRows: { draft.movePoints(from: $0, to: $1) },
-                retryEstimate: { estimateAttempt += 1 }
+                retryEstimate: { estimateAttempt += 1 },
+                selectOffer: { draft.selectedOfferID = $0 },
+                retryOffers: { offersAttempt += 1 },
+                openExplainer: { showsExplainer = true }
             )
-            // Structured re-estimation: the id is the route plus which attempt at it, so
-            // any edit cancels the stale run and starts the right one, dismissal cancels
-            // outright — and a retry is the same owned task run again rather than a loose
-            // one racing it (review, PR #19).
-            .task(id: EstimateRun(waypoints: draft.routeWaypoints, attempt: estimateAttempt)) {
+            // Structured re-pricing: the ids are the route itself, so any edit cancels
+            // the stale runs and starts the right ones; dismissal cancels outright. The
+            // estimate's id also carries its attempt count, so Retry re-runs the same
+            // owned task rather than a loose one racing it (review, PR #19).
+            .task(id: Run(inputs: draft.routeWaypoints, attempt: estimateAttempt)) {
                 await draft.calculateEstimate()
+            }
+            // Offers answer to `offerWaypoints`, not the coordinates: the provider is
+            // sent `fullname` beside every pair, so correcting an address without moving
+            // the pin changes the price it would quote. Keying on coordinates alone let
+            // an edited address keep the old quote, and an order spend it (review, PR #20).
+            .task(id: Run(inputs: draft.offerWaypoints, attempt: offersAttempt)) {
+                await draft.loadOffers { try await session.offers(for: $0) }
+            }
+            .task { await store.refresh() }
+            // The first prices a beginner ever sees arrive with the explainer open
+            // (board 3a). Both inputs matter and either can land last, so the observer
+            // watches the pair: keying on the prices alone meant a quote that beat the
+            // store's first read failed the test once and was never asked again, and a
+            // genuine beginner missed the explainer entirely (review, PR #20).
+            .onChange(of: onboarding, initial: true) { _, onboarding in
+                guard onboarding.isBeginnerSeeingPrices, !hasAutoOpenedExplainer else { return }
+                hasAutoOpenedExplainer = true
+                showsExplainer = true
+            }
+            .sheet(isPresented: $showsExplainer) {
+                TariffExplainer(cards: explainerCards)
             }
             .navigationTitle("New Delivery")
             .navigationBarTitleDisplayMode(.inline)
@@ -123,6 +180,17 @@ private extension NewDeliveryView {
             }
         }
     }
+
+    /// Every class the app knows, priced where the strip has a price — the explainer
+    /// teaches the vocabulary even for classes the route was not offered.
+    var explainerCards: [TariffExplainer.Card] {
+        let offers: [Offer] = if case .ready(let offers) = draft.offers { offers } else { [] }
+        let known: [TariffClass] = [.courier, .express, .cargo]
+        let extra = offers.map(\.tariff).filter { !known.contains($0) }
+        return (known + extra).map { tariff in
+            TariffExplainer.Card(tariff: tariff, offer: offers.first { $0.tariff == tariff })
+        }
+    }
 }
 
 extension NewDeliveryView.Model.Role {
@@ -147,6 +215,8 @@ extension NewDeliveryView.Model.Role {
 
 #Preview("Empty draft") {
     NewDeliveryView(draft: NewDeliveryView.Model())
+        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
+        .environment(StoreController(orderStore: nil, placeStore: nil))
 }
 
 #Preview("Route complete") {
@@ -164,6 +234,8 @@ extension NewDeliveryView.Model.Role {
         for: draft.points[1].id
     )
     return NewDeliveryView(draft: draft)
+        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
+        .environment(StoreController(orderStore: nil, placeStore: nil))
 }
 
 #Preview("Five stops with a return") {
@@ -197,4 +269,6 @@ extension NewDeliveryView.Model.Role {
         for: returnStop
     )
     return NewDeliveryView(draft: draft)
+        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
+        .environment(StoreController(orderStore: nil, placeStore: nil))
 }

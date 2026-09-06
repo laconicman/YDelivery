@@ -19,6 +19,12 @@ final class StoreController {
     /// *nothing there*.
     private(set) var storeError: (any Error)?
 
+    /// Whether the store has been read through at least once, successfully. Until it
+    /// has, an empty ``orders`` means *not looked yet*, not *nothing there* — and a
+    /// first-run surface that reads emptiness as "this sender is new" would greet a
+    /// returning one (review, PR #20).
+    private(set) var hasLoaded = false
+
     private let orderStore: OrderStore?
     private let placeStore: SavedPlaceStore?
 
@@ -43,6 +49,17 @@ final class StoreController {
         if let storeError { return storeError.localizedDescription }
         if orderStore == nil, placeStore == nil { return StoreUnavailable().localizedDescription }
         return nil
+    }
+
+    /// Whether the sender has ever actually placed an order. The beginner's explainer
+    /// runs "until the first successful order" (Roadmap, handoff §7) — and a draft is
+    /// precisely an order that was never placed, so counting rows would retire the
+    /// explainer for someone who has only ever started one (review, PR #20).
+    ///
+    /// A cancelled or undelivered order still counts: the sender went through the strip
+    /// and chose a class, which is the vocabulary this teaches.
+    var hasPlacedAnOrder: Bool {
+        orders.contains { $0.status != .draft }
     }
 
     /// The recent points the picker offers: one per address, newest first — an address
@@ -105,6 +122,7 @@ final class StoreController {
             self.orders = orders
             savedPlaces = places
             storeError = nil
+            hasLoaded = true
         } catch {
             storeError = error
         }

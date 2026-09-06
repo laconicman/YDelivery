@@ -1,0 +1,92 @@
+import Foundation
+import Testing
+import YandexDeliveryExpressAPI
+@testable import YDelivery
+
+/// The two mappings around the offers call — the only place generated types may appear
+/// beside app models (CLAUDE.md rule 1).
+@Suite("Offers mapping")
+@MainActor
+struct ClientControllerOffersTests {
+    @Test("Coordinates go lon,lat on the wire — the trap that answers plausibly, not loudly")
+    func coordinatesAreLonLatOnTheWire() {
+        let request = ClientController.offersRequest(for: [
+            OfferWaypoint(latitude: 55.646068, longitude: 37.668176, address: "Москва, ул Москворечье, 6"),
+            OfferWaypoint(latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52"),
+        ])
+
+        #expect(request.routePoints[0].coordinates == [37.668176, 55.646068],
+                "longitude first (handoff §4) — a swap pins the Barents Sea, silently")
+        #expect(request.routePoints[1].coordinates == [37.648210, 55.652212])
+    }
+
+    @Test("Point ids are one-based visit order, and the courier-readable address rides along")
+    func requestCarriesOrderAndAddresses() {
+        let request = ClientController.offersRequest(for: [
+            OfferWaypoint(latitude: 1, longitude: 2, address: "Первый"),
+            OfferWaypoint(latitude: 3, longitude: 4, address: "Второй"),
+            OfferWaypoint(latitude: 5, longitude: 6, address: "Третий"),
+        ])
+
+        #expect(request.routePoints.map(\.id) == [1, 2, 3])
+        #expect(request.routePoints.map(\.fullname) == ["Первый", "Второй", "Третий"])
+    }
+
+    @Test("A wire offer reads into the app's vocabulary; the with-VAT total is the price")
+    func offerMapsToAppVocabulary() throws {
+        let offer = try #require(Offer(Components.Schemas.CalculatedOffer(
+            deliveryInterval: .init(
+                from: Date(timeIntervalSince1970: 1000),
+                to: Date(timeIntervalSince1970: 5000)
+            ),
+            payload: "offer-token",
+            pickupInterval: .init(
+                from: Date(timeIntervalSince1970: 500),
+                to: Date(timeIntervalSince1970: 900)
+            ),
+            price: .init(currency: .rub, surgeRatio: 1.1, totalPrice: "1449", totalPriceWithVat: "1767.78"),
+            taxiClass: .express
+        )))
+
+        #expect(offer.tariff == .express)
+        #expect(offer.price == Decimal(string: "1767.78", locale: Locale(identifier: "en_US_POSIX")))
+        #expect(offer.currency == "RUB")
+        #expect(offer.payload == "offer-token")
+        #expect(offer.pickupInterval?.lowerBound == Date(timeIntervalSince1970: 500))
+    }
+
+    @Test("An unknown class stays visible by its wire name rather than being dropped")
+    func unknownClassStaysVisible() {
+        #expect(TariffClass(.sddLong) == .other("sdd_long"))
+        #expect(TariffClass.other("sdd_long").words == "sdd_long")
+    }
+
+    @Test("A backwards interval becomes absence, not a trapping range")
+    func backwardsIntervalIsAbsent() throws {
+        let offer = try #require(Offer(Components.Schemas.CalculatedOffer(
+            deliveryInterval: .init(
+                from: Date(timeIntervalSince1970: 5000),
+                to: Date(timeIntervalSince1970: 1000)
+            ),
+            payload: "offer-token",
+            pickupInterval: .init(
+                from: Date(timeIntervalSince1970: 500),
+                to: Date(timeIntervalSince1970: 900)
+            ),
+            price: .init(currency: .rub, surgeRatio: 1, totalPrice: "10", totalPriceWithVat: "12"),
+            taxiClass: .courier
+        )))
+        #expect(offer.deliveryInterval == nil)
+    }
+
+    @Test("Signed out throws the invitation, not an error")
+    func signedOutThrowsUnavailable() async {
+        let controller = ClientController(tokenStore: TokenStore(service: "test.offers.\(UUID())"))
+        await #expect(throws: OffersUnavailable.self) {
+            _ = try await controller.offers(for: [
+                OfferWaypoint(latitude: 1, longitude: 2, address: "А"),
+                OfferWaypoint(latitude: 3, longitude: 4, address: "Б"),
+            ])
+        }
+    }
+}

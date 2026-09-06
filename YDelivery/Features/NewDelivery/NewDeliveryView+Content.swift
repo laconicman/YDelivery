@@ -33,6 +33,8 @@ extension NewDeliveryView {
         let rows: [Row]
         let pins: [Pin]
         let estimate: NewDeliveryView.Model.Estimate
+        let offers: NewDeliveryView.Model.Offers
+        let selectedOfferID: Offer.ID?
         let canSwap: Bool
         let canReorder: Bool
         let pick: (UUID) -> Void
@@ -43,6 +45,9 @@ extension NewDeliveryView {
         let removeRows: (IndexSet) -> Void
         let moveRows: (IndexSet, Int) -> Void
         let retryEstimate: () -> Void
+        let selectOffer: (Offer.ID) -> Void
+        let retryOffers: () -> Void
+        let openExplainer: () -> Void
 
         @State private var camera: MapCameraPosition = .automatic
         @State private var editMode: EditMode = .inactive
@@ -84,7 +89,32 @@ extension NewDeliveryView {
 
                     actions
                 } footer: {
-                    Text("Parcel details and priced offers come after the route.")
+                    if offers == .idle {
+                        Text("Prices appear when the route is complete.")
+                    }
+                }
+
+                if offers != .idle {
+                    Section {
+                        TariffStrip(
+                            offers: offers,
+                            selectedID: selectedOfferID,
+                            select: selectOffer,
+                            retry: retryOffers
+                        )
+                        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                        .listRowBackground(Color.clear)
+                    } header: {
+                        HStack {
+                            Text("How to deliver")
+                            Spacer()
+                            Button(action: openExplainer) {
+                                Image(systemSymbol: .infoCircle)
+                            }
+                            .font(.body)
+                            .accessibilityLabel(Text("About the delivery classes"))
+                        }
+                    }
                 }
             }
             .environment(\.editMode, $editMode)
@@ -219,6 +249,140 @@ extension NewDeliveryView.Content {
             }
         }
     }
+}
+
+// MARK: - Tariff strip
+
+extension NewDeliveryView.Content {
+    /// The delivery classes as one horizontal strip (board `1b`, decision #2): an honest
+    /// waiting state, a failure that keeps the strip's place, and a signed-out state
+    /// that invites rather than errors. The selected card expands to state its bounds —
+    /// constraints replace hints (DesignSystem → "Field taxonomy").
+    struct TariffStrip: View {
+        let offers: NewDeliveryView.Model.Offers
+        let selectedID: Offer.ID?
+        let select: (Offer.ID) -> Void
+        let retry: () -> Void
+
+        var body: some View {
+            switch offers {
+            case .idle:
+                EmptyView()
+            case .loading:
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 10) {
+                        ForEach(TariffClass.placeholders, id: \.self) { tariff in
+                            TariffCard(
+                                emoji: tariff.emoji,
+                                name: tariff.words,
+                                limits: nil,
+                                priceText: "999 ₽",
+                                isSelected: false,
+                                select: {}
+                            )
+                            .redacted(reason: .placeholder)
+                        }
+                    }
+                    Text("Calculating prices…")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            case .ready(let offers) where offers.isEmpty:
+                // A successful answer with nothing in it is not a blank strip: the
+                // provider priced the route and offered no class for it, which the sender
+                // can act on by changing the route or the parcel (review, PR #20).
+                HStack(spacing: 8) {
+                    Image(systemSymbol: .questionmarkCircle)
+                        .foregroundStyle(.secondary)
+                    Text("No delivery classes for this route yet")
+                    Button("Retry", action: retry)
+                }
+                .font(.subheadline)
+                .frame(minHeight: 88)
+            case .ready(let offers):
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(offers) { offer in
+                            TariffCard(
+                                emoji: offer.tariff.emoji,
+                                name: offer.tariff.words,
+                                limits: offer.id == selectedID ? offer.tariff.limitsSummary : nil,
+                                priceText: offer.priceText,
+                                isSelected: offer.id == selectedID,
+                                select: { select(offer.id) }
+                            )
+                        }
+                    }
+                }
+            case .failed:
+                HStack(spacing: 8) {
+                    Image(systemSymbol: .exclamationmarkTriangle)
+                        .foregroundStyle(.secondary)
+                    Text("Couldn't get prices")
+                    Button("Retry", action: retry)
+                }
+                .font(.subheadline)
+                .frame(minHeight: 88)
+            case .signedOut:
+                Text("Add your Yandex Delivery token in Settings to see prices. The route and parcel can be drafted meanwhile.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(minHeight: 88)
+            }
+        }
+    }
+
+    /// One class card: emoji and name always; the bounds only when selected — the
+    /// expert's compressed strip stays scannable (board `1b`, decision #4).
+    struct TariffCard: View {
+        let emoji: String
+        let name: String
+        let limits: String?
+        let priceText: String
+        let isSelected: Bool
+        let select: () -> Void
+
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            Button(action: select) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(emoji)
+                        .font(.title2)
+                    Text(name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    if let limits {
+                        Text(limits)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(priceText)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        // «Цены пришли»: the number lands in a strip already being read
+                        // (DesignSystem → "Motion"); Reduce Motion gets the instant swap.
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                }
+                .padding(12)
+                .frame(minWidth: isSelected ? 150 : 96, alignment: .leading)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(isSelected ? Color.accentColor : Color(.separator), lineWidth: isSelected ? 2 : 0.5)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: "\(name), \(priceText)\(limits.map { ", \($0)" } ?? "")"))
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        }
+    }
+}
+
+private extension TariffClass {
+    /// The skeletons the waiting strip draws — the known classes, redacted.
+    static let placeholders: [TariffClass] = [.courier, .express, .cargo]
 }
 
 // MARK: - Point row
@@ -364,6 +528,8 @@ private extension MKCoordinateRegion {
         ],
         pins: [],
         estimate: .idle,
+        offers: .idle,
+        selectedOfferID: nil,
         canSwap: false,
         canReorder: false,
         pick: { _ in },
@@ -373,7 +539,10 @@ private extension MKCoordinateRegion {
         addStop: {},
         removeRows: { _ in },
         moveRows: { _, _ in },
-        retryEstimate: {}
+        retryEstimate: {},
+        selectOffer: { _ in },
+        retryOffers: {},
+        openExplainer: {}
     )
 }
 
@@ -410,6 +579,12 @@ private extension MKCoordinateRegion {
             .init(id: end, latitude: 55.652212, longitude: 37.648210, badge: .end),
         ],
         estimate: .ready(RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])),
+        offers: .ready([
+            Offer(tariff: .courier, price: 749, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-1"),
+            Offer(tariff: .express, price: 1190, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-2"),
+            Offer(tariff: .cargo, price: 3400, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-3"),
+        ]),
+        selectedOfferID: "offer-2",
         canSwap: true,
         canReorder: false,
         pick: { _ in },
@@ -419,8 +594,35 @@ private extension MKCoordinateRegion {
         addStop: {},
         removeRows: { _ in },
         moveRows: { _, _ in },
-        retryEstimate: {}
+        retryEstimate: {},
+        selectOffer: { _ in },
+        retryOffers: {},
+        openExplainer: {}
     )
+}
+
+#Preview("Tariff strip: waiting, priced, failed, signed out") {
+    List {
+        NewDeliveryView.Content.TariffStrip(
+            offers: .loading, selectedID: nil, select: { _ in }, retry: {}
+        )
+        NewDeliveryView.Content.TariffStrip(
+            offers: .ready([
+                Offer(tariff: .courier, price: 749, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-1"),
+                Offer(tariff: .express, price: 1190, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-2"),
+                Offer(tariff: .cargo, price: 3400, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-3"),
+            ]),
+            selectedID: "offer-1",
+            select: { _ in },
+            retry: {}
+        )
+        NewDeliveryView.Content.TariffStrip(
+            offers: .failed, selectedID: nil, select: { _ in }, retry: {}
+        )
+        NewDeliveryView.Content.TariffStrip(
+            offers: .signedOut, selectedID: nil, select: { _ in }, retry: {}
+        )
+    }
 }
 
 #Preview("Estimate bar: every state keeps its height") {
@@ -450,6 +652,29 @@ private extension MKCoordinateRegion {
         ]],
         camera: $camera
     )
+}
+
+#Preview("Tariff card: selected shows its bounds, unselected stays scannable") {
+    HStack(alignment: .top, spacing: 12) {
+        NewDeliveryView.Content.TariffCard(
+            emoji: "🛵",
+            name: "Courier",
+            limits: "Up to 10 kg · 80 × 50 × 50 cm",
+            priceText: "749 ₽",
+            isSelected: true,
+            select: {}
+        )
+        NewDeliveryView.Content.TariffCard(
+            emoji: "🚚",
+            name: "Cargo",
+            limits: nil,
+            priceText: "3 480 ₽",
+            isSelected: false,
+            select: {}
+        )
+    }
+    .padding()
+    .background(Color(.systemGroupedBackground))
 }
 
 #Preview("Point row: unfilled, no contact") {
