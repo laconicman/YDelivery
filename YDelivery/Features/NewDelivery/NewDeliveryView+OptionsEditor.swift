@@ -24,7 +24,7 @@ extension NewDeliveryView {
             self.save = save
             _options = State(initialValue: options)
             _isScheduled = State(initialValue: options.due != nil)
-            _dueWindow = State(initialValue: DeliveryOptions.dueWindow())
+            _dueWindow = State(initialValue: DeliveryOptions.dueWindow(for: selectedTariff))
         }
 
         private var thermobagAllowed: Bool { selectedTariff == .courier }

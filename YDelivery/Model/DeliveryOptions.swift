@@ -22,10 +22,26 @@ nonisolated struct DeliveryOptions: Hashable, Sendable {
 
     static let loadersRange = 0...2
 
-    /// The provider's window for a scheduled pickup: from an hour ahead to thirty days
-    /// out (§4). Computed at use — a window anchored at creation time would drift.
-    static func dueWindow(now: Date = .now) -> ClosedRange<Date> {
-        now.addingTimeInterval(3600)...now.addingTimeInterval(30 * 24 * 3600)
+    /// The window a scheduled pickup may fall in, for the class that will carry it.
+    ///
+    /// Two sources disagree and neither has been measured. The design handoff (§4) says an
+    /// hour ahead to thirty days out; the API document says 30–240 minutes for `express`
+    /// and five days for `cargo` — and that document is itself read from Yandex's
+    /// reference rather than verified on the wire (package TD-21). Where they conflict
+    /// this takes the **narrower** reading, because the failure modes are not
+    /// symmetrical: offering too little costs a sender some choice, while offering too
+    /// much hands them a default the provider will refuse at ordering time, after they
+    /// have committed (author, 2026-09-06).
+    ///
+    /// The lower bound stays at an hour — stricter than the documented thirty minutes, so
+    /// safe under either reading. An unknown class gets the tightest ceiling, since a
+    /// window that cannot be justified should not be offered.
+    static func dueWindow(for tariff: TariffClass? = nil, now: Date = .now) -> ClosedRange<Date> {
+        let ceiling: TimeInterval = switch tariff {
+        case .cargo: 5 * 24 * 3600
+        default: 4 * 3600
+        }
+        return now.addingTimeInterval(3600)...now.addingTimeInterval(ceiling)
     }
 
     /// What the «Scheduled pickup» switch *means*: on, and this run has a time; off, and

@@ -105,7 +105,7 @@ struct ParcelOptionsTests {
 
     @Test("Scheduling on writes a time; scheduling off takes it away")
     func schedulingWritesItsTime() {
-        let window = DeliveryOptions.dueWindow(now: Date(timeIntervalSince1970: 1_800_000_000))
+        let window = DeliveryOptions.dueWindow(for: .express, now: Date(timeIntervalSince1970: 1_800_000_000))
         var options = DeliveryOptions()
 
         options.setScheduled(true, within: window)
@@ -227,12 +227,21 @@ struct ParcelOptionsTests {
         #expect(TariffClass.express.fits(box))
     }
 
-    @Test("The due window states the provider's bound: an hour ahead, thirty days out")
+    @Test("The due window offers only what a class can be asked for")
     func dueWindowStatesTheBound() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        let window = DeliveryOptions.dueWindow(now: now)
-        #expect(window.lowerBound == now.addingTimeInterval(3600))
-        #expect(window.upperBound == now.addingTimeInterval(30 * 24 * 3600))
+
+        // Express: the API document's four-hour ceiling, not the handoff's thirty days.
+        // Offering a month and being refused at ordering time is the worse failure.
+        let express = DeliveryOptions.dueWindow(for: .express, now: now)
+        #expect(express.lowerBound == now.addingTimeInterval(3600))
+        #expect(express.upperBound == now.addingTimeInterval(4 * 3600))
+
+        #expect(DeliveryOptions.dueWindow(for: .cargo, now: now).upperBound
+            == now.addingTimeInterval(5 * 24 * 3600), "the van may be booked days out")
+
+        #expect(DeliveryOptions.dueWindow(for: nil, now: now).upperBound == express.upperBound,
+                "an unknown class gets the tightest ceiling we can justify")
     }
 
     @Test("Explicit name components survive the store exactly — parsing never enters it")
