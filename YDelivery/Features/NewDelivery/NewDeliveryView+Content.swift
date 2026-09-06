@@ -49,6 +49,10 @@ extension NewDeliveryView {
         let optionsSummary: String
         let whenSummary: String
         let commentSummary: String?
+        /// The CTA's words, or `nil` when the bar has no place on screen — derived on the
+        /// root's side of the seam with everything else (R5; review, PR #22).
+        var orderBarTitle: String? = nil
+        var canOrder: Bool = false
         let canSwap: Bool
         let canReorder: Bool
         let pick: (UUID) -> Void
@@ -86,7 +90,7 @@ extension NewDeliveryView {
                 routeCard
             }
             .safeAreaInset(edge: .bottom) {
-                OrderBar(title: orderBarTitle, canOrder: selectedOffer != nil, openReview: openReview)
+                OrderBar(title: orderBarTitle, canOrder: canOrder, openReview: openReview)
             }
         }
 
@@ -115,20 +119,6 @@ extension NewDeliveryView {
                     .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
-        }
-
-        /// The bar's words, or `nil` when it has no place on screen. Derived once here
-        /// rather than inside the bar, which now takes only what it renders.
-        private var orderBarTitle: String? {
-            guard offers != .idle else { return nil }
-            return selectedOffer.map {
-                String(localized: "Order \($0.tariff.words) · \($0.priceText)")
-            } ?? String(localized: "Order")
-        }
-
-        private var selectedOffer: Offer? {
-            guard case .ready(let offers) = offers else { return nil }
-            return offers.first { $0.id == selectedOfferID }
         }
 
         private var routeCard: some View {

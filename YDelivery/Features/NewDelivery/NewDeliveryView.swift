@@ -14,6 +14,9 @@ struct NewDeliveryView: View {
     /// Bumped per confirm — the ordering task's id, so a retry is the same owned task
     /// run again (the Run pattern; attempt 0 no-ops through the model's queue gate).
     @State private var orderAttempt = 0
+    /// Bumped by «Check again» on an unresolved acceptance — its own owned run, keyed
+    /// like the others so it is cancelled with the screen.
+    @State private var reconcileAttempt = 0
     @State private var pickingPoint: Model.Point?
     /// Bumped by the two Retry buttons. Each is part of its task's id, which is what
     /// makes a retry cancellable by the next edit instead of outliving it.
@@ -74,6 +77,8 @@ struct NewDeliveryView: View {
                 optionsSummary: draft.options.summary,
                 whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
+                orderBarTitle: orderBarTitle,
+                canOrder: draft.selectedOffer != nil,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
@@ -117,6 +122,19 @@ struct NewDeliveryView: View {
                 )
                 // Recording happens once per placed order. This task re-runs whenever a
                 // parked draft is reopened, and `.placed` is still true then.
+                if draft.ordering == .placed, !draft.placedOrderIsRecorded,
+                   let order = draft.placedOrder {
+                    do {
+                        try await store.record(order)
+                        draft.notePlacedOrderRecorded()
+                    } catch {
+                        draft.notePlacedButUnrecorded(error)
+                    }
+                }
+            }
+            .task(id: reconcileAttempt) {
+                guard reconcileAttempt > 0 else { return }
+                await draft.reconcileUnresolved(watch: { try await session.claimState(id: $0) })
                 if draft.ordering == .placed, !draft.placedOrderIsRecorded,
                    let order = draft.placedOrder {
                     do {
@@ -211,7 +229,8 @@ struct NewDeliveryView: View {
                     // Closes the sheet and nothing else: the draft stays parked with its
                     // token, so a later attempt reuses it rather than buying a second
                     // delivery.
-                    unresolvedDone: { showsReview = false }
+                    unresolvedDone: { showsReview = false },
+                    reconcile: { reconcileAttempt += 1 }
                 )
             }
         }
@@ -303,6 +322,15 @@ private extension NewDeliveryView {
 
     /// Every class the app knows, priced where the strip has a price — the explainer
     /// teaches the vocabulary even for classes the route was not offered.
+    /// The CTA's words. `nil` while the bar has no place on screen at all — no route,
+    /// no prices asked for yet.
+    var orderBarTitle: String? {
+        guard draft.offers != .idle else { return nil }
+        return draft.selectedOffer.map {
+            String(localized: "Order \($0.tariff.words) · \($0.priceText)")
+        } ?? String(localized: "Order")
+    }
+
     var explainerCards: [TariffExplainer.Card] {
         let offers: [Offer] = if case .ready(let offers) = draft.offers { offers } else { [] }
         let known: [TariffClass] = [.courier, .express, .cargo]

@@ -33,6 +33,8 @@ extension NewDeliveryView {
         /// context all have to survive — retiring the draft here would let the next
         /// attempt mint a fresh token and dispatch a second courier (review, PR #22).
         var unresolvedDone: () -> Void = {}
+        /// Asks what became of an acceptance whose answer was lost. A read, never a write.
+        var reconcile: () -> Void = {}
 
         @Environment(\.dismiss) private var dismiss
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -171,7 +173,7 @@ extension NewDeliveryView {
                             .font(.subheadline)
                         Button("Try again", action: confirm)
                     }
-                case .unresolved(let reason):
+                case .unresolved(let reason, _):
                     // No retry here on purpose: acceptance was attempted, so ordering
                     // again could buy a second delivery. The honest next step is to look
                     // at what exists before doing anything (review, PR #22).
@@ -181,12 +183,17 @@ extension NewDeliveryView {
                         Text("Check Deliveries before ordering again — this one may have gone through.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                        // Reads only — it cannot create and cannot accept — so pressing
+                        // it is always safe, which is what makes it the first offer here
+                        // rather than a second «Try again» (review, PR #22).
+                        Button("Check again", action: reconcile)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .frame(maxWidth: .infinity)
                         Button(action: unresolvedDone) {
                             Text("Close")
-                                .font(.headline)
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                     }
                 }

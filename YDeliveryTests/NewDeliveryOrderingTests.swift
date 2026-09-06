@@ -215,6 +215,69 @@ struct NewDeliveryOrderingTests {
         }
     }
 
+    @Test("An acceptance whose answer was lost can be asked about, and records once known")
+    func unresolvedCanBeReconciled() async {
+        struct LostAnswer: Error {}
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-7", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in throw LostAnswer() },
+            clock: TestClock()
+        )
+
+        guard case .unresolved(_, let claimID) = model.ordering else {
+            Issue.record("expected unresolved, got \(model.ordering)")
+            return
+        }
+        #expect(claimID == "claim-7", "without the id there is no way back at all")
+
+        // The provider had in fact accepted it.
+        await model.reconcileUnresolved(watch: { id in
+            PlacedClaim(id: id, version: 2, status: .searching, failureText: nil)
+        })
+
+        #expect(model.ordering == .placed)
+        #expect(model.placedOrder?.claimID == "claim-7", "the order that exists, not a new one")
+    }
+
+    @Test("Asking again while it is still unknown leaves it unknown")
+    func reconcileKeepsUncertainty() async {
+        struct LostAnswer: Error {}
+        struct StillOffline: Error {}
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-7", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in throw LostAnswer() },
+            clock: TestClock()
+        )
+
+        await model.reconcileUnresolved(watch: { _ in throw StillOffline() })
+
+        guard case .unresolved = model.ordering else {
+            Issue.record("a failed read must not resolve anything: \(model.ordering)")
+            return
+        }
+        #expect(model.placedOrder == nil)
+    }
+
+    @Test("The order carries the schedule the quote was built from")
+    func orderMatchesTheQuotedSchedule() async {
+        let model = readyDraft()
+        model.options.due = Date.now.addingTimeInterval(-3600) // parked past its pickup
+        await priced(model)
+
+        let request = try? #require(model.orderRequest)
+        #expect(request?.options.due == nil,
+                "pricing quoted an immediate run; sending the expired time could not produce it")
+    }
+
     @Test("Without a confirm, the owned task's appear-run is a no-op")
     func appearRunIsNoOp() async {
         let model = readyDraft()

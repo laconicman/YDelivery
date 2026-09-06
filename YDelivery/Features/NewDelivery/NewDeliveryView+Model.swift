@@ -429,7 +429,7 @@ extension NewDeliveryView {
             /// Acceptance began and its outcome is unknown — the provider may already
             /// have taken the order. Never says "nothing was charged", because that
             /// cannot be known from here (review, PR #22).
-            case unresolved(String)
+            case unresolved(reason: String, claimID: String?)
         }
 
         private(set) var ordering: Ordering = .idle
@@ -495,7 +495,11 @@ extension NewDeliveryView {
             return OrderRequest(
                 points: requestPoints,
                 items: items,
-                options: options,
+                // The same options the quote was built from. Pricing normalised a lapsed
+                // schedule and this did not, so the sheet showed a price for an immediate
+                // run while the create carried the expired time — a quote that could not
+                // produce the order it was quoting (review, PR #22).
+                options: options.effective(),
                 offerPayload: offer.payload,
                 tariffWireValue: offer.tariff.wireValue
             )
@@ -536,9 +540,14 @@ extension NewDeliveryView {
             // evidence that nothing happened: the provider may have accepted and lost
             // the answer on the way back.
             var acceptAttempted = false
+            // Kept so an unresolved acceptance has something to ask about later; without
+            // it the flow reached a terminal state holding nothing, and the only way on
+            // was a fresh draft with a fresh token (review, PR #22).
+            var createdClaimID: String?
             do {
                 ordering = .creating
                 var claim = try await create(request, orderRequestID)
+                createdClaimID = claim.id
 
                 ordering = .estimating
                 let deadline = clock.now.advanced(by: Self.estimatingPatience)
@@ -597,7 +606,8 @@ extension NewDeliveryView {
                 let sentence = (error as? LocalizedError)?.errorDescription
                 if acceptAttempted {
                     ordering = .unresolved(
-                        sentence ?? String(localized: "The order may or may not have gone through.")
+                        reason: sentence ?? String(localized: "The order may or may not have gone through."),
+                        claimID: createdClaimID
                     )
                 } else {
                     ordering = .failed(
@@ -605,6 +615,36 @@ extension NewDeliveryView {
                             ?? String(localized: "The order didn't go through. Nothing was charged — try again.")
                     )
                 }
+            }
+        }
+
+        /// Asks the provider what became of an acceptance whose answer was lost. This
+        /// only ever *reads*: it cannot create and cannot accept, so it is safe to press
+        /// as often as the sender likes. A claim being worked means the order exists and
+        /// is recorded as placed; anything else leaves the unresolved state standing,
+        /// because not knowing is still the honest answer (review, PR #22).
+        func reconcileUnresolved(watch: (String) async throws -> PlacedClaim) async {
+            guard case .unresolved(let reason, let claimID) = ordering,
+                  let claimID, let offer = selectedOffer
+            else { return }
+            do {
+                let claim = try await watch(claimID)
+                guard claim.status == .searching else { return }
+                placedOrder = Order(
+                    created: .now,
+                    status: .searching,
+                    route: points.compactMap { point in
+                        point.place.map { RoutePoint($0, contact: point.contact) }
+                    },
+                    price: ClientController.wireDecimal(offer.price),
+                    currency: offer.currency,
+                    tariff: offer.tariff.wireValue,
+                    claimID: claim.id
+                )
+                ordering = .placed
+            } catch {
+                // Still unknown, which is what it already said.
+                ordering = .unresolved(reason: reason, claimID: claimID)
             }
         }
 
