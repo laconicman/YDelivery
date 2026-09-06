@@ -531,6 +531,12 @@ extension NewDeliveryView {
             // if the lapse fell between two ticks. This closes the window outright.
             if options.scheduleHasLapsed() {
                 options = options.effective()
+                // And drop the quote that schedule bought. Repricing is asynchronous, so
+                // a quick second press would otherwise spend an offer priced for a
+                // scheduled pickup on an order that is now immediate (review, PR #22).
+                // `chosenTariff` survives this, so the class the sender picked is still
+                // what the editors and the window are judged against.
+                selectedOfferID = nil
                 return
             }
             switch ordering {

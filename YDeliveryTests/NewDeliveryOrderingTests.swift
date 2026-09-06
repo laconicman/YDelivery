@@ -174,8 +174,20 @@ struct NewDeliveryOrderingTests {
                 "the first press must not send an immediate order under a schedule on screen")
         #expect(model.options.due == nil, "and the «When» line now says what will be sent")
 
+        #expect(model.selectedOfferID == nil,
+                "the offer was priced for that pickup; a quick second press would spend it")
+        #expect(model.chosenTariff != nil, "the class they picked is not forgotten with it")
+        #expect(model.orderRequest == nil, "so there is nothing to confirm until prices return")
+
+        // Repricing lands, immediate this time.
+        await model.loadOffers { request in
+            #expect(request.options.due == nil)
+            return [Offer(tariff: .express, price: 1190, currency: "RUB",
+                          pickupInterval: nil, deliveryInterval: nil, payload: "fresh")]
+        }
         model.confirmOrder()
         #expect(model.ordering == .queued, "the second press orders what it now says")
+        #expect(model.orderRequest?.offerPayload == "fresh")
     }
 
     @Test("An edited retry mints a new token; an unchanged one keeps it")
