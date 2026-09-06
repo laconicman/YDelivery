@@ -163,19 +163,26 @@ struct NewDeliveryOrderingTests {
     }
 
     @Test("A schedule that lapses while the sheet is open is shown before it is sent")
-    func lapseAtConfirmIsNotSilent() async {
+    func lapseAtConfirmIsNotSilent() async throws {
         let model = readyDraft()
-        await priced(model)
-        model.options.due = Date.now.addingTimeInterval(-60) // passed while they read
+        // Priced *with* the schedule, which then passes while the sheet is being read.
+        // The short window is the point: the offer on hand was bought under that pickup.
+        model.options.due = Date.now.addingTimeInterval(0.4)
+        await model.loadOffers { request in
+            #expect(request.options.due != nil, "the quote is for a scheduled pickup")
+            return [Offer(tariff: .express, price: 1190, currency: "RUB",
+                          pickupInterval: nil, deliveryInterval: nil, payload: "scheduled")]
+        }
+        #expect(model.selectedOfferID == "scheduled")
+        try await Task.sleep(for: .milliseconds(600))
 
         model.confirmOrder()
 
         #expect(model.ordering == .idle,
                 "the first press must not send an immediate order under a schedule on screen")
         #expect(model.options.due == nil, "and the «When» line now says what will be sent")
-
         #expect(model.selectedOfferID == nil,
-                "the offer was priced for that pickup; a quick second press would spend it")
+                "that offer was priced for the pickup that just lapsed")
         #expect(model.chosenTariff != nil, "the class they picked is not forgotten with it")
         #expect(model.orderRequest == nil, "so there is nothing to confirm until prices return")
 
@@ -188,6 +195,30 @@ struct NewDeliveryOrderingTests {
         model.confirmOrder()
         #expect(model.ordering == .queued, "the second press orders what it now says")
         #expect(model.orderRequest?.offerPayload == "fresh")
+    }
+
+    @Test("A schedule already repriced before confirmation keeps its fresh quote")
+    func alreadyRepricedIsNotStranded() async {
+        let model = readyDraft()
+        model.options.due = Date.now.addingTimeInterval(-60) // lapsed
+
+        // The sheet re-rendered after the lapse, so pricing already ran on the effective
+        // (immediate) request and the offer on hand is a fresh one.
+        await model.loadOffers { request in
+            #expect(request.options.due == nil, "pricing already answers to effective()")
+            return [Offer(tariff: .express, price: 1190, currency: "RUB",
+                          pickupInterval: nil, deliveryInterval: nil, payload: "fresh")]
+        }
+        #expect(model.selectedOfferID == "fresh")
+
+        model.confirmOrder()
+
+        #expect(model.selectedOfferID == "fresh",
+                "clearing this one strands the sender: pricingInputs is unchanged, so nothing refetches")
+        #expect(model.options.due == nil)
+        // And the second press can actually order, rather than waiting forever.
+        model.confirmOrder()
+        #expect(model.ordering == .queued)
     }
 
     @Test("An edited retry mints a new token; an unchanged one keeps it")

@@ -93,6 +93,13 @@ extension NewDeliveryView {
             }
         }
 
+        /// The request the offers on hand were priced from. What makes a quote stale is
+        /// not the clock but a difference between this and ``pricingInputs`` — and the
+        /// difference has to be *measured*, because clearing a selection that was already
+        /// refreshed strands the sender with no class and no refetch to restore one
+        /// (review, PR #22).
+        private(set) var pricedRequest: OfferRequest?
+
         /// The class the sender last chose, kept independently of ``offers``.
         /// `selectedOffer` reads through that state and goes nil the moment repricing
         /// starts — which is not the sender changing their mind, and everything that asks
@@ -388,6 +395,7 @@ extension NewDeliveryView {
                 // then renormalised away the options bound to the class they had chosen
                 // (review, PR #21). The *class* is what they picked; the payload is only
                 // what gets spent.
+                pricedRequest = request
                 offers = .ready(loaded)
                 if !loaded.contains(where: { $0.id == selectedOfferID }) {
                     let sameClass = chosenTariff.flatMap { tariff in
@@ -531,12 +539,16 @@ extension NewDeliveryView {
             // if the lapse fell between two ticks. This closes the window outright.
             if options.scheduleHasLapsed() {
                 options = options.effective()
-                // And drop the quote that schedule bought. Repricing is asynchronous, so
-                // a quick second press would otherwise spend an offer priced for a
-                // scheduled pickup on an order that is now immediate (review, PR #22).
-                // `chosenTariff` survives this, so the class the sender picked is still
-                // what the editors and the window are judged against.
-                selectedOfferID = nil
+                // Drop the quote only if it was actually bought with that schedule.
+                // Pricing already answers to `effective()`, so a sheet that re-rendered
+                // after the lapse has *already* repriced and holds a fresh immediate
+                // offer — clearing that one would strand the sender, because
+                // `pricingInputs` is unchanged and nothing would refetch (review,
+                // PR #22). When the held quote was priced with a due, this render is the
+                // first one past the lapse, so the task id does change and prices follow.
+                if pricedRequest?.options.due != nil {
+                    selectedOfferID = nil
+                }
                 return
             }
             switch ordering {
