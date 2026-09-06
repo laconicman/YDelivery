@@ -1,3 +1,5 @@
+import YDeliveryKit
+
 /// A route point the user has chosen: coordinates plus the human-readable address that will
 /// eventually feed a delivery request.
 ///
@@ -11,4 +13,8 @@ nonisolated struct PickedPlace: Hashable, Sendable {
     /// Editable before submission: reverse geocoding proposes it, the user corrects it —
     /// the API's `fullname` is what the courier ultimately reads.
     var address: String
+
+    /// How to get to the door once at the building — filled on the picker's refine
+    /// stage, carried through the draft to the wire.
+    var parts: AddressParts?
 }

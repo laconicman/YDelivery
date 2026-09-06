@@ -26,9 +26,11 @@ nonisolated struct Contact: Hashable, Sendable {
     }
 }
 
-extension Contact {
+nonisolated extension Contact {
     /// The collapsed row's one line: «Иван Петров · +7 912 345-67-89, ext. 12». Display
-    /// formatting lives here, not in a view body (R5).
+    /// formatting lives here, not in a view body (R5). `nonisolated` explicitly: an
+    /// extension does not inherit it from the type, and the project's default isolation
+    /// would otherwise pin this pure formatting to the main actor.
     var summary: String {
         let phonePart = phoneExtension.isEmpty
             ? phone

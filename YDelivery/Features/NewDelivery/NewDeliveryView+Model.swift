@@ -146,6 +146,15 @@ extension NewDeliveryView {
             points[index].place = place
         }
 
+        /// A pasted route link fills both ends in one action (decision #9): the pickup
+        /// and the last delivery. Contacts stay put — a link knows places, not people.
+        func fillEnds(from: PickedPlace, to: PickedPlace) {
+            points[0].place = from
+            if let index = points.lastIndex(where: { $0.role == .dropoff }) {
+                points[index].place = to
+            }
+        }
+
         /// Stores what ``Contact/storable`` says deserves keeping — an emptied card
         /// returns the row's invitation rather than a blank line.
         func setContact(_ contact: Contact?, for id: Point.ID) {

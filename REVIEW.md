@@ -44,6 +44,10 @@ the noise filters.
 - Flag a blanket `@MainActor` (or removal of `nonisolated`) applied to make a diagnostic
   disappear without a stated UI reason; `YDelivery/App/TokenStore.swift` records the
   pattern this project expects.
+- Flag an *unannotated* extension holding pure logic (parsing, formatting) on a
+  `nonisolated` type: extensions do not inherit `nonisolated`, so the project's default
+  isolation pins them to the main actor and the failure is a runtime SIGTRAP from a
+  nonisolated caller, not a compile error (MapLink's first test run, 2026-08-30).
 
 ## Security
 

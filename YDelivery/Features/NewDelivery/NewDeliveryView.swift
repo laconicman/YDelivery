@@ -33,7 +33,17 @@ struct NewDeliveryView: View {
                 PointPickerView(
                     prompt: point.role.pickerPrompt,
                     initialPlace: point.place,
-                    confirm: { draft.setPlace($0, for: point.id) }
+                    initialContact: point.contact,
+                    confirm: { place, contact in
+                        draft.setPlace(place, for: point.id)
+                        // A remembered point speaks for its own door — including when
+                        // nobody is behind it. Refining a pin says nothing, and the row
+                        // keeps whoever it had.
+                        if case .replace(let contact) = contact {
+                            draft.setContact(contact, for: point.id)
+                        }
+                    },
+                    fillEnds: { draft.fillEnds(from: $0, to: $1) }
                 )
             }
             .sheet(item: $editingContactPoint) { point in

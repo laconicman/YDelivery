@@ -5,11 +5,13 @@ import SwiftUI
 @main
 struct YDeliveryApp: App {
     @State private var session = ClientController()
+    @State private var store = StoreController()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(session)
+                .environment(store)
         }
     }
 }

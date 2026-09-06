@@ -26,4 +26,5 @@ struct RootView: View {
 #Preview {
     RootView()
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
+        .environment(StoreController(orderStore: nil, placeStore: nil))
 }
