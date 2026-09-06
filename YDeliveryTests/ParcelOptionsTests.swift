@@ -316,6 +316,34 @@ struct ParcelOptionsTests {
                 "so a van's multi-day pickup stays inside the window it is judged against")
     }
 
+    @Test("A default endpoint is a position, so it constrains the other end too")
+    func defaultEndpointsCannotReverse() {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 1, longitude: 1, address: "А"), for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 2, longitude: 2, address: "Б"), for: model.points[1].id)
+        let middle = model.addStop()
+        model.setPlace(PickedPlace(latitude: 3, longitude: 3, address: "Между"), for: middle)
+        let first = model.points[0].id
+
+        // Pickup left at its default (the route's start) and the handover named as that
+        // same first stop — equal, not merely reversed.
+        var item = ParcelItem()
+        item.name = "Коробка"
+        item.dropoffPointID = first
+        model.setItem(item)
+        #expect(model.items[0].dropoffPointID == nil,
+                "handing over at the door it was collected from is not a journey")
+
+        // Handover left at its default (the route's end) and the pickup named as the end.
+        var second = ParcelItem()
+        second.name = "Вторая"
+        second.pickupPointID = model.points[model.points.count - 1].id
+        model.setItem(second)
+        let saved = model.items.first { $0.id == second.id }
+        #expect(saved?.pickupPointID == nil,
+                "collecting at the last stop leaves nowhere to hand it over")
+    }
+
     @Test("A class judges the whole parcel, not one row at a time")
     func parcelWeightIsJudgedTogether() {
         func box(_ kg: Double, quantity: Int = 1) -> ParcelItem {

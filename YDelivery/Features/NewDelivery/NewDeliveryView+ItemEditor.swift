@@ -154,18 +154,25 @@ extension NewDeliveryView {
         /// Offering the whole list let a sender describe a journey the provider refuses
         /// (review, PR #21) — and an unavailable choice should not be reachable to begin
         /// with, which is the picker's version of "constraints replace hints".
+        /// A default endpoint is a *position*, not an absence of one: `nil` pickup means
+        /// the route's start and `nil` handover means its end. Reading them as "no
+        /// constraint" let the other picker offer that very stop back, so a sender on the
+        /// defaults could still choose an equal or reversed pair (review, PR #21).
+        private var effectivePickupIndex: Int {
+            item.pickupPointID.flatMap { id in stops.firstIndex { $0.id == id } } ?? 0
+        }
+
+        private var effectiveHandoverIndex: Int {
+            item.dropoffPointID.flatMap { id in stops.firstIndex { $0.id == id } }
+                ?? max(stops.count - 1, 0)
+        }
+
         private var stopsAfterPickup: [Stop] {
-            guard let pickup = item.pickupPointID,
-                  let index = stops.firstIndex(where: { $0.id == pickup })
-            else { return stops }
-            return Array(stops.dropFirst(index + 1))
+            Array(stops.dropFirst(effectivePickupIndex + 1))
         }
 
         private var stopsBeforeHandover: [Stop] {
-            guard let dropoff = item.dropoffPointID,
-                  let index = stops.firstIndex(where: { $0.id == dropoff })
-            else { return stops }
-            return Array(stops.prefix(index))
+            Array(stops.prefix(effectiveHandoverIndex))
         }
 
         private func stopPicker(

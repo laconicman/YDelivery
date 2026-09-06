@@ -215,12 +215,22 @@ extension NewDeliveryView {
                     items[index].dropoffPointID = nil
                 }
                 // A box cannot be handed over before it is collected, nor at the door it
-                // was collected from. The handover is the half that gives way, since the
-                // pickup is where the parcel physically is.
-                if let pickup = items[index].pickupPointID.flatMap({ order[$0] }),
-                   let dropoff = items[index].dropoffPointID.flatMap({ order[$0] }),
-                   dropoff <= pickup {
+                // was collected from. A default end is a position too — `nil` pickup is
+                // the route's start, `nil` handover its end — so a pair with one default
+                // can be just as impossible as one with neither (review, PR #21). The
+                // handover is the half that gives way, since the pickup is where the
+                // parcel physically is.
+                let pickup = items[index].pickupPointID.flatMap { order[$0] } ?? 0
+                let handover = items[index].dropoffPointID.flatMap { order[$0] }
+                    ?? max(points.count - 1, 0)
+                if handover <= pickup {
                     items[index].dropoffPointID = nil
+                    // Clearing the handover restores the route's end; if the pickup is
+                    // itself the last stop, the pair is still impossible and the pickup
+                    // is what has to give.
+                    if pickup >= max(points.count - 1, 0) {
+                        items[index].pickupPointID = nil
+                    }
                 }
             }
         }
