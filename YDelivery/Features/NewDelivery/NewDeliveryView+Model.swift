@@ -1,6 +1,7 @@
 import Foundation
 import MapKit
 import Observation
+import YDeliveryKit
 // SwiftUI supplies `remove(atOffsets:)` / `move(fromOffsets:toOffset:)` — the exact
 // semantics `onDelete`/`onMove` hand this model; reimplementing them here would be the
 // riskier kind of purity.
@@ -408,6 +409,171 @@ extension NewDeliveryView {
         var selectedOffer: Offer? {
             guard case .ready(let offers) = offers else { return nil }
             return offers.first { $0.id == selectedOfferID }
+        }
+
+        // MARK: Ordering
+
+        /// Where the one irreversible action stands (board `5f`, finding 2). Failure is
+        /// a filled sentence the sheet displays as it arrived.
+        enum Ordering: Hashable {
+            case idle
+            /// Confirmed on the review sheet; the owned task picks it up.
+            case queued
+            case creating
+            /// The provider is pricing the created claim; the flow watches.
+            case estimating
+            /// Accepting — the moment money moves.
+            case accepting
+            case placed
+            case failed(String)
+        }
+
+        private(set) var ordering: Ordering = .idle
+        /// The order as recorded once accepted — what history remembers.
+        private(set) var placedOrder: Order?
+        /// «Placed but not remembered» — the store refused after money moved; the sheet
+        /// says so instead of pretending either way.
+        private(set) var recordWarning: String?
+
+        /// One idempotency token per draft: the provider replays the same create for the
+        /// same token, so a retried confirm cannot dispatch two couriers. A fresh draft
+        /// mints a fresh token.
+        let orderRequestID = UUID()
+
+        /// Everything that must be true before the confirm button exists — every bound
+        /// stated as a sentence the review sheet renders (the wire would otherwise say
+        /// it as a 400).
+        var orderBlockers: [String] {
+            var blockers: [String] = []
+            if !isRouteComplete {
+                blockers.append(String(localized: "Every stop needs its place on the map."))
+            }
+            if points.contains(where: { ($0.contact?.storable?.phone ?? "").isEmpty }) {
+                blockers.append(String(localized: "The courier calls ahead — every stop needs a person with a phone."))
+            }
+            if items.isEmpty {
+                blockers.append(String(localized: "Say what's inside — the parcel is insured by its declared value."))
+            } else if items.contains(where: {
+                $0.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.cost == nil
+            }) {
+                blockers.append(String(localized: "Every item needs a name and a declared value."))
+            }
+            if selectedOffer == nil {
+                blockers.append(String(localized: "Pick a delivery class once prices arrive."))
+            }
+            return blockers
+        }
+
+        /// The create call's payload — assembled only when nothing blocks it.
+        var orderRequest: OrderRequest? {
+            guard orderBlockers.isEmpty, let offer = selectedOffer else { return nil }
+            let requestPoints = points.compactMap { point -> OrderRequest.Point? in
+                guard let place = point.place, let contact = point.contact else { return nil }
+                return OrderRequest.Point(
+                    pointID: point.id,
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    address: place.address,
+                    parts: place.parts,
+                    contact: contact,
+                    role: point.role
+                )
+            }
+            return OrderRequest(
+                points: requestPoints,
+                items: items,
+                options: options,
+                offerPayload: offer.payload,
+                tariffWireValue: offer.tariff.wireValue
+            )
+        }
+
+        /// The review sheet's confirm: queue the run for the owned task. A repeat tap
+        /// while anything is in flight is a no-op — the task id changing is what retries.
+        func confirmOrder() {
+            guard orderRequest != nil else { return }
+            switch ordering {
+            case .idle, .failed: ordering = .queued
+            default: break
+            }
+        }
+
+        /// Runs the queued order through create → watch → accept, publishing each phase.
+        /// Steps are handed in by the root so the model never learns the transport; the
+        /// clock is injectable so the poll tests offline. Cancellation (the flow closed
+        /// mid-run) re-queues — reopening resumes from the confirm, not from a lie.
+        func placeOrder(
+            create: (OrderRequest, UUID) async throws -> PlacedClaim,
+            watch: (String) async throws -> PlacedClaim,
+            accept: (String, Int) async throws -> PlacedClaim,
+            clock: some Clock<Duration> = ContinuousClock()
+        ) async {
+            guard ordering == .queued, let request = orderRequest,
+                  let offer = selectedOffer
+            else { return }
+            do {
+                ordering = .creating
+                var claim = try await create(request, orderRequestID)
+
+                ordering = .estimating
+                let deadline = clock.now.advanced(by: Self.estimatingPatience)
+                while claim.status == .estimating {
+                    guard clock.now < deadline else { throw OrderingTimedOut() }
+                    try await clock.sleep(for: Self.pollInterval)
+                    claim = try await watch(claim.id)
+                }
+                if claim.status == .failed {
+                    throw OrderingRefused(reason: claim.failureText)
+                }
+
+                ordering = .accepting
+                claim = try await accept(claim.id, claim.version)
+
+                placedOrder = Order(
+                    created: .now,
+                    status: .searching,
+                    route: points.compactMap { point in
+                        point.place.map { RoutePoint($0, contact: point.contact) }
+                    },
+                    price: ClientController.wireDecimal(offer.price),
+                    currency: offer.currency,
+                    tariff: offer.tariff.wireValue,
+                    claimID: claim.id
+                )
+                ordering = .placed
+            } catch is CancellationError {
+                ordering = .queued
+            } catch {
+                guard !Task.isCancelled else { return }
+                ordering = .failed(
+                    (error as? LocalizedError)?.errorDescription
+                        ?? String(localized: "The order didn't go through. Nothing was charged — try again.")
+                )
+            }
+        }
+
+        /// The store refused after acceptance — say so beside the placed state.
+        func notePlacedButUnrecorded(_ error: any Error) {
+            recordWarning = (error as? LocalizedError)?.errorDescription
+                ?? String(localized: "The order is placed, but couldn't be saved to history on this device.")
+        }
+
+        private static let pollInterval: Duration = .seconds(1)
+        /// How long estimation may reasonably hold the sender — past it, honesty beats
+        /// hope; the created claim keeps living server-side either way.
+        private static let estimatingPatience: Duration = .seconds(60)
+
+        struct OrderingTimedOut: LocalizedError {
+            var errorDescription: String? {
+                String(localized: "The provider is taking too long to price the run. Try again in a minute — nothing was charged.")
+            }
+        }
+
+        struct OrderingRefused: LocalizedError {
+            let reason: String?
+            var errorDescription: String? {
+                reason ?? String(localized: "The provider couldn't price this run. Check the route and the parcel — nothing was charged.")
+            }
         }
 
         /// Changes what happens at a stop's door. ``availableRoles(for:)`` is the single

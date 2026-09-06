@@ -7,6 +7,13 @@ import YDeliveryKit
 /// later Phase-2 slices (Roadmap → Phase 2).
 struct NewDeliveryView: View {
     let draft: Model
+    /// The order is placed and acknowledged — `RootView` retires this draft and closes
+    /// the flow.
+    let placed: () -> Void
+    @State private var showsReview = false
+    /// Bumped per confirm — the ordering task's id, so a retry is the same owned task
+    /// run again (the Run pattern; attempt 0 no-ops through the model's queue gate).
+    @State private var orderAttempt = 0
     @State private var pickingPoint: Model.Point?
     /// Bumped by the two Retry buttons. Each is part of its task's id, which is what
     /// makes a retry cancellable by the next edit instead of outliving it.
@@ -85,7 +92,8 @@ struct NewDeliveryView: View {
                 addItem: { editingItem = ParcelItem() },
                 editItem: { editingItem = draft.item(withID: $0) },
                 removeItems: { draft.removeItems(at: $0) },
-                editOptions: { isEditingOptions = true }
+                editOptions: { isEditingOptions = true },
+                openReview: { showsReview = true }
             )
             // Structured re-pricing: the ids are what pricing answers to — the route for
             // the estimate; route, parcel, and options for offers — so any edit cancels
@@ -97,6 +105,23 @@ struct NewDeliveryView: View {
             }
             .task(id: Run(inputs: draft.pricingInputs, attempt: offersAttempt)) {
                 await draft.loadOffers { try await session.offers(for: $0) }
+            }
+            // The ordering run: create → watch → accept, then remember. Owned by its
+            // attempt id; the model's queue gate makes appear-time runs no-ops, and a
+            // recording failure is said beside the placed state, never swallowed.
+            .task(id: orderAttempt) {
+                await draft.placeOrder(
+                    create: { try await session.createClaim($0, requestID: $1) },
+                    watch: { try await session.claimState(id: $0) },
+                    accept: { try await session.acceptClaim(id: $0, version: $1) }
+                )
+                if draft.ordering == .placed, let order = draft.placedOrder {
+                    do {
+                        try await store.record(order)
+                    } catch {
+                        draft.notePlacedButUnrecorded(error)
+                    }
+                }
             }
             .task { await store.refresh() }
             // The first prices a beginner ever sees arrive with the explainer open
@@ -156,6 +181,29 @@ struct NewDeliveryView: View {
                     options: draft.options,
                     selectedTariff: draft.chosenTariff,
                     save: { draft.options = $0 }
+                )
+            }
+            .sheet(isPresented: $showsReview) {
+                ReviewSheet(
+                    stops: reviewStops,
+                    itemLines: draft.items.map { item in
+                        "\(item.name) — \(item.summary)"
+                    },
+                    optionsLine: draft.options.summary,
+                    whenLine: draft.options.whenSummary,
+                    tariffName: draft.selectedOffer?.tariff.words ?? "",
+                    priceText: draft.selectedOffer?.priceText,
+                    blockers: draft.orderBlockers,
+                    ordering: draft.ordering,
+                    recordWarning: draft.recordWarning,
+                    confirm: {
+                        draft.confirmOrder()
+                        orderAttempt += 1
+                    },
+                    done: {
+                        showsReview = false
+                        placed()
+                    }
                 )
             }
         }
@@ -220,6 +268,24 @@ private extension NewDeliveryView {
         }
     }
 
+    /// The route, restated for the review sheet — same badges, same words.
+    var reviewStops: [ReviewSheet.Stop] {
+        draft.points.enumerated().compactMap { index, point in
+            point.place.map { place in
+                ReviewSheet.Stop(
+                    id: point.id,
+                    badge: PointBadge.Role(
+                        role: point.role,
+                        index: index,
+                        isLast: index == draft.points.count - 1
+                    ),
+                    address: place.displayAddress,
+                    contact: point.contact?.summary ?? ""
+                )
+            }
+        }
+    }
+
     /// The stops an item can board or leave at — labels for the editor's pickers.
     var itemStops: [ItemEditor.Stop] {
         draft.points.compactMap { point in
@@ -265,7 +331,7 @@ extension NewDeliveryView.Model.Role {
 }
 
 #Preview("Empty draft") {
-    NewDeliveryView(draft: NewDeliveryView.Model())
+    NewDeliveryView(draft: NewDeliveryView.Model(), placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
         .environment(StoreController(orderStore: nil, placeStore: nil))
 }
@@ -284,7 +350,7 @@ extension NewDeliveryView.Model.Role {
         PickedPlace(latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52"),
         for: draft.points[1].id
     )
-    return NewDeliveryView(draft: draft)
+    return NewDeliveryView(draft: draft, placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
         .environment(StoreController(orderStore: nil, placeStore: nil))
 }
@@ -319,7 +385,7 @@ extension NewDeliveryView.Model.Role {
         PickedPlace(latitude: 59.932720, longitude: 30.349709, address: "Санкт-Петербург, Невский проспект, 100"),
         for: returnStop
     )
-    return NewDeliveryView(draft: draft)
+    return NewDeliveryView(draft: draft, placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
         .environment(StoreController(orderStore: nil, placeStore: nil))
 }

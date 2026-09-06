@@ -70,6 +70,8 @@ extension NewDeliveryView {
         @State private var camera: MapCameraPosition = .automatic
         @State private var editMode: EditMode = .inactive
 
+        let openReview: () -> Void
+
         var body: some View {
             VStack(spacing: 0) {
                 RouteMap(pins: pins, legs: estimateLegs, camera: $camera)
@@ -82,6 +84,9 @@ extension NewDeliveryView {
                     }
                     .containerRelativeFrame(.vertical) { length, _ in length * Self.mapShare }
                 routeCard
+            }
+            .safeAreaInset(edge: .bottom) {
+                OrderBar(offers: offers, selectedOfferID: selectedOfferID, openReview: openReview)
             }
         }
 
@@ -353,6 +358,45 @@ extension NewDeliveryView.Content {
                 .frame(minHeight: Layout.MinHeight.bar)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Layout.Radius.bar))
             }
+        }
+    }
+}
+
+// MARK: - Order bar
+
+extension NewDeliveryView.Content {
+    /// The one CTA (board `1b`): named and priced once a class is chosen, visibly
+    /// waiting otherwise — never confused with the estimate bar above, which informs and
+    /// never acts (decision #13). Ordering itself happens behind the review sheet.
+    struct OrderBar: View {
+        let offers: NewDeliveryView.Model.Offers
+        let selectedOfferID: Offer.ID?
+        let openReview: () -> Void
+
+        var body: some View {
+            if offers != .idle {
+                Button(action: openReview) {
+                    Text(title)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(selectedOffer == nil)
+                .padding(.horizontal, Layout.Spacing.edge)
+                .padding(.vertical, Layout.Spacing.unit)
+                .background(.bar)
+            }
+        }
+
+        private var selectedOffer: Offer? {
+            guard case .ready(let offers) = offers else { return nil }
+            return offers.first { $0.id == selectedOfferID }
+        }
+
+        private var title: String {
+            selectedOffer.map { String(localized: "Order \($0.tariff.words) · \($0.priceText)") }
+                ?? String(localized: "Order")
         }
     }
 }
@@ -666,7 +710,8 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
-        editOptions: {}
+        editOptions: {},
+        openReview: {}
     )
 }
 
@@ -731,7 +776,8 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
-        editOptions: {}
+        editOptions: {},
+        openReview: {}
     )
 }
 
