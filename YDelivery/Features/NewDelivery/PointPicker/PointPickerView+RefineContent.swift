@@ -27,9 +27,11 @@ extension PointPickerView {
         let done: () -> Void
 
         @State private var camera: MapCameraPosition
-        /// How many times the camera has settled. The first is this view arriving at the
-        /// region it was seeded with; anything beyond that is the sender driving.
-        @State private var cameraSettles = 0
+        /// Whether the sender has driven this map themselves. Counting camera settles
+        /// was inference and got it wrong: if a pan lands before the seeding callback,
+        /// the first settle *is* the sender's, and a late start city would overwrite it
+        /// (review, PR #19). A gesture on the map is direct evidence instead.
+        @State private var senderDroveTheMap = false
 
         /// What the map shows before any interaction — reported on appear so the first
         /// search is region-biased too; `.onMapCameraChange(.onEnd)` only fires after a move.
@@ -87,6 +89,14 @@ extension PointPickerView {
                         Marker(pin.displayAddress, systemImage: SFSymbol.mappin.rawValue, coordinate: pin.coordinate)
                     }
                 }
+                .simultaneousGesture(
+                    // Any pan or pinch on the map is the sender taking it over. Recorded
+                    // before the camera moves, so a late fallback cannot beat it.
+                    DragGesture(minimumDistance: 1).onChanged { _ in senderDroveTheMap = true }
+                )
+                .simultaneousGesture(
+                    MagnifyGesture(minimumScaleDelta: 0.01).onChanged { _ in senderDroveTheMap = true }
+                )
                 .onTapGesture { screenPoint in
                     if let coordinate = proxy.convert(screenPoint, from: .local) {
                         // Suppress only when this tap will actually move the pin — a tap on
@@ -105,7 +115,6 @@ extension PointPickerView {
             }
             .onMapCameraChange(frequency: .onEnd) { context in
                 onVisibleRegionChange(context.region)
-                cameraSettles += 1
             }
             .onAppear {
                 onVisibleRegionChange(initialRegion)
@@ -116,7 +125,7 @@ extension PointPickerView {
                 // chose, with the completer biased to it too. An empty map they have not
                 // driven yet follows the answer when it arrives; a placed pin or a moved
                 // camera is theirs and is left alone (review, PR #19).
-                guard let region = fallbackRegion, pin == nil, cameraSettles <= 1 else { return }
+                guard let region = fallbackRegion, pin == nil, !senderDroveTheMap else { return }
                 camera = .region(region)
                 onVisibleRegionChange(region)
             }
