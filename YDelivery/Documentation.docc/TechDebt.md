@@ -58,6 +58,49 @@ contributor should have to untangle — and the house precedent is XcodeGen
   defaults). The pbxproj and the generated scheme left version control; `xcodegen generate`
   recreates them after cloning or editing the spec.
 
+## YD-5 — An unresolved acceptance does not survive a restart — **open**
+
+`acceptClaim` can time out or fail *after* the provider took it: the flow renders
+`Ordering.unresolved` with a read-only «Check again» (`reconcileUnresolved(watch:)`), but
+that state lives in the draft model only. Force-quit mid-reconcile and the app forgets a
+claim that may be spending money; the vendor remembers.
+
+- **Cost:** the one state where the app can lie by omission about money.
+- **Discharge:** persist the pending claim id and reconcile on launch — lands naturally
+  with Phase 3's journal (match by the `claimID` every order already carries) and the
+  store-stack decision (<doc:Roadmap> → the research). Until then the window is one
+  foregrounded flow wide.
+
+## YD-6 — Item rows do not show their journey — **open**
+
+`repairItemJourneys()` keeps per-item stops valid across delete, reorder, `setRole` and
+`setItem` — but the row renders name and summary only, so a repaired (released) stop
+reference changes silently.
+
+- **Cost:** on multi-stop routes a sender can believe an item still boards where it no
+  longer does; the truth is one editor-open away, which is one too far.
+- **Discharge:** the journey line on the item row (board `3d`'s «Маршрут вещи»
+  vocabulary), shown whenever the route has middles.
+
+## YD-7 — Post-draft statuses read as unknown — **open**
+
+`PlacedClaim.Progress` collapses exactly the statuses the ordering flow decides on;
+`pickuped`, `delivered`, `cancelled` and the rest of the zoo land in `.other(raw)` —
+honest, but dumb copy if ever surfaced.
+
+- **Cost:** any surface polling past acceptance (an unresolved reconcile that finds a
+  far-along claim) shows a raw wire word.
+- **Discharge:** the full wire→`OrderStatus` vocabulary that Phase 3's journal needs
+  anyway; `.other` then survives only for statuses Yandex invents later.
+
+## YD-8 — DMS coordinate strings are a documented parse gap — **open**
+
+<doc:LinkGrammars> lists `55 45 20.9N …` as a raw-string row; `MapLink` parses decimal
+pairs and hemisphere suffixes only, and the tests record the gap.
+
+- **Cost:** a pasted DMS pair is not offered at all — rare on phones, common on paper.
+- **Discharge:** a DMS arm in `MapLink`'s raw parser, tests citing the grammar table.
+
 ## See Also
 
 - <doc:Design>

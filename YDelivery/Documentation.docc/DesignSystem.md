@@ -110,6 +110,16 @@ Keyboard and autofill per field type: `textContentType` on every contact field, 
 `.phonePad`; `.numberPad` for flat/floor; `.decimalPad` for weight/cost. A sender is always
 copying from somewhere.
 
+## The reflow ladder (board `3f`)
+
+At accessibility-extra-large the draft reflows down **a ranked ladder, not breakpoints** —
+in order: (1) label and value stack; (2) a leading glyph keeps its size but the row grows;
+(3) the tariff strip becomes a vertical list — the horizontal strip cannot survive, which
+is why the `3a` explainer is the layout to build; (4) toolbar Cancel/Done wrap to their own
+row; (5) two-line address rows run to three lines rather than truncate. **Truncating an
+address is never acceptable — a wrong address is a failed delivery.** In code the ladder is
+`ViewThatFits` candidate lists, authored most complete first (decision #31).
+
 ## Motion (board `4c`)
 
 One rule: **animation reports a state change the user did not cause, or confirms one they

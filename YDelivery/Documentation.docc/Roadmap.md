@@ -2,8 +2,8 @@
 
 Priority order. Rationale lives in <doc:Design>; the capability map with API dependencies is
 <doc:Vision>; what is wrong today is <doc:TechDebt>. Since 2026-08-30 the phasing follows
-the design handoff's build order (`DESIGN-HANDOFF.md` §7, transient at the repo root) —
-each phase ends somewhere shippable.
+the 2026-08 design session's build order (its transient handoff folded in here and into
+<doc:Design> on 2026-09-06) — each phase ends somewhere shippable.
 
 ## Done
 
@@ -19,24 +19,50 @@ and repeat — born in the App Group so a widget target could read it the day it
 (its *stack* still awaits the Phase-2 research below); `textContentType` on the one field
 missing it; SFSafeSymbols across the app (YD-3). Nothing looks new, by design.
 
-## Now — design Phase 2: the draft screen (boards `1b`, `2a`, `2c`, `3a`, `3d`)
+**Design Phase 2 — the draft screen (PRs #17–#22, 2026-09-06):** the whole ordering loop,
+in six stacked slices. The fixed card (map above, `2c` badges, collapsed contacts, swap,
+reorder, a real return-point flow); the two-stage picker (saved chips → done with the
+contact aboard, recents that show the person, confirm-pin with typed address parts, the
+<doc:LinkGrammars> paste affordance behind the system `PasteButton`, considerate
+When-In-Use location with the Settings start-city fallback); the estimate bar
+(information, never the CTA, failure at held height); the tariff strip with its four
+honest states and the vertical `3a` explainer, priced by `offers/calculate` through the
+controller boundary; parcel and options with every §4 interdependency enforced and
+renormalized in the UI; and the review sheet — bounds stated as sentences when ordering
+is blocked, one owned create → watch → accept run behind a per-draft idempotency token,
+the placed order recorded to the store and acknowledged with the searching-green check.
+The wire's silent traps are pinned by tests: lon,lat; centimetres to metres; POSIX money;
+the phone extension in its own field; person names as stored components, because
+Foundation's parser refuses «Иван Петров» (<doc:Design>). Three review rounds hardened
+pricing staleness into vocabulary — `chosenTariff`, `effective()`, `pricedRequest` — and
+gave acceptance an `unresolved` state with a read-only way back. 157 tests in 15 suites.
+*The phase's done-when held:* a real order with no address typed twice, every bounded
+field stating its bound.
 
-- Fixed route card: map above, rows with `pointStart`/`pointEnd` badges per
-  <doc:DesignSystem>, collapsed contact rows, swap, add point.
-- Picker grows saved chips, recents-with-contacts, choose-on-map confirm-pin with address
-  parts, and the paste affordance per <doc:LinkGrammars>.
-- Estimate bar (information, never the CTA) with its failure state — `MKDirections`
-  distance/time, replaced by provider figures when offers land.
-- Tariff strip with waiting/failed states; vertical beginner explainer auto-opening until
-  the first successful order.
-- Parcel and options with constraint-as-hint and the §4 interdependencies enforced in the
-  UI, never discovered via API errors.
-- Review sheet before ordering — the one irreversible action acknowledges itself.
-- Start from the user's position: When-In-Use with the considerate acquisition UX
-  (`NetworkObserverSample` pattern); explicit start city in Settings as fallback.
+## Now — design Phase 3: while closed (boards `5a`–`5d`, `4b`)
 
-*Done when:* a sender completes a real order without typing an address twice, and every
-bounded field states its bound.
+- **Journal sync first, package first:** `journal` and `search` operations do not exist in
+  `YandexDeliveryExpressAPI` 0.2.0 — spec + tests land there, tagged, before the app
+  feature (the demand is on the package Roadmap since 2026-09-02, beside `tariffs`). The
+  journal carries **no coordinates** (verified 2026-08-30, <doc:Vision>): status/price
+  events plus `current_point_id`, which is exactly enough for stop-granularity progress
+  on every closed-app surface. Phase 2 left the matching key ready — every recorded order
+  carries its `claimID` — and left the consumers waiting: the full status vocabulary
+  (YD-7), reconciling an `unresolved` acceptance on launch (YD-5), and history rows that
+  can finally move.
+- The `3e` history card with «Повторить»/«Наоборот» replaces the minimal list —
+  `RouteLine`'s first consumer (handoff §6's last unbuilt component) — and the `3e`
+  saved-place editor gives the bookmark's chips a management surface.
+- Custom fields: settings schema, two flags, own draft section, Spotlight indexing.
+- Live Activity (seven states, failures never auto-dismiss), started locally on order
+  creation, updated by polling — the push relay stays a Later item.
+- Two widgets (waiting · working), three App Intents, notification thread rules with
+  parcel-photo attachments, share-in extension.
+- Local notifications + `BGAppRefreshTask` from journal events.
+- When the package ships `tariffs`: swap the strip's and explainer's static bounds for
+  live per-geo `supported_requirements`.
+
+*Done when:* a sender learns their courier arrived without opening the app.
 
 ### In parallel: the persistence and sharing research
 
@@ -57,22 +83,6 @@ The research therefore weighs three honest paths: NSPCK outright; the Apple-docu
 same store for UI ergonomics — prototype before trusting); or the shared slice on raw
 CloudKit/`CKSyncEngine` beside a simpler local store. Re-check SwiftData sharing each
 WWDC — it is the standing preference the moment it exists.
-
-## Then — design Phase 3: while closed (boards `5a`–`5d`, `4b`)
-
-- **Journal sync first, package first:** `journal` and `search` operations do not exist in
-  `YandexDeliveryExpressAPI` 0.2.0 — spec + tests land there, tagged, before the app
-  feature. The journal carries **no coordinates** (verified 2026-08-30, <doc:Vision>):
-  status/price events plus `current_point_id`, which is exactly enough for stop-granularity
-  progress on every closed-app surface.
-- Custom fields: settings schema, two flags, own draft section, Spotlight indexing.
-- Live Activity (seven states, failures never auto-dismiss), started locally on order
-  creation, updated by polling — the push relay stays a Later item.
-- Two widgets (waiting · working), three App Intents, notification thread rules with
-  parcel-photo attachments, share-in extension.
-- Local notifications + `BGAppRefreshTask` from journal events.
-
-*Done when:* a sender learns their courier arrived without opening the app.
 
 ## Later — design Phase 4 and beyond
 

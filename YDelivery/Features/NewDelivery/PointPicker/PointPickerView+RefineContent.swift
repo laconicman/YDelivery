@@ -225,7 +225,7 @@ extension PointPickerView.RefineContent {
 
                     // Unavailable renders disabled with its reason, never absent —
                     // a vocabulary the sender cannot see is one they cannot learn
-                    // (DESIGN-HANDOFF §4.2; review, PR #18).
+                    // (DesignSystem → field rule 2; review, PR #18).
                     Button(action: savePlace) {
                         Image(systemSymbol: .bookmark)
                             .font(.headline)

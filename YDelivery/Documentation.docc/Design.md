@@ -125,9 +125,10 @@ about each constraint:
 
 ## The destination & ordering design (2026-08)
 
-The design session's full record is `DESIGN-HANDOFF.md` (transient, repo root — folds in
-here as it is implemented); its four permanent specifications live in <doc:DesignSystem>.
-Three decisions shape everything else, recorded here so they survive the handoff's deletion:
+The design session's transient handoff folded in here and into <doc:Roadmap> and was
+deleted with Phase 2's round-up (2026-09-06), along with the boards for surfaces that
+shipped; the boards for Phase-3+ surfaces stay in `design/`. Its four permanent
+specifications live in <doc:DesignSystem>. Three decisions shape everything else:
 
 **The route card is fixed; the map sits above it.** Delivery classes must be visible before
 pricing — courier vs van changes the route, not just the price — and filled point rows run
@@ -149,6 +150,25 @@ Two framings that settle later arguments: **the unit of work is the order, not t
 (the sender's own order number outranks the vendor's claim id on every surface), and **the
 app is mostly used while it is closed** (ordering takes ninety seconds; the forty waiting
 minutes happen on the Lock Screen).
+
+The session's two open questions that Phase 2 touched were settled by the author
+(2026-08-30): **the return point is a real v1 flow** — a per-row role, a full wire
+`_type: return`, not a badge reserved for later — and **currency is a picker** over the
+wire's three (₽ \$ €), RUB default, never a text field.
+
+## A person's name is components, joined by the formatter
+
+`Contact` stores `givenName` and `familyName`; the one full-name string the store and the
+wire speak is assembled by `PersonNameComponents`' formatter, and the substrate keeps the
+components beside it so nothing ever needs parsing back. The deciding fact: Foundation's
+name parser — both `PersonNameComponentsFormatter.personNameComponents(from:)` and the
+parse-strategy initializer — returns nothing for «Иван Петров» (verified on-host,
+2026-09-06, pinned by a test). In this app's first market, a stored single string is
+unsplittable.
+
+**Rejected:** one `name` string parsed back into fields when needed — dead on arrival for
+Cyrillic. Also rejected: hand-splitting on the first space — wrong for mononyms,
+patronymics, and every locale that orders names family-first.
 
 ## English development language; Russian is the first localization
 
