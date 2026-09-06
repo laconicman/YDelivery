@@ -22,8 +22,11 @@ extension NewDeliveryView {
         init(options: DeliveryOptions, selectedTariff: TariffClass?, save: @escaping (DeliveryOptions) -> Void) {
             self.selectedTariff = selectedTariff
             self.save = save
-            _options = State(initialValue: options)
-            _isScheduled = State(initialValue: options.due != nil)
+            // A parked draft can outlive its own pickup time; opening the editor on a
+            // lapsed schedule would hand `DatePicker` a selection outside its own range.
+            let settled = options.lapsedScheduleCleared(for: selectedTariff)
+            _options = State(initialValue: settled)
+            _isScheduled = State(initialValue: settled.due != nil)
             _dueWindow = State(initialValue: DeliveryOptions.dueWindow(for: selectedTariff))
         }
 
@@ -71,7 +74,7 @@ extension NewDeliveryView {
                             )
                         }
                     } footer: {
-                        Text("From an hour ahead up to thirty days.")
+                        Text(dueBoundWords)
                     }
 
                     Section("Note for the courier") {
@@ -96,6 +99,15 @@ extension NewDeliveryView {
                     options.setScheduled(isScheduled, within: dueWindow)
                 }
             }
+        }
+
+        /// The bound this picker actually offers, stated rather than hinted — and it
+        /// depends on the class, so it cannot be a fixed sentence (review, PR #21).
+        private var dueBoundWords: LocalizedStringKey {
+            let hours = Int(dueWindow.upperBound.timeIntervalSince(dueWindow.lowerBound) / 3600)
+            return hours >= 24
+                ? "From an hour ahead, up to \(hours / 24) days out."
+                : "From an hour ahead, up to \(hours + 1) hours out."
         }
 
         private var dueBinding: Binding<Date> {

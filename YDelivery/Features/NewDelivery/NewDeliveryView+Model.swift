@@ -181,24 +181,34 @@ extension NewDeliveryView {
                 .map { points[$0] }
             guard remaining.contains(where: { $0.role == .dropoff }) else { return }
             points = remaining
-            releaseItemStops()
+            repairItemJourneys()
         }
 
-        /// An item names the stop it boards and the stop it leaves at. Deleting that stop
-        /// leaves the name behind, pointing at nothing — and a reference to nothing is
-        /// indistinguishable, downstream, from "no preference", so the item would quietly
-        /// travel between the route's ends instead (review, PR #21).
+        /// An item names the stop it boards and the stop it leaves at. Two edits can make
+        /// that pair untrue: deleting a named stop leaves the name pointing at nothing,
+        /// and reordering can put the handover *before* the pickup. Both are repaired
+        /// here, because both mean the same thing downstream — a journey the sender did
+        /// not describe (review, PR #21).
         ///
-        /// Forgetting the reference is the honest repair: `nil` genuinely means the ends,
-        /// which is the common case and what the item editor offers by default. Keeping a
-        /// dangling id and guessing would be the silent version of the same thing.
-        private func releaseItemStops() {
-            let live = Set(points.map(\.id))
+        /// Forgetting is the honest repair: `nil` genuinely means the route's ends, which
+        /// is the common case and what the item editor offers by default. Keeping a
+        /// dangling or reversed id and resolving it later would be the silent version of
+        /// the same thing.
+        private func repairItemJourneys() {
+            let order = Dictionary(uniqueKeysWithValues: points.enumerated().map { ($1.id, $0) })
             for index in items.indices {
-                if let id = items[index].pickupPointID, !live.contains(id) {
+                if let id = items[index].pickupPointID, order[id] == nil {
                     items[index].pickupPointID = nil
                 }
-                if let id = items[index].dropoffPointID, !live.contains(id) {
+                if let id = items[index].dropoffPointID, order[id] == nil {
+                    items[index].dropoffPointID = nil
+                }
+                // A box cannot be handed over before it is collected, nor at the door it
+                // was collected from. The handover is the half that gives way, since the
+                // pickup is where the parcel physically is.
+                if let pickup = items[index].pickupPointID.flatMap({ order[$0] }),
+                   let dropoff = items[index].dropoffPointID.flatMap({ order[$0] }),
+                   dropoff <= pickup {
                     items[index].dropoffPointID = nil
                 }
             }
@@ -212,6 +222,7 @@ extension NewDeliveryView {
             guard source.allSatisfy({ $0 >= lowerBound && $0 < upperBound }) else { return }
             let clamped = min(max(destination, lowerBound), upperBound)
             points.move(fromOffsets: source, toOffset: clamped)
+            repairItemJourneys()
         }
 
         func setPlace(_ place: PickedPlace, for id: Point.ID) {
@@ -274,8 +285,11 @@ extension NewDeliveryView {
             items.first { $0.id == id }
         }
 
-        /// A blank card saves as nothing — the «Add an item» invitation returns.
+        /// A blank card saves as nothing — the «Add an item» invitation returns. The
+        /// journey is repaired on the way in as well: the editor's pickers now decline
+        /// an impossible pair, and the model does not depend on them to.
         func setItem(_ item: ParcelItem) {
+            defer { repairItemJourneys() }
             guard let index = items.firstIndex(where: { $0.id == item.id }) else {
                 if !item.isBlank { items.append(item) }
                 return
@@ -317,7 +331,7 @@ extension NewDeliveryView {
             // The note the courier reads is carried to claim creation, never to pricing —
             // the offers request has nowhere to put it. Leaving it in the identity made
             // every keystroke in that field re-fetch identical offers (review, PR #21).
-            var priced = options
+            var priced = options.lapsedScheduleCleared(for: selectedOffer?.tariff)
             priced.comment = ""
             return OfferRequest(waypoints: waypoints, items: items, options: priced)
         }
@@ -334,13 +348,24 @@ extension NewDeliveryView {
                 selectedOfferID = nil
                 return
             }
+            // Captured before the state leaves `.ready`: `selectedOffer` reads through
+            // `offers`, so asking after `.loading` would always answer nil.
+            let chosenTariff = selectedOffer?.tariff
             offers = .loading
             do {
                 let loaded = try await fetch(request)
                 guard !Task.isCancelled else { return }
+                // Payloads are short-lived, so matching the selection by id alone moved
+                // the sender to the first class on every recalculation — and the `didSet`
+                // then renormalised away the options bound to the class they had chosen
+                // (review, PR #21). The *class* is what they picked; the payload is only
+                // what gets spent.
                 offers = .ready(loaded)
                 if !loaded.contains(where: { $0.id == selectedOfferID }) {
-                    selectedOfferID = loaded.first?.id
+                    let sameClass = chosenTariff.flatMap { tariff in
+                        loaded.first { $0.tariff == tariff }
+                    }
+                    selectedOfferID = (sameClass ?? loaded.first)?.id
                 }
             } catch is CancellationError {
             } catch is OffersUnavailable {

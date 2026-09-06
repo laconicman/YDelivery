@@ -82,3 +82,16 @@ nonisolated extension TariffClass {
         return true
     }
 }
+
+nonisolated extension TariffClass {
+    /// What this class has to say about a box: that it fits and up to what, or that it
+    /// does not and what to do. Formatting on the formatted type rather than in a view
+    /// body (R5) — the editor declares structure and renders this (review, PR #21).
+    func fitWords(for item: ParcelItem) -> String? {
+        guard let sides = maxSidesCm else { return nil }
+        let bounds = Dimensions.centimeters(sides)
+        return fits(item)
+            ? String(localized: "Fits \(words): up to \(bounds).")
+            : String(localized: "Doesn't fit \(words) — its bound is \(bounds). Pick a larger class, or it may be refused at the door.")
+    }
+}

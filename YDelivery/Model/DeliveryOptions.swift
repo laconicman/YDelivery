@@ -44,6 +44,25 @@ nonisolated struct DeliveryOptions: Hashable, Sendable {
         return now.addingTimeInterval(3600)...now.addingTimeInterval(ceiling)
     }
 
+    /// Whether a scheduled time is still one. A draft outlives its compose sheet by
+    /// design, so a parked one can outlive its own pickup time — and a `due` in the past
+    /// is refused by the provider, which made every quote fail until the sender happened
+    /// to reopen the options and reset it (review, PR #21).
+    func scheduleHasLapsed(for tariff: TariffClass?, now: Date = .now) -> Bool {
+        guard let due else { return false }
+        return !Self.dueWindow(for: tariff, now: now).contains(due)
+    }
+
+    /// These options as pricing and the editor should read them: a lapsed schedule is no
+    /// schedule, which is what it has become. The «When» row says so too, so the change
+    /// is visible rather than a quiet correction on the wire.
+    func lapsedScheduleCleared(for tariff: TariffClass?, now: Date = .now) -> DeliveryOptions {
+        guard scheduleHasLapsed(for: tariff, now: now) else { return self }
+        var cleared = self
+        cleared.due = nil
+        return cleared
+    }
+
     /// What the «Scheduled pickup» switch *means*: on, and this run has a time; off, and
     /// it goes as soon as possible. The switch is a view control but its meaning is a
     /// model decision (R6) — and putting it here is what makes it testable. Turning it on

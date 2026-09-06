@@ -85,8 +85,18 @@ extension NewDeliveryView {
 
                     if stops.count > 2 {
                         Section("The item's own route") {
-                            stopPicker("Pick up at", selection: $item.pickupPointID, fallback: stops.first)
-                            stopPicker("Hand over at", selection: $item.dropoffPointID, fallback: stops.last)
+                            stopPicker(
+                                "Pick up at",
+                                selection: $item.pickupPointID,
+                                fallback: stops.first,
+                                choices: stopsBeforeHandover
+                            )
+                            stopPicker(
+                                "Hand over at",
+                                selection: $item.dropoffPointID,
+                                fallback: stops.last,
+                                choices: stopsAfterPickup
+                            )
                         }
                     }
                 }
@@ -113,13 +123,8 @@ extension NewDeliveryView {
         /// that it does not (DesignSystem → field rule 2).
         @ViewBuilder
         private var fitFooter: some View {
-            if let tariff = selectedTariff, let sides = tariff.maxSidesCm {
-                let bounds = Dimensions.centimeters(sides)
-                if tariff.fits(item) {
-                    Text("Fits \(tariff.words): up to \(bounds).")
-                } else {
-                    Text("Doesn't fit \(tariff.words) — its bound is \(bounds). Pick a larger class, or it may be refused at the door.")
-                }
+            if let words = selectedTariff?.fitWords(for: item) {
+                Text(words)
             }
         }
 
@@ -130,13 +135,33 @@ extension NewDeliveryView {
             )
         }
 
+        /// Each end offers only the stops the other end leaves possible: a box cannot be
+        /// handed over before it is collected, nor at the door it was collected from.
+        /// Offering the whole list let a sender describe a journey the provider refuses
+        /// (review, PR #21) — and an unavailable choice should not be reachable to begin
+        /// with, which is the picker's version of "constraints replace hints".
+        private var stopsAfterPickup: [Stop] {
+            guard let pickup = item.pickupPointID,
+                  let index = stops.firstIndex(where: { $0.id == pickup })
+            else { return stops }
+            return Array(stops.dropFirst(index + 1))
+        }
+
+        private var stopsBeforeHandover: [Stop] {
+            guard let dropoff = item.dropoffPointID,
+                  let index = stops.firstIndex(where: { $0.id == dropoff })
+            else { return stops }
+            return Array(stops.prefix(index))
+        }
+
         private func stopPicker(
             _ title: LocalizedStringKey,
             selection: Binding<UUID?>,
-            fallback: Stop?
+            fallback: Stop?,
+            choices: [Stop]
         ) -> some View {
             Picker(title, selection: selection) {
-                ForEach(stops) { stop in
+                ForEach(choices) { stop in
                     Text(stop.label).tag(UUID?.some(stop.id))
                 }
             }

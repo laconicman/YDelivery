@@ -209,6 +209,65 @@ struct ParcelOptionsTests {
         #expect(model.items.isEmpty, "emptying the card is removing the item")
     }
 
+    @Test("Repricing keeps the class the sender chose, not the first one offered")
+    func repricingKeepsTheChosenClass() async {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "А"), for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Б"), for: model.points[1].id)
+
+        func offer(_ payload: String, _ tariff: TariffClass) -> Offer {
+            Offer(tariff: tariff, price: 100, currency: "RUB",
+                  pickupInterval: nil, deliveryInterval: nil, payload: payload)
+        }
+
+        await model.loadOffers { _ in [offer("a1", .courier), offer("b1", .cargo)] }
+        model.selectedOfferID = "b1"
+        #expect(model.selectedOffer?.tariff == .cargo)
+
+        // Payloads rotate on every recalculation; the class is what was chosen.
+        await model.loadOffers { _ in [offer("a2", .courier), offer("b2", .cargo)] }
+        #expect(model.selectedOffer?.tariff == .cargo,
+                "matching by payload alone moved the sender to the first class silently")
+        #expect(model.selectedOfferID == "b2", "and the id is the payload that gets spent")
+    }
+
+    @Test("A schedule the window has passed is no schedule")
+    func lapsedScheduleReadsAsSoonAsPossible() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        var options = DeliveryOptions()
+        options.due = now.addingTimeInterval(-3600) // a parked draft outlived its pickup
+
+        #expect(options.scheduleHasLapsed(for: .express, now: now))
+        #expect(options.lapsedScheduleCleared(for: .express, now: now).due == nil,
+                "sending a past date failed every quote until someone reopened the options")
+
+        var live = DeliveryOptions()
+        live.due = now.addingTimeInterval(2 * 3600)
+        #expect(!live.scheduleHasLapsed(for: .express, now: now))
+        #expect(live.lapsedScheduleCleared(for: .express, now: now).due == live.due)
+    }
+
+    @Test("An item cannot be handed over before, or where, it was collected")
+    func itemJourneysStayPossible() {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 1, longitude: 1, address: "А"), for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 2, longitude: 2, address: "Б"), for: model.points[1].id)
+        let middle = model.addStop()
+        model.setPlace(PickedPlace(latitude: 3, longitude: 3, address: "Между"), for: middle)
+
+        var item = ParcelItem()
+        item.name = "Коробка"
+        item.pickupPointID = model.points[1].id  // visit order 2
+        item.dropoffPointID = middle             // visit order 3 — a possible journey
+        model.setItem(item)
+        #expect(model.items[0].dropoffPointID == middle, "valid on the way in")
+
+        // Reordering drags the handover in front of the pickup.
+        model.movePoints(from: IndexSet(integer: 2), to: 1)
+        #expect(model.items[0].dropoffPointID == nil,
+                "a box handed over before it is collected is a journey the provider refuses")
+    }
+
     @Test("Fit judges only what is stated, and lets the box rotate")
     func fitChecksAreHonest() {
         var box = ParcelItem()

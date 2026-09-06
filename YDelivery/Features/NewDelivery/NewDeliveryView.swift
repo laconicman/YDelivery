@@ -65,7 +65,9 @@ struct NewDeliveryView: View {
                 selectedOfferID: draft.selectedOfferID,
                 itemRows: contentItemRows,
                 optionsSummary: draft.options.summary,
-                whenSummary: draft.options.whenSummary,
+                whenSummary: draft.options
+                    .lapsedScheduleCleared(for: draft.selectedOffer?.tariff)
+                    .whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
