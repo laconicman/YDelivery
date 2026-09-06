@@ -237,14 +237,14 @@ struct ParcelOptionsTests {
         var options = DeliveryOptions()
         options.due = now.addingTimeInterval(-3600) // a parked draft outlived its pickup
 
-        #expect(options.scheduleHasLapsed(for: .express, now: now))
-        #expect(options.lapsedScheduleCleared(for: .express, now: now).due == nil,
+        #expect(options.scheduleHasLapsed(now: now))
+        #expect(options.effective(now: now).due == nil,
                 "sending a past date failed every quote until someone reopened the options")
 
         var live = DeliveryOptions()
         live.due = now.addingTimeInterval(2 * 3600)
-        #expect(!live.scheduleHasLapsed(for: .express, now: now))
-        #expect(live.lapsedScheduleCleared(for: .express, now: now).due == live.due)
+        #expect(!live.scheduleHasLapsed(now: now))
+        #expect(live.effective(now: now).due == live.due)
     }
 
     @Test("An item cannot be handed over before, or where, it was collected")
@@ -266,6 +266,63 @@ struct ParcelOptionsTests {
         model.movePoints(from: IndexSet(integer: 2), to: 1)
         #expect(model.items[0].dropoffPointID == nil,
                 "a box handed over before it is collected is a journey the provider refuses")
+    }
+
+    @Test("A cargo date days out survives the pricing task's own loading state")
+    func cargoScheduleSurvivesRepricing() async {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "А"), for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Б"), for: model.points[1].id)
+        let due = Date.now.addingTimeInterval(3 * 24 * 3600) // legal for a van, not a courier
+        model.options.due = due
+
+        // The identity pricing answers to must not change when pricing begins.
+        let before = model.pricingInputs
+        await model.loadOffers { request in
+            #expect(request.options.due == due,
+                    "deriving the window from selectedOffer cleared this the moment offers left .ready")
+            return [Offer(tariff: .cargo, price: 1, currency: "RUB",
+                          pickupInterval: nil, deliveryInterval: nil, payload: "c1")]
+        }
+        #expect(model.pricingInputs == before, "a changed identity would restart the task in a loop")
+    }
+
+    @Test("A class judges the whole parcel, not one row at a time")
+    func parcelWeightIsJudgedTogether() {
+        func box(_ kg: Double, quantity: Int = 1) -> ParcelItem {
+            var item = ParcelItem()
+            item.name = "Коробка"
+            item.weightKg = kg
+            item.quantity = quantity
+            return item
+        }
+
+        // Each row passes a courier's 10 kg on its own; together they are 15.
+        let rows = [box(5), box(5), box(5)]
+        #expect(rows.allSatisfy { TariffClass.courier.fits($0) })
+        #expect(!TariffClass.courier.fitsParcel(rows), "ten 5 kg boxes are not a courier job")
+
+        // Quantity counts on one row too.
+        #expect(!TariffClass.courier.fits(box(5, quantity: 3)))
+        #expect(TariffClass.courier.fits(box(5, quantity: 2)))
+    }
+
+    @Test("Too heavy together is said where no single row is at fault")
+    func combinedWeightIsExplained() {
+        let model = NewDeliveryView.Model()
+        for _ in 0..<3 {
+            var item = ParcelItem()
+            item.name = "Коробка"
+            item.weightKg = 5
+            model.setItem(item)
+        }
+
+        #expect(model.itemsThatDontFit(.courier).isEmpty, "no box is the problem")
+        #expect(model.parcelIsTooHeavy(for: .courier))
+        let card = NewDeliveryView.TariffExplainer.Card(
+            tariff: .courier, offer: nil, misfits: [], parcelIsTooHeavy: true
+        )
+        #expect(card.misfit?.isEmpty == false, "the card says so rather than showing nothing")
     }
 
     @Test("Fit judges only what is stated, and lets the box rotate")

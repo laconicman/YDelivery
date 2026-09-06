@@ -69,17 +69,35 @@ nonisolated extension TariffClass {
     /// numbers pass — absence is "not stated", and the provider's courier judges at the
     /// door; the UI hint warns only about what is *known* not to fit. The box may be
     /// rotated, so sorted sides compare against sorted bounds.
+    /// Whether this class can carry the whole parcel: every box through the door, and
+    /// the load under the weight limit *together*. Judging rows one at a time called ten
+    /// five-kilo boxes a courier job (review, PR #21).
+    func fitsParcel(_ items: [ParcelItem]) -> Bool {
+        weightWithin(items) && items.allSatisfy(fitsOneBox)
+    }
+
+    /// One row's own verdict, for the warning that row carries.
     func fits(_ item: ParcelItem) -> Bool {
-        if let maxWeightKg, let weight = item.weightKg, weight > maxWeightKg {
+        fitsOneBox(item) && weightWithin([item])
+    }
+
+    /// Sides only — genuinely per-row, since rotating one box says nothing about the next.
+    func fitsOneBox(_ item: ParcelItem) -> Bool {
+        guard let maxSideCm = maxSidesCm, let size = item.size else { return true }
+        let sides = [size.lengthCm, size.widthCm, size.heightCm].sorted(by: >)
+        for (side, bound) in zip(sides, maxSideCm) where side > bound {
             return false
         }
-        if let maxSideCm = maxSidesCm, let size = item.size {
-            let sides = [size.lengthCm, size.widthCm, size.heightCm].sorted(by: >)
-            for (side, bound) in zip(sides, maxSideCm) where side > bound {
-                return false
-            }
-        }
         return true
+    }
+
+    /// `quantity` multiplies the row's weight. The wire documents `weight` as the weight
+    /// of the item beside a separate `quantity`, so per-unit is the reading — and it is a
+    /// reading rather than a measurement; package TD-21 covers what is unverified here.
+    private func weightWithin(_ items: [ParcelItem]) -> Bool {
+        guard let maxWeightKg else { return true }
+        let total = items.reduce(0.0) { $0 + ($1.weightKg ?? 0) * Double($1.quantity) }
+        return total <= maxWeightKg
     }
 }
 

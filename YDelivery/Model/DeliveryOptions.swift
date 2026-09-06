@@ -44,20 +44,28 @@ nonisolated struct DeliveryOptions: Hashable, Sendable {
         return now.addingTimeInterval(3600)...now.addingTimeInterval(ceiling)
     }
 
-    /// Whether a scheduled time is still one. A draft outlives its compose sheet by
+    /// Whether a scheduled time has gone by. A draft outlives its compose sheet by
     /// design, so a parked one can outlive its own pickup time — and a `due` in the past
-    /// is refused by the provider, which made every quote fail until the sender happened
-    /// to reopen the options and reset it (review, PR #21).
-    func scheduleHasLapsed(for tariff: TariffClass?, now: Date = .now) -> Bool {
+    /// is refused, which made every quote fail until the sender happened to reopen the
+    /// options and reset it (review, PR #21).
+    ///
+    /// Deliberately **not** class-dependent, which the first version of this was. The
+    /// class's ceiling says what a sender may *choose* in the picker; it says nothing
+    /// about whether a time already chosen is still in the future. Asking for the class
+    /// here also meant asking `selectedOffer`, which is readable only while `offers` is
+    /// `.ready` — so the moment pricing began, a cargo date days out looked lapsed, was
+    /// cleared from the request, changed the task's identity and restarted it (review,
+    /// PR #21). A validity test must not depend on state the work it feeds invalidates.
+    func scheduleHasLapsed(now: Date = .now) -> Bool {
         guard let due else { return false }
-        return !Self.dueWindow(for: tariff, now: now).contains(due)
+        return due <= now
     }
 
-    /// These options as pricing and the editor should read them: a lapsed schedule is no
-    /// schedule, which is what it has become. The «When» row says so too, so the change
-    /// is visible rather than a quiet correction on the wire.
-    func lapsedScheduleCleared(for tariff: TariffClass?, now: Date = .now) -> DeliveryOptions {
-        guard scheduleHasLapsed(for: tariff, now: now) else { return self }
+    /// These options as everything downstream should read them: a lapsed schedule is no
+    /// schedule, which is what it has become. One definition, so the quote, the order and
+    /// the «When» row cannot describe different runs (review, PR #22).
+    func effective(now: Date = .now) -> DeliveryOptions {
+        guard scheduleHasLapsed(now: now) else { return self }
         var cleared = self
         cleared.due = nil
         return cleared

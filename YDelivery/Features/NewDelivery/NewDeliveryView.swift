@@ -65,9 +65,7 @@ struct NewDeliveryView: View {
                 selectedOfferID: draft.selectedOfferID,
                 itemRows: contentItemRows,
                 optionsSummary: draft.options.summary,
-                whenSummary: draft.options
-                    .lapsedScheduleCleared(for: draft.selectedOffer?.tariff)
-                    .whenSummary,
+                whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
@@ -239,7 +237,8 @@ private extension NewDeliveryView {
             TariffExplainer.Card(
                 tariff: tariff,
                 offer: offers.first { $0.tariff == tariff },
-                misfits: draft.itemsThatDontFit(tariff)
+                misfits: draft.itemsThatDontFit(tariff),
+                parcelIsTooHeavy: draft.parcelIsTooHeavy(for: tariff)
             )
         }
     }

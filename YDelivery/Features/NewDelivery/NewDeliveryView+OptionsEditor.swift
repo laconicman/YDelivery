@@ -24,7 +24,14 @@ extension NewDeliveryView {
             self.save = save
             // A parked draft can outlive its own pickup time; opening the editor on a
             // lapsed schedule would hand `DatePicker` a selection outside its own range.
-            let settled = options.lapsedScheduleCleared(for: selectedTariff)
+            // Lapsed first — then clamped into the class's window, so `DatePicker` never
+            // opens on a selection outside its own range (a cargo date is legal for cargo
+            // and out of range for a courier).
+            var settled = options.effective()
+            if let due = settled.due {
+                let window = DeliveryOptions.dueWindow(for: selectedTariff)
+                settled.due = min(max(due, window.lowerBound), window.upperBound)
+            }
             _options = State(initialValue: settled)
             _isScheduled = State(initialValue: settled.due != nil)
             _dueWindow = State(initialValue: DeliveryOptions.dueWindow(for: selectedTariff))

@@ -95,14 +95,28 @@ extension NewDeliveryView.TariffExplainer {
 
 extension NewDeliveryView.TariffExplainer.Card {
     /// A class and, when the strip already has one, its price.
-    init(tariff: TariffClass, offer: Offer?, misfits: [ParcelItem] = []) {
+    init(
+        tariff: TariffClass,
+        offer: Offer?,
+        misfits: [ParcelItem] = [],
+        parcelIsTooHeavy: Bool = false
+    ) {
+        let misfit: String? = if !misfits.isEmpty {
+            Self.misfitWords(misfits)
+        } else if parcelIsTooHeavy {
+            // Every box passes on its own; together they are over the limit. Naming a
+            // box here would blame the wrong thing.
+            String(localized: "Everything fits, but together it's too heavy for this class")
+        } else {
+            nil
+        }
         self.init(
             name: tariff.words,
             emoji: tariff.emoji,
             explanation: tariff.explanation,
             limits: tariff.limits,
             priceText: offer?.priceText,
-            misfit: misfits.isEmpty ? nil : Self.misfitWords(misfits)
+            misfit: misfit
         )
     }
 

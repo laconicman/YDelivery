@@ -111,10 +111,19 @@ extension NewDeliveryView {
                             save(item)
                             dismiss()
                         }
+                        // A stated size of nothing is not a size: three positive sides,
+                        // or the toggle is off (review, PR #21).
+                        .disabled(hasSize && !sizeIsStated)
                     }
                 }
                 .onChange(of: hasSize) {
-                    if !hasSize { item.size = nil }
+                    // The toggle must *write* the state it claims in both directions. On
+                    // it showed a fabricated zero size through the binding and stored
+                    // nothing, so Save omitted the dimensions unless a field happened to
+                    // be edited (review, PR #21).
+                    item.size = hasSize
+                        ? (item.size ?? ParcelItem.Size(lengthCm: 0, widthCm: 0, heightCm: 0))
+                        : nil
                 }
             }
         }
@@ -126,6 +135,11 @@ extension NewDeliveryView {
             if let words = selectedTariff?.fitWords(for: item) {
                 Text(words)
             }
+        }
+
+        private var sizeIsStated: Bool {
+            guard let size = item.size else { return false }
+            return size.lengthCm > 0 && size.widthCm > 0 && size.heightCm > 0
         }
 
         private var sizeBinding: Binding<ParcelItem.Size> {
@@ -231,5 +245,18 @@ extension NewDeliveryView.ItemEditor {
             selectedTariff: .courier,
             save: { _ in }
         )
+    }
+}
+
+#Preview("Size fields — empty and stated") {
+    @Previewable @State var empty = ParcelItem.Size(lengthCm: 0, widthCm: 0, heightCm: 0)
+    @Previewable @State var stated = ParcelItem.Size(lengthCm: 40, widthCm: 30, heightCm: 25)
+    Form {
+        Section("Nothing stated yet") {
+            NewDeliveryView.ItemEditor.SizeFields(size: $empty)
+        }
+        Section("A box the courier can take") {
+            NewDeliveryView.ItemEditor.SizeFields(size: $stated)
+        }
     }
 }

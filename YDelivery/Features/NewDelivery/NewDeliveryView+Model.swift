@@ -311,6 +311,15 @@ extension NewDeliveryView {
             items.filter { !tariff.fits($0) }
         }
 
+        /// True when every box passes on its own and the parcel is still too heavy for
+        /// the class — the case no per-row warning can show, because no row is at fault
+        /// (review, PR #21).
+        func parcelIsTooHeavy(for tariff: TariffClass) -> Bool {
+            !items.isEmpty
+                && items.allSatisfy { tariff.fits($0) }
+                && !tariff.fitsParcel(items)
+        }
+
         // MARK: Offers
 
         /// Everything pricing answers to — route, parcel, options. Also the re-price
@@ -331,7 +340,7 @@ extension NewDeliveryView {
             // The note the courier reads is carried to claim creation, never to pricing —
             // the offers request has nowhere to put it. Leaving it in the identity made
             // every keystroke in that field re-fetch identical offers (review, PR #21).
-            var priced = options.lapsedScheduleCleared(for: selectedOffer?.tariff)
+            var priced = options.effective()
             priced.comment = ""
             return OfferRequest(waypoints: waypoints, items: items, options: priced)
         }
@@ -396,6 +405,10 @@ extension NewDeliveryView {
             points[index].role = role
             if role == .return {
                 points.append(points.remove(at: index))
+                // Becoming the return moves this stop behind the others, which can put an
+                // item's handover before its pickup exactly as a drag would (review,
+                // PR #21). Every path that changes visit order repairs the journeys.
+                repairItemJourneys()
             }
         }
     }
