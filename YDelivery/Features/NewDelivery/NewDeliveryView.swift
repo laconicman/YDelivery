@@ -225,7 +225,11 @@ struct NewDeliveryView: View {
                         "\(item.name) — \(item.summary)"
                     },
                     optionsLine: draft.options.summary,
-                    whenLine: draft.options.whenSummary,
+                    // The same `effective()` the order is built from. The sheet is the
+                    // last thing the sender reads before an irreversible action, so a
+                    // lapsed time shown here while the order departs immediately is the
+                    // worst place for the two to disagree (review, PR #22).
+                    whenLine: draft.options.effective().whenSummary,
                     tariffName: draft.selectedOffer?.tariff.words ?? "",
                     priceText: draft.selectedOffer?.priceText,
                     blockers: draft.orderBlockers,

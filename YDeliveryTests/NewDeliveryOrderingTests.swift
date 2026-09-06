@@ -276,6 +276,12 @@ struct NewDeliveryOrderingTests {
         let request = try? #require(model.orderRequest)
         #expect(request?.options.due == nil,
                 "pricing quoted an immediate run; sending the expired time could not produce it")
+
+        // And what the sender reads before confirming says the same thing. The review
+        // sheet showing a lapsed time over an order that departs immediately is the
+        // worst place for these to disagree.
+        #expect(model.options.effective().whenSummary == DeliveryOptions().whenSummary,
+                "the sheet's «When» line is built from the options the order is built from")
     }
 
     @Test("Without a confirm, the owned task's appear-run is a no-op")
