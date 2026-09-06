@@ -426,6 +426,10 @@ extension NewDeliveryView {
             case accepting
             case placed
             case failed(String)
+            /// Acceptance began and its outcome is unknown — the provider may already
+            /// have taken the order. Never says "nothing was charged", because that
+            /// cannot be known from here (review, PR #22).
+            case unresolved(String)
         }
 
         private(set) var ordering: Ordering = .idle
@@ -511,6 +515,10 @@ extension NewDeliveryView {
             guard ordering == .queued, let request = orderRequest,
                   let offer = selectedOffer
             else { return }
+            // Set the moment acceptance is attempted. After that point a failure is not
+            // evidence that nothing happened: the provider may have accepted and lost
+            // the answer on the way back.
+            var acceptAttempted = false
             do {
                 ordering = .creating
                 var claim = try await create(request, orderRequestID)
@@ -522,12 +530,30 @@ extension NewDeliveryView {
                     try await clock.sleep(for: Self.pollInterval)
                     claim = try await watch(claim.id)
                 }
-                if claim.status == .failed {
-                    throw OrderingRefused(reason: claim.failureText)
-                }
 
-                ordering = .accepting
-                claim = try await accept(claim.id, claim.version)
+                // Creation is idempotent on `orderRequestID`, so a retry can be handed
+                // back a claim an earlier attempt already accepted. Only a claim actually
+                // waiting for approval may be accepted; accepting one twice is how a
+                // dispatched courier ends up behind a screen that says every retry failed
+                // (review, PR #22).
+                switch claim.status {
+                case .failed:
+                    throw OrderingRefused(reason: claim.failureText)
+                case .searching:
+                    break // already accepted, and the provider is finding a courier
+                case .readyToAccept:
+                    ordering = .accepting
+                    acceptAttempted = true
+                    claim = try await accept(claim.id, claim.version)
+                case .estimating:
+                    throw OrderingTimedOut()
+                case .other(let raw):
+                    // The explicit policy for a status this app does not know: do not
+                    // accept it, and do not call it placed. Say the order is in an
+                    // unknown state and name it, rather than guessing in either
+                    // direction (review, PR #22).
+                    throw OrderingUnknownState(status: raw)
+                }
 
                 placedOrder = Order(
                     created: .now,
@@ -545,14 +571,34 @@ extension NewDeliveryView {
                 ordering = .queued
             } catch {
                 guard !Task.isCancelled else { return }
-                ordering = .failed(
-                    (error as? LocalizedError)?.errorDescription
-                        ?? String(localized: "The order didn't go through. Nothing was charged — try again.")
-                )
+                let sentence = (error as? LocalizedError)?.errorDescription
+                if acceptAttempted {
+                    ordering = .unresolved(
+                        sentence ?? String(localized: "The order may or may not have gone through.")
+                    )
+                } else {
+                    ordering = .failed(
+                        sentence
+                            ?? String(localized: "The order didn't go through. Nothing was charged — try again.")
+                    )
+                }
             }
         }
 
         /// The store refused after acceptance — say so beside the placed state.
+        /// Whether the placed order has been handed to the store. Recording is a
+        /// *transition*, not a property of being placed — the ordering task re-runs when
+        /// a parked draft is reopened, sees `.placed` again, and would record a second
+        /// time. The store is idempotent by id as well, but this is what keeps a
+        /// reopened draft from shuffling its own order back to the top of history
+        /// (review, PR #22).
+        private(set) var placedOrderIsRecorded = false
+
+        func notePlacedOrderRecorded() {
+            placedOrderIsRecorded = true
+            recordWarning = nil
+        }
+
         func notePlacedButUnrecorded(_ error: any Error) {
             recordWarning = (error as? LocalizedError)?.errorDescription
                 ?? String(localized: "The order is placed, but couldn't be saved to history on this device.")
@@ -573,6 +619,15 @@ extension NewDeliveryView {
             let reason: String?
             var errorDescription: String? {
                 reason ?? String(localized: "The provider couldn't price this run. Check the route and the parcel — nothing was charged.")
+            }
+        }
+
+        /// A claim in a status this app has no rule for. Deliberately says nothing about
+        /// whether money moved, because from here that is not known.
+        struct OrderingUnknownState: LocalizedError {
+            let status: String
+            var errorDescription: String? {
+                String(localized: "The order is in a state this app doesn't recognise (\(status)). Check your deliveries before ordering again.")
             }
         }
 

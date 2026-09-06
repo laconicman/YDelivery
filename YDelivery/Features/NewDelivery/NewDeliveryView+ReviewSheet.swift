@@ -161,6 +161,24 @@ extension NewDeliveryView {
                             .font(.subheadline)
                         Button("Try again", action: confirm)
                     }
+                case .unresolved(let reason):
+                    // No retry here on purpose: acceptance was attempted, so ordering
+                    // again could buy a second delivery. The honest next step is to look
+                    // at what exists before doing anything (review, PR #22).
+                    VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
+                        Label(reason, systemSymbol: .questionmarkCircle)
+                            .font(.subheadline)
+                        Text("Check Deliveries before ordering again — this one may have gone through.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button(action: done) {
+                            Text("Check deliveries")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    }
                 }
             } footer: {
                 if blockers.isEmpty, ordering == .idle || ordering == .queued {

@@ -133,10 +133,35 @@ extension ClientController {
 /// Everything a create call needs, in the draft's vocabulary.
 nonisolated struct OrderRequest: Hashable, Sendable {
     var points: [Point]
-    var items: [ParcelItem]
+    private(set) var items: [ParcelItem]
     var options: DeliveryOptions
     var offerPayload: String?
     var tariffWireValue: String?
+
+    /// Item stops are normalised against these points on the way in, exactly as
+    /// ``OfferRequest`` does it: an id naming no point here becomes `nil`. That keeps
+    /// the mapping's `nil` meaning one thing — the route's ends — rather than either
+    /// that *or* a stop that was deleted. On the create call the stakes are higher than
+    /// on pricing: this is the request that dispatches a courier (review, PR #22).
+    init(
+        points: [Point],
+        items: [ParcelItem],
+        options: DeliveryOptions,
+        offerPayload: String? = nil,
+        tariffWireValue: String? = nil
+    ) {
+        self.points = points
+        self.options = options
+        self.offerPayload = offerPayload
+        self.tariffWireValue = tariffWireValue
+        let live = Set(points.map(\.pointID))
+        self.items = items.map { item in
+            var item = item
+            if let id = item.pickupPointID, !live.contains(id) { item.pickupPointID = nil }
+            if let id = item.dropoffPointID, !live.contains(id) { item.dropoffPointID = nil }
+            return item
+        }
+    }
 
     /// One stop, complete: where, how spelled, who answers the door.
     nonisolated struct Point: Hashable, Sendable {

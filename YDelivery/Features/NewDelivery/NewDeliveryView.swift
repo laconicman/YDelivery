@@ -115,9 +115,13 @@ struct NewDeliveryView: View {
                     watch: { try await session.claimState(id: $0) },
                     accept: { try await session.acceptClaim(id: $0, version: $1) }
                 )
-                if draft.ordering == .placed, let order = draft.placedOrder {
+                // Recording happens once per placed order. This task re-runs whenever a
+                // parked draft is reopened, and `.placed` is still true then.
+                if draft.ordering == .placed, !draft.placedOrderIsRecorded,
+                   let order = draft.placedOrder {
                     do {
                         try await store.record(order)
+                        draft.notePlacedOrderRecorded()
                     } catch {
                         draft.notePlacedButUnrecorded(error)
                     }

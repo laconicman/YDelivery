@@ -73,6 +73,95 @@ struct NewDeliveryOrderingTests {
         #expect(order?.route.first?.contactGivenName == "Иван")
     }
 
+    @Test("A claim already searching is placed, not accepted a second time")
+    func alreadyAcceptedIsNotAcceptedAgain() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        var accepts = 0
+        await model.placeOrder(
+            // The idempotent create hands back the claim an earlier attempt accepted,
+            // whose answer was lost on the way home.
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 3, status: .searching, failureText: nil) },
+            watch: { _ in Issue.record("no watching is needed once it is searching"); return PlacedClaim(id: "claim-1", version: 3, status: .searching, failureText: nil) },
+            accept: { id, version in
+                accepts += 1
+                return PlacedClaim(id: id, version: version, status: .searching, failureText: nil)
+            },
+            clock: TestClock()
+        )
+
+        #expect(accepts == 0, "accepting a dispatched courier's claim again fails every retry")
+        #expect(model.ordering == .placed)
+        #expect(model.placedOrder?.claimID == "claim-1")
+    }
+
+    @Test("A failure during acceptance never claims nothing was charged")
+    func uncertainAcceptanceSaysSo() async {
+        struct LostAnswer: Error {}
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in throw LostAnswer() },
+            clock: TestClock()
+        )
+
+        guard case .unresolved = model.ordering else {
+            Issue.record("acceptance began, so the outcome is unknown: \(model.ordering)")
+            return
+        }
+    }
+
+    @Test("A failure before acceptance may still say nothing was charged")
+    func failureBeforeAcceptanceIsCertain() async {
+        struct Offline: Error {}
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in throw Offline() },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in Issue.record("never reached"); return PlacedClaim(id: "x", version: 1, status: .searching, failureText: nil) },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("nothing was attempted, so the certainty is honest: \(model.ordering)")
+            return
+        }
+    }
+
+    @Test("A status this app has no rule for is neither accepted nor called placed")
+    func unknownStatusIsUnresolved() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        var accepts = 0
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .other("cargo_on_hold"), failureText: nil) },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .other("cargo_on_hold"), failureText: nil) },
+            accept: { id, version in
+                accepts += 1
+                return PlacedClaim(id: id, version: version, status: .searching, failureText: nil)
+            },
+            clock: TestClock()
+        )
+
+        #expect(accepts == 0, "guessing in either direction is worse than saying so")
+        guard case .failed(let reason) = model.ordering else {
+            Issue.record("expected a stated failure, got \(model.ordering)")
+            return
+        }
+        #expect(reason.contains("cargo_on_hold"), "the status is named so it can be looked up")
+    }
+
     @Test("Without a confirm, the owned task's appear-run is a no-op")
     func appearRunIsNoOp() async {
         let model = readyDraft()
