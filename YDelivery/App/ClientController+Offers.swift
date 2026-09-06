@@ -19,7 +19,14 @@ extension ClientController {
                 body: .json(Self.offersRequest(for: waypoints))
             )
         )
-        return try response.ok.body.json.offers.compactMap(Offer.init)
+        let wire = try response.ok.body.json.offers
+        let offers = wire.compactMap(Offer.init)
+        // Dropping one unreadable price is right; dropping *every* one and calling the
+        // result an empty success is not. That renders a blank strip with nothing to
+        // retry, which reads as "no offers for this route" when it is actually a parsing
+        // problem (review, PR #20). An answer we could not read is a failure.
+        guard offers.isEmpty == wire.isEmpty else { throw OffersUnreadable() }
+        return offers
     }
 
     /// The request, built flat. **Coordinates are `[longitude, latitude]` on the wire** —

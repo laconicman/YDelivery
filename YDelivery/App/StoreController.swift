@@ -51,6 +51,17 @@ final class StoreController {
         return nil
     }
 
+    /// Whether the sender has ever actually placed an order. The beginner's explainer
+    /// runs "until the first successful order" (Roadmap, handoff §7) — and a draft is
+    /// precisely an order that was never placed, so counting rows would retire the
+    /// explainer for someone who has only ever started one (review, PR #20).
+    ///
+    /// A cancelled or undelivered order still counts: the sender went through the strip
+    /// and chose a class, which is the vocabulary this teaches.
+    var hasPlacedAnOrder: Bool {
+        orders.contains { $0.status != .draft }
+    }
+
     /// The recent points the picker offers: one per address, newest first — an address
     /// delivered to twice is one memory, not two rows (Design → one substrate).
     var recentPoints: [RoutePoint] {

@@ -126,6 +126,25 @@ struct StoreControllerTests {
         #expect(picked?.contactName == "Анна")
     }
 
+    @Test("A draft is not an order — the explainer runs until one is actually placed")
+    func onlyPlacedOrdersRetireTheExplainer() async throws {
+        let controller = controller
+        #expect(!controller.hasPlacedAnOrder)
+
+        try OrderStore(directory: directory).record(
+            Order(created: .now, status: .draft, route: [])
+        )
+        await controller.refresh()
+        #expect(!controller.hasPlacedAnOrder, "a started-and-abandoned draft teaches nobody anything")
+
+        try OrderStore(directory: directory).record(
+            Order(created: .now, status: .cancelled, route: [])
+        )
+        await controller.refresh()
+        #expect(controller.hasPlacedAnOrder,
+                "placed then cancelled still means they saw the strip and chose a class")
+    }
+
     @Test("Recents cap at the limit — the empty-query list stays one screen tall")
     func recentsRespectLimit() {
         let orders = (0..<20).map { index in

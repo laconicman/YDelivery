@@ -101,6 +101,14 @@ nonisolated extension Offer {
 /// invitation, not a failure. Model-layer type so the draft model never learns the
 /// controller's shape. `LocalizedError` with a filled description, like every error
 /// here that could ever surface (author's standing preference).
+/// The answer carried offers and none of them could be read — the strip shows its failed
+/// state, with a retry, rather than an empty one with nothing to press.
+nonisolated struct OffersUnreadable: LocalizedError, Hashable {
+    var errorDescription: String? {
+        String(localized: "The prices came back in a form this app could not read.")
+    }
+}
+
 nonisolated struct OffersUnavailable: LocalizedError, Hashable {
     var errorDescription: String? {
         String(localized: "Sign in with your Yandex Delivery token to see prices.")

@@ -21,6 +21,28 @@ struct NewDeliveryView: View {
     @Environment(StoreController.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    /// The two answers the auto-open needs, so it can be re-asked when either arrives.
+    /// Store emptiness is trusted only after a successful read — not knowing is not the
+    /// same as knowing there is nothing.
+    private struct Onboarding: Equatable {
+        let pricesReady: Bool
+        let historyKnown: Bool
+        let hasOrderedBefore: Bool
+
+        var isBeginnerSeeingPrices: Bool {
+            pricesReady && historyKnown && !hasOrderedBefore
+        }
+    }
+
+    private var onboarding: Onboarding {
+        let pricesReady = if case .ready = draft.offers { true } else { false }
+        return Onboarding(
+            pricesReady: pricesReady,
+            historyKnown: store.hasLoaded,
+            hasOrderedBefore: store.hasPlacedAnOrder
+        )
+    }
+
     /// What one priced run answers to: the inputs it prices, and which attempt at them.
     /// Both live tasks are keyed this way, so an edit cancels the stale run and a Retry
     /// is the same owned task run again — never a loose one racing it.
@@ -66,17 +88,15 @@ struct NewDeliveryView: View {
                 await draft.loadOffers { try await session.offers(for: $0) }
             }
             .task { await store.refresh() }
-            .onChange(of: draft.offers) {
-                // The first prices a beginner ever sees arrive with the explainer open
-                // (board 3a) — until the store holds a single completed order.
-                // `store.hasLoaded` is the point: pricing can finish before the first
-                // store read does, and an unread store is empty. Without it the explainer
-                // greets a returning sender as a beginner (review, PR #20).
-                if case .ready = draft.offers, !hasAutoOpenedExplainer,
-                   store.hasLoaded, store.orders.isEmpty {
-                    hasAutoOpenedExplainer = true
-                    showsExplainer = true
-                }
+            // The first prices a beginner ever sees arrive with the explainer open
+            // (board 3a). Both inputs matter and either can land last, so the observer
+            // watches the pair: keying on the prices alone meant a quote that beat the
+            // store's first read failed the test once and was never asked again, and a
+            // genuine beginner missed the explainer entirely (review, PR #20).
+            .onChange(of: onboarding, initial: true) { _, onboarding in
+                guard onboarding.isBeginnerSeeingPrices, !hasAutoOpenedExplainer else { return }
+                hasAutoOpenedExplainer = true
+                showsExplainer = true
             }
             .sheet(isPresented: $showsExplainer) {
                 TariffExplainer(cards: explainerCards)
