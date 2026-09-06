@@ -178,7 +178,7 @@ extension PointPickerView.RefineContent {
         let done: () -> Void
 
         var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
                 if hasPin {
                     HStack {
                         TextField("Address", text: $address, axis: .vertical)
@@ -190,7 +190,7 @@ extension PointPickerView.RefineContent {
                     }
                     PartsFields(parts: $parts)
                 } else if isResolving {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Layout.Spacing.unit) {
                         ProgressView()
                         Text("Finding the place…")
                             .font(.footnote)
@@ -213,7 +213,7 @@ extension PointPickerView.RefineContent {
                         .foregroundStyle(.red)
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: Layout.Spacing.unit) {
                     Button(action: done) {
                         Text("Done")
                             .font(.headline)
@@ -255,7 +255,7 @@ extension PointPickerView.RefineContent {
         @Binding var parts: AddressParts
 
         var body: some View {
-            HStack(spacing: 6) {
+            HStack(spacing: Layout.Spacing.chip) {
                 partField("entrance", text: $parts.entrance)
                 partField("floor", text: $parts.floor)
                     .keyboardType(.numberPad)
@@ -268,8 +268,8 @@ extension PointPickerView.RefineContent {
 
         private func partField(_ prompt: LocalizedStringKey, text: Binding<String>) -> some View {
             TextField(prompt, text: text)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, Layout.Spacing.cards)
+                .padding(.vertical, Layout.Spacing.chip)
                 .background(Color(.secondarySystemFill), in: Capsule())
         }
     }

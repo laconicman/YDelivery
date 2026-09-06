@@ -23,8 +23,10 @@ struct NewDeliveryOffersTests {
     @Test("Prices land and the first offer is selected, so the strip always has an answer")
     func offersLandWithASelection() async {
         let model = filledDraft()
-        await model.loadOffers { waypoints in
-            #expect(waypoints.map(\.address) == ["Офис", "Дом"])
+        await model.loadOffers { request in
+            #expect(request.waypoints.map(\.address) == ["Офис", "Дом"])
+            #expect(request.waypoints.map(\.pointID) == model.points.map(\.id),
+                    "items name their stops by these ids")
             return [self.offer("a"), self.offer("b", tariff: .express)]
         }
 

@@ -9,7 +9,7 @@ struct NewDeliveryModelTests {
     private let office = PickedPlace(latitude: 55.7558, longitude: 37.6173, address: "Офис")
     private let home = PickedPlace(latitude: 55.6460, longitude: 37.6681, address: "Дом")
     private let shop = PickedPlace(latitude: 55.7499, longitude: 37.5934, address: "Магазин")
-    private let ivan = Contact(name: "Иван Петров", phone: "+7 912 345-67-89")
+    private let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+7 912 345-67-89")
 
     /// A draft with its two founding rows filled — the common A→B case.
     private func filledDraft() -> NewDeliveryView.Model {
@@ -124,8 +124,8 @@ struct NewDeliveryModelTests {
         model.setContact(Contact(phoneExtension: "123"), for: id)
         #expect(model.points[0].contact == nil, "nothing dialable, nothing kept")
 
-        model.setContact(Contact(name: "Иван", phoneExtension: "123"), for: id)
-        #expect(model.points[0].contact == Contact(name: "Иван"),
+        model.setContact(Contact(givenName: "Иван", phoneExtension: "123"), for: id)
+        #expect(model.points[0].contact == Contact(givenName: "Иван"),
                 "the name survives; the undialable extension does not")
     }
 

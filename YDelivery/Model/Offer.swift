@@ -58,29 +58,45 @@ nonisolated extension TariffClass {
         }
     }
 
+    /// The class's bounds as numbers, so fit checks and display derive from one truth.
+    ///
+    /// **Static data, v1** (author, 2026-08-30): the `tariffs` operation that would make
+    /// these live per-city data is not in `YandexDeliveryExpressAPI` 0.2.0 — the need is
+    /// recorded in the package's Roadmap, and these values follow the provider's
+    /// published defaults (its `ItemSize` note; cargo = the small body) until then.
+    var maxWeightKg: Double? {
+        switch self {
+        case .courier: 10
+        case .express: 20
+        case .cargo: 300
+        case .other: nil
+        }
+    }
+
+    /// Longest-to-shortest side bounds in centimetres.
+    var maxSidesCm: [Double]? {
+        switch self {
+        case .courier: [80, 50, 50]
+        case .express: [100, 60, 50]
+        case .cargo: [170, 96, 90]
+        case .other: nil
+        }
+    }
+
     /// The class's bounds, stated as the helper text — constraints replace hints
     /// (DesignSystem → "Field taxonomy").
-    ///
-    /// **Static copy, v1** (author, 2026-08-30): the `tariffs` operation that would make
-    /// these live per-city data is not in `YandexDeliveryExpressAPI` 0.2.0 — the need is
-    /// recorded in the package's Roadmap, and these lines follow the provider's published
-    /// defaults until then.
     var limits: [String] {
-        switch self {
-        case .courier: [
-            String(localized: "Up to 10 kg"),
-            String(localized: "80 × 50 × 50 cm"),
-        ]
-        case .express: [
-            String(localized: "Up to 20 kg"),
-            String(localized: "100 × 60 × 50 cm"),
-        ]
-        case .cargo: [
-            String(localized: "Up to 300 kg · 170 × 96 × 90 cm"),
-            String(localized: "Loaders — one or two"),
-        ]
-        case .other: []
+        var lines: [String] = []
+        if let maxWeightKg {
+            lines.append(String(localized: "Up to \(maxWeightKg.formatted(.number)) kg"))
         }
+        if let maxSidesCm {
+            lines.append(Dimensions.centimeters(maxSidesCm))
+        }
+        if self == .cargo {
+            lines.append(String(localized: "Loaders — one or two"))
+        }
+        return lines
     }
 
     /// The selected card's one constraint line (board `1b`).
@@ -115,9 +131,4 @@ nonisolated struct OffersUnavailable: LocalizedError, Hashable {
     }
 }
 
-/// One stop of the route, reduced to what an offers request needs.
-nonisolated struct OfferWaypoint: Hashable, Sendable {
-    var latitude: Double
-    var longitude: Double
-    var address: String
-}
+

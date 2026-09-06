@@ -106,7 +106,7 @@ extension PointPickerView {
         // MARK: Search field
 
         private var searchField: some View {
-            HStack(spacing: 8) {
+            HStack(spacing: Layout.Spacing.unit) {
                 Image(systemSymbol: .magnifyingglass)
                     .foregroundStyle(.secondary)
                 TextField("Address or place", text: $searchText)
@@ -131,22 +131,27 @@ extension PointPickerView {
 
         private var chipsRow: some View {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: Layout.Spacing.unit) {
                     ForEach(chips) { chip in
                         Button {
                             pickChip(chip.id)
                         } label: {
                             Label(chip.name, systemSymbol: chip.symbol)
                                 .font(.subheadline)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
+                                .padding(.horizontal, Layout.Spacing.gutter)
+                                .padding(.vertical, Layout.Spacing.chip)
                                 .background(Color(.secondarySystemFill), in: Capsule())
                         }
                         .buttonStyle(.plain)
                     }
                 }
             }
-            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+            .listRowInsets(EdgeInsets(
+                top: Layout.Spacing.tight,
+                leading: Layout.Spacing.gutter,
+                bottom: Layout.Spacing.tight,
+                trailing: Layout.Spacing.gutter
+            ))
             .listRowBackground(Color.clear)
         }
 
@@ -156,7 +161,7 @@ extension PointPickerView {
             Section {
                 Button(action: useMyLocation) {
                     if isLocating {
-                        HStack(spacing: 10) {
+                        HStack(spacing: Layout.Spacing.cards) {
                             ProgressView()
                             Text("Finding where you are…")
                                 .foregroundStyle(.secondary)
@@ -243,7 +248,7 @@ extension PointPickerView {
 
         private var locationPrompt: some View {
             Section {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Layout.Spacing.cards) {
                     Label("Show where you are?", systemSymbol: .location)
                         .font(.headline)
                     Text("Your position appears on the map and becomes the pickup point. Everything works without it — points can be placed by hand.")
@@ -256,13 +261,13 @@ extension PointPickerView {
                             .buttonStyle(.bordered)
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, Layout.Spacing.tight)
             }
         }
 
         private var locationDeniedCard: some View {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
                     Label("Location access is off", systemSymbol: .locationSlash)
                         .font(.headline)
                     Text("Your position can't be shown or used as the pickup point. Everything else works.")
@@ -270,7 +275,7 @@ extension PointPickerView {
                         .foregroundStyle(.secondary)
                     Button("Open Settings", action: openSettings)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, Layout.Spacing.tight)
             }
         }
     }
@@ -318,19 +323,19 @@ extension PointPickerView.SearchContent {
             Section {
                 switch state {
                 case .expanding:
-                    HStack(spacing: 10) {
+                    HStack(spacing: Layout.Spacing.cards) {
                         ProgressView()
                         Text("Expanding the link…")
                             .foregroundStyle(.secondary)
                     }
                 case .resolving:
-                    HStack(spacing: 10) {
+                    HStack(spacing: Layout.Spacing.cards) {
                         ProgressView()
                         Text("Naming the point…")
                             .foregroundStyle(.secondary)
                     }
                 case .preview(let point, let source):
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
                         Text("Looks like a link with a point — use it?")
                             .font(.subheadline)
                         Text(point.displayAddress)
@@ -345,9 +350,9 @@ extension PointPickerView.SearchContent {
                                 .buttonStyle(.bordered)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, Layout.Spacing.tight)
                 case .routePreview(let from, let to, let source):
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
                         Text("A route link — fill both ends?")
                             .font(.subheadline)
                         Label(from.displayAddress, systemSymbol: .smallcircleFilledCircle)
@@ -364,9 +369,9 @@ extension PointPickerView.SearchContent {
                                 .buttonStyle(.bordered)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, Layout.Spacing.tight)
                 case .failed(let failure):
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
                         switch failure {
                         case .couldNotExpand(let original):
                             Label("The short link couldn't be expanded", systemSymbol: .wifiSlash)
@@ -390,7 +395,7 @@ extension PointPickerView.SearchContent {
                         }
                         Button("Dismiss", action: dismiss)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, Layout.Spacing.tight)
                 }
             }
         }

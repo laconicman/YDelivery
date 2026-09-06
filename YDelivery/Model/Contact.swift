@@ -1,16 +1,20 @@
 import Foundation
 
 /// Who stands at the door of a route point: the name the courier asks for and the phone
-/// they call. The extension is its own field, never folded into the number — no free-text
-/// number ever means two things (DesignSystem → "Field taxonomy", rule 3).
+/// they call. The name is explicit components — given and family — concatenated only
+/// through `PersonNameComponents`, never by hand-joined strings; the wire and the store
+/// speak one full-name string, this type owns the split (author's standing preference,
+/// 2026-09-06). The extension is its own field, never folded into the number — no
+/// free-text number ever means two things (DesignSystem → "Field taxonomy", rule 3).
 nonisolated struct Contact: Hashable, Sendable {
-    var name = ""
+    var givenName = ""
+    var familyName = ""
     var phone = ""
     var phoneExtension = ""
 
     /// Nothing worth keeping: an all-empty contact is "no contact", not a blank card.
     var isEmpty: Bool {
-        name.isEmpty && phone.isEmpty && phoneExtension.isEmpty
+        givenName.isEmpty && familyName.isEmpty && phone.isEmpty && phoneExtension.isEmpty
     }
 
     /// What deserves storing: an extension without a phone is noise the courier cannot
@@ -27,6 +31,29 @@ nonisolated struct Contact: Hashable, Sendable {
 }
 
 nonisolated extension Contact {
+    /// The one full-name string the store and the wire speak — assembled by the
+    /// components formatter, so name order stays the locale's decision, not ours.
+    var fullName: String {
+        var components = PersonNameComponents()
+        components.givenName = givenName.isEmpty ? nil : givenName
+        components.familyName = familyName.isEmpty ? nil : familyName
+        return components.formatted()
+    }
+
+    /// A stored or wire full name, split back into components — through the name
+    /// formatter's parser, which is script-aware where the strict parse strategy is not
+    /// (it refuses «Иван Петров»). What it cannot read at all stays whole in the given
+    /// name — a courier can still ask for it.
+    init(fullName: String, phone: String = "", phoneExtension: String = "") {
+        let components = PersonNameComponentsFormatter().personNameComponents(from: fullName)
+        self.init(
+            givenName: components?.givenName ?? fullName,
+            familyName: components?.familyName ?? "",
+            phone: phone,
+            phoneExtension: phoneExtension
+        )
+    }
+
     /// The collapsed row's one line: «Иван Петров · +7 912 345-67-89, ext. 12». Display
     /// formatting lives here, not in a view body (R5). `nonisolated` explicitly: an
     /// extension does not inherit it from the type, and the project's default isolation
@@ -35,6 +62,6 @@ nonisolated extension Contact {
         let phonePart = phoneExtension.isEmpty
             ? phone
             : phone.isEmpty ? "" : String(localized: "\(phone), ext. \(phoneExtension)")
-        return [name, phonePart].filter { !$0.isEmpty }.joined(separator: " · ")
+        return [fullName, phonePart].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }

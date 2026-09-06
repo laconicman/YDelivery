@@ -18,12 +18,25 @@ nonisolated extension PickedPlace {
 
 nonisolated extension Contact {
     /// The person a remembered point keeps at its door — `nil` when it kept nobody.
+    /// Components first — they are the stored truth; rows written before components
+    /// existed fall back to parsing their single string (Latin splits; Cyrillic stays
+    /// whole in the given name, since Foundation's parser refuses it — still a name a
+    /// courier can ask for).
     init?(at point: RoutePoint) {
-        let contact = Contact(
-            name: point.contactName ?? "",
-            phone: point.contactPhone ?? "",
-            phoneExtension: point.contactPhoneExtension ?? ""
-        )
+        let contact: Contact = if point.contactGivenName != nil || point.contactFamilyName != nil {
+            Contact(
+                givenName: point.contactGivenName ?? "",
+                familyName: point.contactFamilyName ?? "",
+                phone: point.contactPhone ?? "",
+                phoneExtension: point.contactPhoneExtension ?? ""
+            )
+        } else {
+            Contact(
+                fullName: point.contactName ?? "",
+                phone: point.contactPhone ?? "",
+                phoneExtension: point.contactPhoneExtension ?? ""
+            )
+        }
         guard let storable = contact.storable else { return nil }
         self = storable
     }
@@ -39,7 +52,11 @@ nonisolated extension RoutePoint {
             longitude: place.longitude,
             address: place.address,
             addressParts: place.parts.flatMap { $0.isEmpty ? nil : $0 },
-            contactName: contact.flatMap { $0.name.isEmpty ? nil : $0.name },
+            // Both spellings: the formatted whole for the wire and legacy readers, the
+            // components as the splittable truth.
+            contactName: contact.flatMap { $0.fullName.isEmpty ? nil : $0.fullName },
+            contactGivenName: contact.flatMap { $0.givenName.isEmpty ? nil : $0.givenName },
+            contactFamilyName: contact.flatMap { $0.familyName.isEmpty ? nil : $0.familyName },
             contactPhone: contact.flatMap { $0.phone.isEmpty ? nil : $0.phone },
             contactPhoneExtension: contact.flatMap { $0.phoneExtension.isEmpty ? nil : $0.phoneExtension }
         )

@@ -25,8 +25,13 @@ extension NewDeliveryView {
             NavigationStack {
                 Form {
                     Section {
-                        TextField("Name", text: $contact.name)
-                            .textContentType(.name)
+                        // Explicit components, concatenated only by the name formatter
+                        // (author's standing preference) — and each field autofills from
+                        // its own content type.
+                        TextField("Given name", text: $contact.givenName)
+                            .textContentType(.givenName)
+                        TextField("Family name", text: $contact.familyName)
+                            .textContentType(.familyName)
                         TextField("Phone", text: $contact.phone)
                             .textContentType(.telephoneNumber)
                             .keyboardType(.phonePad)
@@ -71,7 +76,7 @@ extension NewDeliveryView {
     Color.clear.sheet(isPresented: .constant(true)) {
         NewDeliveryView.ContactEditor(
             title: "Who receives",
-            contact: Contact(name: "Менеджер склада", phone: "+7 495 123-45-67", phoneExtension: "123"),
+            contact: Contact(givenName: "Менеджер склада", phone: "+7 495 123-45-67", phoneExtension: "123"),
             save: { _ in }
         )
     }

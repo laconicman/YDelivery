@@ -1,4 +1,5 @@
 import SwiftUI
+import YDeliveryKit
 
 extension NewDeliveryView {
     /// The beginner explainer (board `3a`): a vertical list — the shape that survives
@@ -55,10 +56,10 @@ extension NewDeliveryView.TariffExplainer {
         let card: Card
 
         var body: some View {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
                 Text(card.emoji)
                     .font(.title)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: Layout.Spacing.tight) {
                     Text(card.name)
                         .font(.headline)
                     if let explanation = card.explanation {
@@ -77,7 +78,7 @@ extension NewDeliveryView.TariffExplainer {
                         .font(.headline)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, Layout.Spacing.hairline)
         }
     }
 }

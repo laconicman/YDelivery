@@ -75,9 +75,25 @@ extension NewDeliveryView {
         private(set) var estimate: Estimate = .idle
         private(set) var offers: Offers = .idle
 
+        /// What the courier carries (board `3d`). Empty is a valid draft — the provider
+        /// then prices against the class's maximum dimensions.
+        private(set) var items: [ParcelItem] = []
+        var options = DeliveryOptions()
+
         /// The card the order button will spend — auto-selected to the first offer when
-        /// prices land, switchable by tapping the strip.
-        var selectedOfferID: Offer.ID?
+        /// prices land, switchable by tapping the strip. Changing class renormalizes the
+        /// options that are bound to one (§4): a thermal bag cannot leave with anything
+        /// but a courier, loaders only ride the cargo van — enforced here, never
+        /// discovered via API errors.
+        var selectedOfferID: Offer.ID? {
+            didSet { normalizeOptions() }
+        }
+
+        private func normalizeOptions() {
+            guard let tariff = selectedOffer?.tariff else { return }
+            if tariff != .courier { options.thermobag = false }
+            if tariff != .cargo { options.loaders = 0 }
+        }
 
         private let estimateRoute: RouteEstimator
 
@@ -231,17 +247,53 @@ extension NewDeliveryView {
             }
         }
 
+        // MARK: Parcel
+
+        func item(withID id: ParcelItem.ID) -> ParcelItem? {
+            items.first { $0.id == id }
+        }
+
+        /// A blank card saves as nothing — the «Add an item» invitation returns.
+        func setItem(_ item: ParcelItem) {
+            guard let index = items.firstIndex(where: { $0.id == item.id }) else {
+                if !item.isBlank { items.append(item) }
+                return
+            }
+            if item.isBlank {
+                items.remove(at: index)
+            } else {
+                items[index] = item
+            }
+        }
+
+        func removeItems(at offsets: IndexSet) {
+            items.remove(atOffsets: offsets)
+        }
+
+        /// The heaviest reading of the parcel against a class's bounds — what the strip
+        /// and the explainer warn with (board `3a`: the mismatch note).
+        func itemsThatDontFit(_ tariff: TariffClass) -> [ParcelItem] {
+            items.filter { !tariff.fits($0) }
+        }
+
         // MARK: Offers
 
-        /// The route as an offers request sees it — address included, since the provider
-        /// wants `fullname` beside every coordinate pair.
-        var offerWaypoints: [OfferWaypoint] {
-            guard isRouteComplete else { return [] }
-            return points.compactMap { point in
+        /// Everything pricing answers to — route, parcel, options. Also the re-price
+        /// trigger: the root's `.task(id:)` watches this, so an edit to any of the three
+        /// cancels the stale run.
+        var pricingInputs: OfferRequest? {
+            guard isRouteComplete else { return nil }
+            let waypoints = points.compactMap { point in
                 point.place.map {
-                    OfferWaypoint(latitude: $0.latitude, longitude: $0.longitude, address: $0.address)
+                    OfferRequest.RequestWaypoint(
+                        pointID: point.id,
+                        latitude: $0.latitude,
+                        longitude: $0.longitude,
+                        address: $0.address
+                    )
                 }
             }
+            return OfferRequest(waypoints: waypoints, items: items, options: options)
         }
 
         /// Loads priced offers through the caller's fetch — the root view hands in the
@@ -249,17 +301,16 @@ extension NewDeliveryView {
         /// selection survives a reload when the same offer returns; otherwise the first
         /// offer is selected, so the strip always has an answer for the order button.
         func loadOffers(
-            _ fetch: ([OfferWaypoint]) async throws -> [Offer]
+            _ fetch: (OfferRequest) async throws -> [Offer]
         ) async {
-            let waypoints = offerWaypoints
-            guard waypoints.count >= 2 else {
+            guard let request = pricingInputs else {
                 offers = .idle
                 selectedOfferID = nil
                 return
             }
             offers = .loading
             do {
-                let loaded = try await fetch(waypoints)
+                let loaded = try await fetch(request)
                 guard !Task.isCancelled else { return }
                 offers = .ready(loaded)
                 if !loaded.contains(where: { $0.id == selectedOfferID }) {
