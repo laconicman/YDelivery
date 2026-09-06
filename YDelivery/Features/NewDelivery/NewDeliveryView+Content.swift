@@ -1,111 +1,450 @@
+import MapKit
 import SFSafeSymbols
 import SwiftUI
+import YDeliveryKit
 
 extension NewDeliveryView {
-    /// Pure presentation: two route-end rows and a swap affordance. Plain values in,
-    /// intents out (R1/R2).
+    /// Pure presentation of the fixed-card shell (board `1b`): the map above, the route
+    /// card below, both fully readable without a gesture. Plain values in, intents out
+    /// (R1/R2); the badges make the route list the map's legend (board `2c`).
     struct Content: View {
-        let pickupAddress: String?
-        let dropoffAddress: String?
+        /// One route row, reduced to what it renders.
+        struct Row: Identifiable {
+            let id: UUID
+            let badge: PointBadge.Role
+            let address: String?
+            let placeholder: LocalizedStringKey
+            let contactSummary: String?
+            let contactInvitation: LocalizedStringKey
+            /// Roles this row may switch to — empty for the pinned pickup row.
+            let availableRoles: [NewDeliveryView.Model.Role]
+            let isDeletable: Bool
+            let isMovable: Bool
+        }
+
+        /// A chosen point on the map, reduced to what the marker renders.
+        struct Pin: Identifiable, Hashable {
+            let id: UUID
+            let latitude: Double
+            let longitude: Double
+            let badge: PointBadge.Role
+        }
+
+        let rows: [Row]
+        let pins: [Pin]
         let canSwap: Bool
-        let pick: (RouteEnd) -> Void
+        let canReorder: Bool
+        let pick: (UUID) -> Void
+        let editContact: (UUID) -> Void
+        let setRole: (UUID, NewDeliveryView.Model.Role) -> Void
         let swapEnds: () -> Void
+        let addStop: () -> Void
+        let removeRows: (IndexSet) -> Void
+        let moveRows: (IndexSet, Int) -> Void
+
+        @State private var camera: MapCameraPosition = .automatic
+        @State private var editMode: EditMode = .inactive
 
         var body: some View {
+            VStack(spacing: 0) {
+                RouteMap(pins: pins, camera: $camera)
+                    .containerRelativeFrame(.vertical) { length, _ in length * 0.33 }
+                routeCard
+            }
+        }
+
+        private var routeCard: some View {
             List {
                 Section {
-                    EndRow(
-                        label: "Pickup",
-                        symbol: .shippingboxAndArrowBackward,
-                        address: pickupAddress,
-                        select: { pick(.pickup) }
-                    )
-                    EndRow(
-                        label: "Drop-off",
-                        symbol: .house,
-                        address: dropoffAddress,
-                        select: { pick(.dropoff) }
-                    )
+                    ForEach(rows) { row in
+                        PointRow(
+                            row: row,
+                            pick: { pick(row.id) },
+                            editContact: { editContact(row.id) },
+                            setRole: { setRole(row.id, $0) }
+                        )
+                        .deleteDisabled(!row.isDeletable)
+                        .moveDisabled(!row.isMovable)
+                    }
+                    .onDelete(perform: removeRows)
+                    .onMove(perform: moveRows)
+
+                    actions
                 } footer: {
                     Text("Parcel details and priced offers come after the route.")
                 }
+            }
+            .environment(\.editMode, $editMode)
+            .onChange(of: rows.count) {
+                // Deleting down to the founding pair hides the Reorder control while
+                // edit mode is on — leave it too, or the list is trapped editing with
+                // no exit (review, PR #17).
+                if rows.count <= 2 { editMode = .inactive }
+            }
+        }
 
-                if canSwap {
+        /// The card's own affordances (board `2b`): two points swap; three or more
+        /// reorder. Swap stays visible but disabled while an end is empty — unavailable
+        /// affordances state themselves rather than vanish (DesignSystem → field rules).
+        private var actions: some View {
+            HStack(spacing: 24) {
+                if rows.count == 2 {
                     Button(action: swapEnds) {
-                        Label("Swap pickup and drop-off", systemSymbol: .arrowUpArrowDown)
+                        Label("Swap", systemSymbol: .arrowUpArrowDown)
+                    }
+                    .disabled(!canSwap)
+                }
+                Button(action: addStop) {
+                    Label("Add stop", systemSymbol: .plus)
+                }
+                if canReorder {
+                    Button {
+                        withAnimation { editMode = editMode == .active ? .inactive : .active }
+                    } label: {
+                        Label(
+                            editMode == .active ? "Done reordering" : "Reorder",
+                            systemSymbol: .arrowUpAndDownTextHorizontal
+                        )
                     }
                 }
             }
+            .buttonStyle(.borderless)
+            .font(.subheadline)
+            .labelStyle(.titleAndIcon)
         }
     }
 }
+
+// MARK: - Route map
 
 extension NewDeliveryView.Content {
-    /// One end of the route: shows the chosen address or invites choosing one.
-    struct EndRow: View {
-        let label: LocalizedStringKey
-        let symbol: SFSymbol
-        let address: String?
-        let select: () -> Void
+    /// The map above the card: chosen points as `2c` marks. An accelerator, never the
+    /// only route — everything on it is reachable through the rows below (handoff §8).
+    struct RouteMap: View {
+        let pins: [Pin]
+        @Binding var camera: MapCameraPosition
 
         var body: some View {
-            Button(action: select) {
-                HStack {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(label)
-                                .font(.headline)
-                            Text(address ?? "Choose on the map")
-                                .font(.subheadline)
-                                .foregroundStyle(address == nil ? .tertiary : .secondary)
-                        }
-                    } icon: {
-                        Image(systemSymbol: symbol)
+            Map(position: $camera) {
+                ForEach(pins) { pin in
+                    Annotation(
+                        coordinate: CLLocationCoordinate2D(
+                            latitude: pin.latitude,
+                            longitude: pin.longitude
+                        ),
+                        // The teardrop's tip is the coordinate; round marks sit on it.
+                        anchor: pin.badge.mapAnchor
+                    ) {
+                        PointBadge(role: pin.badge)
+                            .shadow(radius: 1.5, y: 1)
+                    } label: {
+                        EmptyView()
                     }
-                    Spacer()
-                    Image(systemSymbol: .chevronForward)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
                 }
             }
-            .foregroundStyle(.primary)
+            .onAppear {
+                if pins.isEmpty { camera = .region(.moscow) }
+            }
+            .onChange(of: pins) {
+                // A route edit reframes the map to the new route — search results and
+                // added stops arrive from off-screen and deserve the camera.
+                camera = .automatic
+            }
         }
     }
 }
 
-#Preview("End row: chosen and unchosen") {
-    List {
-        NewDeliveryView.Content.EndRow(
-            label: "Pickup",
-            symbol: .shippingboxAndArrowBackward,
-            address: "Москва, ул Москворечье, 6",
-            select: {}
-        )
-        NewDeliveryView.Content.EndRow(
-            label: "Drop-off",
-            symbol: .house,
-            address: nil,
-            select: {}
+// MARK: - Point row
+
+extension NewDeliveryView.Content {
+    /// One stop: the mark, the address (or the invitation to choose one), and the
+    /// collapsed contact line (decision #5 — contacts live on the draft, one row per
+    /// point). Address and contact are separate targets; the row never truncates an
+    /// address (handoff §8 — a wrong address is a failed delivery).
+    struct PointRow: View {
+        let row: Row
+        let pick: () -> Void
+        let editContact: () -> Void
+        let setRole: (NewDeliveryView.Model.Role) -> Void
+
+        var body: some View {
+            HStack(alignment: .top, spacing: 12) {
+                PointBadge(role: row.badge)
+                VStack(alignment: .leading, spacing: 2) {
+                    Button(action: pick) {
+                        Group {
+                            if let address = row.address {
+                                Text(address) // user data, never a localization key
+                                    .foregroundStyle(.primary)
+                            } else {
+                                Text(row.placeholder)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: editContact) {
+                        if let contactSummary = row.contactSummary {
+                            // Concrete `Color.secondary`: the hierarchical style would
+                            // resolve against the button's tint and read as blue.
+                            Text(contactSummary)
+                                .font(.footnote)
+                                .foregroundStyle(Color.secondary)
+                        } else {
+                            Label(row.contactInvitation, systemSymbol: .plus)
+                                .font(.footnote)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            .contextMenu {
+                ForEach(row.availableRoles, id: \.self) { role in
+                    Button {
+                        setRole(role)
+                    } label: {
+                        Label(role.menuLabel, systemSymbol: role.menuSymbol)
+                    }
+                }
+            }
+        }
+    }
+}
+
+extension NewDeliveryView.Model.Role {
+    /// The context-menu verb for switching a stop to this role.
+    var menuLabel: LocalizedStringKey {
+        switch self {
+        case .pickup: "Make this the pickup"
+        case .dropoff: "Deliver here"
+        case .return: "Return leftovers here"
+        }
+    }
+
+    var menuSymbol: SFSymbol {
+        switch self {
+        case .pickup: .shippingbox
+        case .dropoff: .house
+        case .return: .arrowUturnBackward
+        }
+    }
+
+    /// The empty contact line's invitation, whole — composing it from parts would break
+    /// under localization.
+    var contactInvitation: LocalizedStringKey {
+        switch self {
+        case .pickup: "Who hands over — name and phone"
+        case .dropoff: "Who receives — name and phone"
+        case .return: "Who takes the return — name and phone"
+        }
+    }
+}
+
+// MARK: - Bridging
+
+extension NewDeliveryView.Content {
+    /// Builds the plain-value interface from the draft (R2): the parent stays terse, the
+    /// content stays decoupled and previewable from literals.
+    init(
+        draft: NewDeliveryView.Model,
+        pick: @escaping (UUID) -> Void,
+        editContact: @escaping (UUID) -> Void,
+        setRole: @escaping (UUID, NewDeliveryView.Model.Role) -> Void,
+        swapEnds: @escaping () -> Void,
+        addStop: @escaping () -> Void,
+        removeRows: @escaping (IndexSet) -> Void,
+        moveRows: @escaping (IndexSet, Int) -> Void
+    ) {
+        let points = draft.points
+        let rows = points.enumerated().map { index, point in
+            let badge = PointBadge.Role(
+                role: point.role,
+                index: index,
+                isLast: index == points.count - 1
+            )
+            return Row(
+                id: point.id,
+                badge: badge,
+                address: point.place?.displayAddress,
+                placeholder: point.role.pickerPrompt,
+                contactSummary: point.contact?.summary,
+                contactInvitation: point.role.contactInvitation,
+                availableRoles: draft.availableRoles(for: point.id),
+                isDeletable: index > 0 && points.count > 2,
+                isMovable: index > 0 && point.role != .return
+            )
+        }
+        let pins = points.enumerated().compactMap { index, point in
+            point.place.map { place in
+                Pin(
+                    id: point.id,
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    badge: PointBadge.Role(
+                        role: point.role,
+                        index: index,
+                        isLast: index == points.count - 1
+                    )
+                )
+            }
+        }
+        self.init(
+            rows: rows,
+            pins: pins,
+            canSwap: draft.canSwap,
+            canReorder: draft.canReorder,
+            pick: pick,
+            editContact: editContact,
+            setRole: setRole,
+            swapEnds: swapEnds,
+            addStop: addStop,
+            removeRows: removeRows,
+            moveRows: moveRows
         )
     }
 }
+
+extension PointBadge.Role {
+    /// The `2c` mapping from a draft row to its mark: the route starts with the ring and
+    /// ends with the teardrop; stops between are numbered by position, so the numbers
+    /// survive reordering; a return point keeps its own mark wherever it sits.
+    init(role: NewDeliveryView.Model.Role, index: Int, isLast: Bool) {
+        switch role {
+        case .pickup where index == 0: self = .start
+        case .pickup: self = .stop(number: index + 1)
+        case .return: self = .returnPoint
+        case .dropoff where isLast: self = .end
+        case .dropoff: self = .stop(number: index + 1)
+        }
+    }
+}
+
+private extension MKCoordinateRegion {
+    /// The fallback frame for an empty draft — the picker uses the same anchor.
+    static let moscow = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 55.7558, longitude: 37.6173),
+        span: MKCoordinateSpan(latitudeDelta: 0.35, longitudeDelta: 0.35)
+    )
+}
+
+// MARK: - Previews
 
 #Preview("Empty draft") {
     NewDeliveryView.Content(
-        pickupAddress: nil,
-        dropoffAddress: nil,
+        rows: [
+            .init(
+                id: UUID(),
+                badge: .start,
+                address: nil,
+                placeholder: "Where to pick up?",
+                contactSummary: nil,
+                contactInvitation: "Who hands over — name and phone",
+                availableRoles: [],
+                isDeletable: false,
+                isMovable: false
+            ),
+            .init(
+                id: UUID(),
+                badge: .end,
+                address: nil,
+                placeholder: "Where to deliver?",
+                contactSummary: nil,
+                contactInvitation: "Who receives — name and phone",
+                availableRoles: [],
+                isDeletable: false,
+                isMovable: true
+            ),
+        ],
+        pins: [],
         canSwap: false,
+        canReorder: false,
         pick: { _ in },
-        swapEnds: {}
+        editContact: { _ in },
+        setRole: { _, _ in },
+        swapEnds: {},
+        addStop: {},
+        removeRows: { _ in },
+        moveRows: { _, _ in }
     )
 }
 
 #Preview("Route complete") {
-    NewDeliveryView.Content(
-        pickupAddress: "Москва, ул Москворечье, 6",
-        dropoffAddress: "Москва, Каширское шоссе, 52",
+    let start = UUID()
+    let end = UUID()
+    return NewDeliveryView.Content(
+        rows: [
+            .init(
+                id: start,
+                badge: .start,
+                address: "Москва, ул Москворечье, 6",
+                placeholder: "Where to pick up?",
+                contactSummary: "Иван Петров · +7 912 345-67-89",
+                contactInvitation: "Who hands over — name and phone",
+                availableRoles: [],
+                isDeletable: false,
+                isMovable: false
+            ),
+            .init(
+                id: end,
+                badge: .end,
+                address: "Москва, Каширское шоссе, 52",
+                placeholder: "Where to deliver?",
+                contactSummary: nil,
+                contactInvitation: "Who receives — name and phone",
+                availableRoles: [],
+                isDeletable: false,
+                isMovable: true
+            ),
+        ],
+        pins: [
+            .init(id: start, latitude: 55.646068, longitude: 37.668176, badge: .start),
+            .init(id: end, latitude: 55.652212, longitude: 37.648210, badge: .end),
+        ],
         canSwap: true,
+        canReorder: false,
         pick: { _ in },
-        swapEnds: {}
+        editContact: { _ in },
+        setRole: { _, _ in },
+        swapEnds: {},
+        addStop: {},
+        removeRows: { _ in },
+        moveRows: { _, _ in }
     )
+}
+
+#Preview("Route map: pins framed") {
+    @Previewable @State var camera = MapCameraPosition.automatic
+    NewDeliveryView.Content.RouteMap(
+        pins: [
+            .init(id: UUID(), latitude: 55.646068, longitude: 37.668176, badge: .start),
+            .init(id: UUID(), latitude: 55.749917, longitude: 37.593450, badge: .stop(number: 2)),
+            .init(id: UUID(), latitude: 55.652212, longitude: 37.648210, badge: .end),
+        ],
+        camera: $camera
+    )
+}
+
+#Preview("Point row: unfilled, no contact") {
+    List {
+        NewDeliveryView.Content.PointRow(
+            row: .init(
+                id: UUID(),
+                badge: .stop(number: 2),
+                address: nil,
+                placeholder: "Where to deliver?",
+                contactSummary: nil,
+                contactInvitation: "Who receives — name and phone",
+                availableRoles: [.return],
+                isDeletable: true,
+                isMovable: true
+            ),
+            pick: {},
+            editContact: {},
+            setRole: { _ in }
+        )
+    }
 }

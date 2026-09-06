@@ -22,7 +22,12 @@ the noise filters.
   `TokenStore(service: "preview.YDelivery")`, never the app's real service.
 - Flag a new `// TODO` in Swift code that carries no `YD-n` register number.
 - Require content views (`…View+Content.swift`) to take plain values, bindings, and
-  closures; flag one that reaches into a controller or the environment.
+  closures; flag one that reaches into a controller or the environment. The rule is about
+  the view's **stored properties**: a convenience `init(draft:)` in an *extension* is the
+  prescribed bridge, not a violation of it — it keeps the properties plain and leaves the
+  memberwise initializer alive for previews (R2; Manferdini, *SwiftUI Structural
+  Foundations* 3.4). Flag that initializer only when it appears in the view's own
+  declaration or when a stored property takes a model type (misfired on PR #17).
 - Flag a feature that needs API surface absent from `YandexDeliveryExpressAPI` being built
   against hand-rolled URLs — the package grows first (CLAUDE.md rule 7).
 
