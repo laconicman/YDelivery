@@ -34,6 +34,17 @@ final class StoreController {
     /// with its reason when the container is unresolvable, rather than vanishing.
     var canSavePlaces: Bool { placeStore != nil }
 
+    /// Why there is no history to show, when there is none for a reason. A read that
+    /// failed and a container that never resolved are different causes with the same
+    /// symptom — an empty list — and both must be told apart from "you have not sent
+    /// anything yet" (review, PR #18). `nil` when the store is healthy, whether or not
+    /// it holds anything.
+    var historyUnavailable: String? {
+        if let storeError { return storeError.localizedDescription }
+        if orderStore == nil, placeStore == nil { return StoreUnavailable().localizedDescription }
+        return nil
+    }
+
     /// The recent points the picker offers: one per address, newest first — an address
     /// delivered to twice is one memory, not two rows (Design → one substrate).
     var recentPoints: [RoutePoint] {
@@ -53,21 +64,36 @@ final class StoreController {
         saved: [SavedPlace] = [],
         limit: Int = 8
     ) -> [RoutePoint] {
-        var seen = Set(saved.map { addressKey($0.point.address) })
+        var seen = Set(saved.map { destinationKey($0.point) })
         var recents: [RoutePoint] = []
         for point in orders.flatMap(\.route) {
-            let key = addressKey(point.address)
-            guard !key.isEmpty, seen.insert(key).inserted else { continue }
+            guard !point.address.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+            guard seen.insert(destinationKey(point)).inserted else { continue }
             recents.append(point)
             if recents.count == limit { break }
         }
         return recents
     }
 
-    /// One spelling of "the same address", so the two things that dedupe against each
-    /// other agree on what same means.
-    private nonisolated static func addressKey(_ address: String) -> String {
-        address.lowercased().trimmingCharacters(in: .whitespaces)
+    /// What makes two remembered points *the same delivery destination*, so the two
+    /// things that deduplicate against each other agree on what "same" means.
+    ///
+    /// The address alone is not enough. Flat 12 and flat 46 of one building share a
+    /// street address and are different doors with different people behind them; keeping
+    /// only the newest would offer a recent that restores the wrong apartment and the
+    /// wrong contact (review, PR #18). The door details and the coordinates are part of
+    /// the identity for exactly that reason.
+    private nonisolated static func destinationKey(_ point: RoutePoint) -> String {
+        let address = point.address.lowercased().trimmingCharacters(in: .whitespaces)
+        let parts = point.addressParts.map {
+            "\($0.entrance)|\($0.floor)|\($0.apartment)|\($0.intercom)".lowercased()
+        } ?? ""
+        // Five decimals is about a metre — enough to separate two entrances of one
+        // building, coarse enough that the same pin re-read stays one memory.
+        let coordinates = String(
+            format: "%.5f,%.5f", point.latitude, point.longitude
+        )
+        return "\(address)#\(parts)#\(coordinates)"
     }
 
     /// Reads both files off the main actor and publishes the result here.

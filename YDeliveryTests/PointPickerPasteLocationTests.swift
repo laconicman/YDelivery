@@ -120,6 +120,35 @@ struct PointPickerPasteLocationTests {
         #expect(model.locationIsApproximate, "a kilometre-wide fix cannot name a door")
     }
 
+    @Test("A choice the sender makes retires a location fix still in flight")
+    func lateFixDoesNotOverwriteANewerChoice() async throws {
+        let released = AsyncStream<Void>.makeStream()
+        let model = PointPickerView.Model(
+            resolveAddress: { _, _ in "Resolved" },
+            searchPlace: { _, _ in PickedPlace(latitude: 55.64, longitude: 37.66, address: "Каширское шоссе, 52") },
+            expandLink: { _ in throw Unexpected() },
+            locateOnce: {
+                // Still looking when the sender gives up and searches instead.
+                var iterator = released.stream.makeAsyncIterator()
+                _ = await iterator.next()
+                return (55.7558, 37.6173, 40)
+            }
+        )
+
+        model.continueAfterLocationPrompt()
+        model.searchAsAddress("Каширское шоссе 52")
+        try await waitUntil { !model.isResolving }
+        #expect(model.pin?.address == "Каширское шоссе, 52")
+
+        released.continuation.yield()
+        released.continuation.finish()
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(model.pin?.address == "Каширское шоссе, 52",
+                "the fix the sender stopped waiting for must not drop a pin over their choice")
+        #expect(!model.isLocating)
+    }
+
     @Test("Denied location is a rendered state, not an error")
     func deniedLocationRenders() async throws {
         let model = model(locate: { throw PointPickerView.Model.LocationDenied() })

@@ -88,7 +88,9 @@ extension PointPickerView {
     }
 }
 
-extension SavedPlace.Kind {
+// Pure display vocabulary on a `nonisolated` Kit type: annotated for the same reason
+// `PickedPlace+displayAddress` is (REVIEW.md's extension-isolation rule).
+nonisolated extension SavedPlace.Kind {
     /// The chip's glyph. ПВЗ and locker kinds join when the app can send to one.
     var symbol: SFSymbol {
         switch self {

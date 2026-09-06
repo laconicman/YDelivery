@@ -24,6 +24,11 @@ extension PointPickerView {
 
         let chips: [Chip]
         let recents: [Recent]
+        /// Why the remembered places and recents may be missing, when they are missing
+        /// because the store could not be read or never resolved. *Could not look* must
+        /// not render as *nothing there* (review, PR #18). Defaults to absent, which is
+        /// what a healthy store — and every preview of one — reports.
+        var historyUnavailable: String? = nil
         @Binding var searchText: String
         let suggestions: [Model.AddressSuggestion]
         let pasteState: Model.PasteState?
@@ -72,6 +77,15 @@ extension PointPickerView {
                 if searchText.isEmpty {
                     standingActions
                     if !recents.isEmpty {
+                        if let historyUnavailable {
+                            Section {
+                                Label(historyUnavailable, systemSymbol: .exclamationmarkTriangle)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            } footer: {
+                                Text("Saved places and recent addresses can't be read. Everything else works — search, the map, and pasting a link.")
+                            }
+                        }
                         recentsSection(recents)
                     }
                 } else {

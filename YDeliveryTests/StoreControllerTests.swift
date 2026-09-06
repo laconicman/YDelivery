@@ -65,6 +65,49 @@ struct StoreControllerTests {
                 "the chip already carries that point, with its name and its contact")
     }
 
+    @Test("Two flats at one address are two memories — the door is part of the identity")
+    func apartmentsDoNotCollapse() {
+        var twelve = RoutePoint(latitude: 55.75, longitude: 37.61, address: "Тверская, 6")
+        twelve.addressParts = AddressParts(apartment: "12")
+        twelve.contactName = "Иван"
+        var fortySix = RoutePoint(latitude: 55.75, longitude: 37.61, address: "Тверская, 6")
+        fortySix.addressParts = AddressParts(apartment: "46")
+        fortySix.contactName = "Анна"
+
+        let orders = [Order(created: .now, status: .done, route: [twelve, fortySix])]
+        let recents = StoreController.recentPoints(in: orders)
+
+        #expect(recents.count == 2, "keeping the newest would restore the wrong flat and the wrong person")
+        #expect(Set(recents.compactMap(\.contactName)) == ["Иван", "Анна"])
+    }
+
+    @Test("A saved place hides its own door, not the whole building")
+    func savedPlaceHidesOnlyItself() {
+        var saved = RoutePoint(latitude: 55.75, longitude: 37.61, address: "Тверская, 6")
+        saved.addressParts = AddressParts(apartment: "12")
+        var other = RoutePoint(latitude: 55.75, longitude: 37.61, address: "Тверская, 6")
+        other.addressParts = AddressParts(apartment: "46")
+
+        let recents = StoreController.recentPoints(
+            in: [Order(created: .now, status: .done, route: [saved, other])],
+            saved: [SavedPlace(name: "Дом", kind: .home, point: saved)]
+        )
+
+        #expect(recents.map { $0.addressParts?.apartment } == ["46"],
+                "the chip covers flat 12; flat 46 is still its own memory")
+    }
+
+    @Test("No container is a stated reason, not an empty history")
+    func containerlessHistoryExplainsItself() async {
+        let containerless = StoreController(orderStore: nil, placeStore: nil)
+        #expect(containerless.historyUnavailable != nil,
+                "an empty list with no explanation reads as 'you have sent nothing'")
+
+        let healthy = controller
+        await healthy.refresh()
+        #expect(healthy.historyUnavailable == nil, "empty but readable explains nothing")
+    }
+
     @Test("Recents cap at the limit — the empty-query list stays one screen tall")
     func recentsRespectLimit() {
         let orders = (0..<20).map { index in

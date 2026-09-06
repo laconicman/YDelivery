@@ -11,8 +11,8 @@ import YDeliveryKit
 /// already-chosen place (which opens straight on the map, at the place).
 struct PointPickerView: View {
     let prompt: LocalizedStringKey
-    /// The chosen place, plus the person at its door when a chip or recent carried one.
-    let confirm: (PickedPlace, Contact?) -> Void
+    /// The chosen place, and what the selection has to say about the person at its door.
+    let confirm: (PickedPlace, ContactChoice) -> Void
     /// A pasted route link fills both ends in one action (decision #9); `nil` hides
     /// that offer.
     let fillEnds: ((PickedPlace, PickedPlace) -> Void)?
@@ -25,11 +25,21 @@ struct PointPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
+    /// What a selection says about the person at the door. Refining a pin says nothing —
+    /// whoever the row already had is still standing there. Choosing a remembered point
+    /// speaks for the whole point: it carries its person, or it carries nobody, and
+    /// either way that replaces what was there. Collapsing "nothing to say" into "nobody"
+    /// left the courier calling the previous address's person (review, PR #18).
+    enum ContactChoice: Hashable {
+        case unchanged
+        case replace(Contact?)
+    }
+
     init(
         prompt: LocalizedStringKey,
         initialPlace: PickedPlace? = nil,
         initialContact: Contact? = nil,
-        confirm: @escaping (PickedPlace, Contact?) -> Void,
+        confirm: @escaping (PickedPlace, ContactChoice) -> Void,
         fillEnds: ((PickedPlace, PickedPlace) -> Void)? = nil
     ) {
         self.prompt = prompt
@@ -57,6 +67,7 @@ struct PointPickerView: View {
                     SearchContent.Chip(id: $0.id, name: $0.name, symbol: $0.kind.symbol)
                 },
                 recents: store.recentPoints.map(SearchContent.Recent.init),
+                historyUnavailable: store.historyUnavailable,
                 searchText: $model.searchText,
                 suggestions: model.suggestions,
                 pasteState: model.pasteState,
@@ -67,12 +78,12 @@ struct PointPickerView: View {
                     // Chip → done: the whole point, contact included, no further steps
                     // (board 2a — the habitual sender's path).
                     guard let place = store.savedPlaces.first(where: { $0.id == id }) else { return }
-                    confirm(PickedPlace(place.point), Contact(at: place.point))
+                    confirm(PickedPlace(place.point), .replace(Contact(at: place.point)))
                     dismiss()
                 },
                 pickRecent: { address in
                     guard let point = store.recentPoints.first(where: { $0.address == address }) else { return }
-                    confirm(PickedPlace(point), Contact(at: point))
+                    confirm(PickedPlace(point), .replace(Contact(at: point)))
                     dismiss()
                 },
                 select: { model.select($0) },
@@ -122,7 +133,8 @@ struct PointPickerView: View {
                     },
                     done: {
                         guard let place = model.confirmedPlace else { return }
-                        confirm(place, nil)
+                        // Refining says nothing about people; the row keeps whoever it had.
+                        confirm(place, .unchanged)
                         dismiss()
                     }
                 )

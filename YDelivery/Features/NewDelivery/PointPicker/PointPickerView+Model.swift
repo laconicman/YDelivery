@@ -133,6 +133,17 @@ extension PointPickerView {
         ///
         /// Opening the picker on an already-chosen place does *not* call it — that place
         /// arrives with its own parts, and editing it is not choosing a new point.
+        /// A fix the sender is no longer waiting for. Any selection they make themselves
+        /// supersedes a pending «Моё местоположение» — otherwise the fix lands late and
+        /// drops its pin over the address they just chose (review, PR #18). Called from
+        /// the selection paths, never from the fix's own completion, which must be free
+        /// to place the pin it was asked for.
+        private func retireLocationFix() {
+            locationTask?.cancel()
+            locationTask = nil
+            isLocating = false
+        }
+
         private func adoptNewPoint(isApproximate: Bool = false) {
             addressParts = AddressParts()
             locationIsApproximate = isApproximate
@@ -210,6 +221,7 @@ extension PointPickerView {
 
         private func beginLookup(_ operation: @escaping @Sendable () async throws -> PickedPlace) {
             lookupTask?.cancel()
+            retireLocationFix()
             lookupError = nil
             isResolving = true
             // Weak self, so an in-flight lookup does not pin a dismissed screen's model
@@ -277,6 +289,7 @@ extension PointPickerView {
         func placePreviewedPoint() {
             guard case .preview(let place, _) = pasteState else { return }
             pasteState = nil
+            retireLocationFix()
             adoptNewPoint()
             pin = place
             isRefining = true
@@ -373,6 +386,11 @@ extension PointPickerView {
                 do {
                     let fix = try await locateOnce()
                     guard !Task.isCancelled else { return }
+                    // This fix is arriving, so it is no longer pending: drop the handle
+                    // before placing the pin, or `dropPin`'s selection path would retire
+                    // the very task delivering it.
+                    self?.locationTask = nil
+                    self?.isLocating = false
                     // Say so, and invite correcting the pin (board `2a`).
                     self?.dropPin(
                         latitude: fix.latitude,
@@ -425,12 +443,15 @@ extension PointPickerView.Model {
         )
     }
 
-    /// One HEAD request; `URLSession` follows the redirect chain and hands back where it
-    /// landed — the only network step the paste affordance ever takes.
+    /// One GET; `URLSession` follows the redirect chain and hands back where it landed —
+    /// the only network step the paste affordance ever takes.
+    ///
+    /// GET rather than HEAD: shorteners are not obliged to answer HEAD, and the ones this
+    /// grammar supports redirect on GET. Answering HEAD with 405 made every short link
+    /// from such a provider report "could not expand" (review, PR #18). The body is
+    /// discarded; only where it landed matters.
     nonisolated static let urlSessionExpander: LinkExpander = { url in
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await URLSession.shared.data(from: url)
         guard let final = response.url else { throw URLError(.badServerResponse) }
         return final
     }
