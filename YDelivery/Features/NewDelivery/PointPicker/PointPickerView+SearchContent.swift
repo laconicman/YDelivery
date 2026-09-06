@@ -79,16 +79,20 @@ extension PointPickerView {
 
                 if searchText.isEmpty {
                     standingActions
-                    if !recents.isEmpty {
-                        if let historyUnavailable {
-                            Section {
-                                Label(historyUnavailable, systemSymbol: .exclamationmarkTriangle)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            } footer: {
-                                Text("Saved places and recent addresses can't be read. Everything else works — search, the map, and pasting a link.")
-                            }
+                    // Outside the recents check on purpose: an unreadable store leaves
+                    // that list empty, which is exactly when this has something to say.
+                    // Nested inside it, the notice only ever appeared when nothing was
+                    // missing (review, PR #18).
+                    if let historyUnavailable {
+                        Section {
+                            Label(historyUnavailable, systemSymbol: .exclamationmarkTriangle)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } footer: {
+                            Text("Saved places and recent addresses can't be read. Everything else works — search, the map, and pasting a link.")
                         }
+                    }
+                    if !recents.isEmpty {
                         recentsSection(recents)
                     }
                 } else {
@@ -474,6 +478,34 @@ extension PointPickerView.SearchContent {
         isLocating: false,
         locationPromptVisible: true,
         locationDenied: true,
+        pickChip: { _ in },
+        pickRecent: { _ in },
+        select: { _ in },
+        searchAsAddress: { _ in },
+        chooseOnMap: {},
+        useMyLocation: {},
+        continueLocationPrompt: {},
+        dismissLocationPrompt: {},
+        openSettings: {},
+        paste: { _ in },
+        placePreviewedPoint: {},
+        fillRoute: nil,
+        dismissPaste: {}
+    )
+}
+
+#Preview("History that cannot be read") {
+    @Previewable @State var text = ""
+    PointPickerView.SearchContent(
+        chips: [],
+        recents: [],
+        historyUnavailable: "Shared storage is unavailable on this install.",
+        searchText: $text,
+        suggestions: [],
+        pasteState: nil,
+        isLocating: false,
+        locationPromptVisible: false,
+        locationDenied: false,
         pickChip: { _ in },
         pickRecent: { _ in },
         select: { _ in },
