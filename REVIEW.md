@@ -38,7 +38,11 @@ the noise filters.
 - Flag `@AppStorage` or `UserDefaults` holding anything secret-shaped — the demo repo's
   token-in-`@AppStorage` is a demo-only allowance that must not migrate here.
 - Flag `Task { … }` blocks that neither await a result nor handle thrown errors, and any
-  polling loop created outside a controller that owns and cancels it.
+  polling loop created outside a controller that owns and cancels it — **except** a loop
+  whose whole life is one screen's, which CLAUDE.md rule 6 permits in that screen's view
+  model when it is owned, cancellable and handles its errors (settled 2026-09-06; the
+  ordering wait in `NewDeliveryView.Model` is the example). Flag one that should outlive
+  its screen — journal sync, courier position — wherever it sits.
 - Flag `DispatchQueue.main.async` in a file already using Swift Concurrency — it hides an
   isolation bug rather than fixing one.
 - Flag a blanket `@MainActor` (or removal of `nonisolated`) applied to make a diagnostic

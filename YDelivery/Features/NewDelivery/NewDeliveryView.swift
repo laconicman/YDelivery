@@ -7,6 +7,18 @@ import YDeliveryKit
 /// later Phase-2 slices (Roadmap → Phase 2).
 struct NewDeliveryView: View {
     let draft: Model
+    /// The order is placed and acknowledged — `RootView` retires this draft and closes
+    /// the flow.
+    let placed: () -> Void
+    @State private var showsReview = false
+    /// Bumped per confirm — the ordering task's id, so a retry is the same owned task
+    /// run again (the Run pattern; attempt 0 no-ops through the model's queue gate).
+    @State private var orderAttempt = 0
+    /// Bumped by «Check again» on an unresolved acceptance — its own owned run, keyed
+    /// like the others so it is cancelled with the screen.
+    @State private var reconcileAttempt = 0
+    /// Bumped by «Save it again» when history refused a placed order.
+    @State private var recordAttempt = 0
     @State private var pickingPoint: Model.Point?
     /// Bumped by the two Retry buttons. Each is part of its task's id, which is what
     /// makes a retry cancellable by the next edit instead of outliving it.
@@ -67,6 +79,8 @@ struct NewDeliveryView: View {
                 optionsSummary: draft.options.summary,
                 whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
+                orderBarTitle: orderBarTitle,
+                canOrder: draft.selectedOffer != nil,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
@@ -85,7 +99,8 @@ struct NewDeliveryView: View {
                 addItem: { editingItem = ParcelItem() },
                 editItem: { editingItem = draft.item(withID: $0) },
                 removeItems: { draft.removeItems(at: $0) },
-                editOptions: { isEditingOptions = true }
+                editOptions: { isEditingOptions = true },
+                openReview: { showsReview = true }
             )
             // Structured re-pricing: the ids are what pricing answers to — the route for
             // the estimate; route, parcel, and options for offers — so any edit cancels
@@ -97,6 +112,51 @@ struct NewDeliveryView: View {
             }
             .task(id: Run(inputs: draft.pricingInputs, attempt: offersAttempt)) {
                 await draft.loadOffers { try await session.offers(for: $0) }
+            }
+            // The ordering run: create → watch → accept, then remember. Owned by its
+            // attempt id; the model's queue gate makes appear-time runs no-ops, and a
+            // recording failure is said beside the placed state, never swallowed.
+            .task(id: orderAttempt) {
+                await draft.placeOrder(
+                    create: { try await session.createClaim($0, requestID: $1) },
+                    watch: { try await session.claimState(id: $0) },
+                    accept: { try await session.acceptClaim(id: $0, version: $1) }
+                )
+                // Recording happens once per placed order. This task re-runs whenever a
+                // parked draft is reopened, and `.placed` is still true then.
+                if draft.ordering == .placed, !draft.placedOrderIsRecorded,
+                   let order = draft.placedOrder {
+                    do {
+                        try await store.record(order)
+                        draft.notePlacedOrderRecorded()
+                    } catch {
+                        draft.notePlacedButUnrecorded(error)
+                    }
+                }
+            }
+            .task(id: reconcileAttempt) {
+                guard reconcileAttempt > 0 else { return }
+                await draft.reconcileUnresolved(watch: { try await session.claimState(id: $0) })
+                if draft.ordering == .placed, !draft.placedOrderIsRecorded,
+                   let order = draft.placedOrder {
+                    do {
+                        try await store.record(order)
+                        draft.notePlacedOrderRecorded()
+                    } catch {
+                        draft.notePlacedButUnrecorded(error)
+                    }
+                }
+            }
+            .task(id: recordAttempt) {
+                guard recordAttempt > 0, draft.ordering == .placed,
+                      !draft.placedOrderIsRecorded, let order = draft.placedOrder
+                else { return }
+                do {
+                    try await store.record(order)
+                    draft.notePlacedOrderRecorded()
+                } catch {
+                    draft.notePlacedButUnrecorded(error)
+                }
             }
             .task { await store.refresh() }
             // The first prices a beginner ever sees arrive with the explainer open
@@ -156,6 +216,39 @@ struct NewDeliveryView: View {
                     options: draft.options,
                     selectedTariff: draft.chosenTariff,
                     save: { draft.options = $0 }
+                )
+            }
+            .sheet(isPresented: $showsReview) {
+                ReviewSheet(
+                    stops: reviewStops,
+                    itemLines: draft.items.map { item in
+                        "\(item.name) — \(item.summary)"
+                    },
+                    optionsLine: draft.options.summary,
+                    // The same `effective()` the order is built from. The sheet is the
+                    // last thing the sender reads before an irreversible action, so a
+                    // lapsed time shown here while the order departs immediately is the
+                    // worst place for the two to disagree (review, PR #22).
+                    whenLine: draft.options.effective().whenSummary,
+                    tariffName: draft.selectedOffer?.tariff.words ?? "",
+                    priceText: draft.selectedOffer?.priceText,
+                    blockers: draft.orderBlockers,
+                    ordering: draft.ordering,
+                    recordWarning: draft.recordWarning,
+                    confirm: {
+                        draft.confirmOrder()
+                        orderAttempt += 1
+                    },
+                    done: {
+                        showsReview = false
+                        placed()
+                    },
+                    // Closes the sheet and nothing else: the draft stays parked with its
+                    // token, so a later attempt reuses it rather than buying a second
+                    // delivery.
+                    unresolvedDone: { showsReview = false },
+                    reconcile: { reconcileAttempt += 1 },
+                    retryRecording: { recordAttempt += 1 }
                 )
             }
         }
@@ -220,6 +313,24 @@ private extension NewDeliveryView {
         }
     }
 
+    /// The route, restated for the review sheet — same badges, same words.
+    var reviewStops: [ReviewSheet.Stop] {
+        draft.points.enumerated().compactMap { index, point in
+            point.place.map { place in
+                ReviewSheet.Stop(
+                    id: point.id,
+                    badge: PointBadge.Role(
+                        role: point.role,
+                        index: index,
+                        isLast: index == draft.points.count - 1
+                    ),
+                    address: place.displayAddress,
+                    contact: point.contact?.summary ?? ""
+                )
+            }
+        }
+    }
+
     /// The stops an item can board or leave at — labels for the editor's pickers.
     var itemStops: [ItemEditor.Stop] {
         draft.points.compactMap { point in
@@ -229,6 +340,15 @@ private extension NewDeliveryView {
 
     /// Every class the app knows, priced where the strip has a price — the explainer
     /// teaches the vocabulary even for classes the route was not offered.
+    /// The CTA's words. `nil` while the bar has no place on screen at all — no route,
+    /// no prices asked for yet.
+    var orderBarTitle: String? {
+        guard draft.offers != .idle else { return nil }
+        return draft.selectedOffer.map {
+            String(localized: "Order \($0.tariff.words) · \($0.priceText)")
+        } ?? String(localized: "Order")
+    }
+
     var explainerCards: [TariffExplainer.Card] {
         let offers: [Offer] = if case .ready(let offers) = draft.offers { offers } else { [] }
         let known: [TariffClass] = [.courier, .express, .cargo]
@@ -265,7 +385,7 @@ extension NewDeliveryView.Model.Role {
 }
 
 #Preview("Empty draft") {
-    NewDeliveryView(draft: NewDeliveryView.Model())
+    NewDeliveryView(draft: NewDeliveryView.Model(), placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
         .environment(StoreController(orderStore: nil, placeStore: nil))
 }
@@ -284,7 +404,7 @@ extension NewDeliveryView.Model.Role {
         PickedPlace(latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52"),
         for: draft.points[1].id
     )
-    return NewDeliveryView(draft: draft)
+    return NewDeliveryView(draft: draft, placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
         .environment(StoreController(orderStore: nil, placeStore: nil))
 }
@@ -319,7 +439,7 @@ extension NewDeliveryView.Model.Role {
         PickedPlace(latitude: 59.932720, longitude: 30.349709, address: "Санкт-Петербург, Невский проспект, 100"),
         for: returnStop
     )
-    return NewDeliveryView(draft: draft)
+    return NewDeliveryView(draft: draft, placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
         .environment(StoreController(orderStore: nil, placeStore: nil))
 }

@@ -36,9 +36,17 @@ Concurrency — all deliberate, see `Design`.
    finishing any view.
 5. **`body` declares structure; it never computes presentation** (R5). Formatting in
    extensions on the formatted type; derivation in the view model or controller.
-6. **Async work is structured and owned.** Polling loops (journal sync, courier position)
-   live in controllers as cancellable `Task`s tied to their owner's lifetime — never in
-   views, never fire-and-forget without error handling. Follow `swift-concurrency`.
+6. **Async work is structured and owned.** Polling loops live in controllers as cancellable
+   `Task`s tied to their owner's lifetime — never in views, never fire-and-forget without
+   error handling. Follow `swift-concurrency`.
+   *Scope, settled 2026-09-06 (author):* this governs polling that is **worth continuing
+   while its screen is not showing** — journal sync, and courier position, where holding
+   the poll in a controller across an off-screen map trades cheap lightweight requests for
+   a shorter delay when it returns. A loop that only makes sense while its screen is up may
+   live with that screen's view model, provided it is still owned, cancellable, and
+   error-handling: `NewDeliveryView.Model.placeOrder`'s wait for a claim to leave
+   `estimating` is the worked example, and splitting it out would give one state machine
+   two owners.
 7. **Package-first sequencing.** A feature needing API surface the package lacks starts as
    a package PR (spec + tests), tagged and consumed by URL — then the app feature. Record
    the need in the package's Roadmap/TechDebt, not only here.

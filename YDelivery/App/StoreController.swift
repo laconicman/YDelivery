@@ -56,8 +56,12 @@ final class StoreController {
     /// precisely an order that was never placed, so counting rows would retire the
     /// explainer for someone who has only ever started one (review, PR #20).
     ///
-    /// A cancelled or undelivered order still counts: the sender went through the strip
-    /// and chose a class, which is the vocabulary this teaches.
+    /// «Successful» means **accepted by the system**, settled by the author 2026-09-06:
+    /// a placed order is part of history whatever becomes of it afterwards, and whether it
+    /// was later cancelled or failed to deliver is a question about its status, not about
+    /// whether the sender has ordered before. So a cancelled or undelivered order still
+    /// counts — they went through the strip and chose a class, which is the vocabulary
+    /// this teaches.
     var hasPlacedAnOrder: Bool {
         orders.contains { $0.status != .draft }
     }
@@ -143,6 +147,18 @@ final class StoreController {
         storeError = nil
     }
 
+    /// Records a placed order and republishes history. Throws — an order that was
+    /// *placed* but not *remembered* is a state the sender must see, not a silent gap
+    /// in the list.
+    func record(_ order: Order) async throws {
+        guard let orderStore else { throw StoreUnavailable() }
+        try await Self.write(order, to: orderStore)
+        // The write held; if the confirming read stumbles, the order still leads the
+        // list rather than vanishing until the next refresh.
+        orders = (try? await Self.readOrders(orderStore)) ?? ([order] + orders)
+        storeError = nil
+    }
+
     struct StoreUnavailable: LocalizedError {
         var errorDescription: String? {
             String(localized: "Shared storage is unavailable on this install.")
@@ -169,5 +185,15 @@ final class StoreController {
     @concurrent
     private static func write(_ place: SavedPlace, to store: SavedPlaceStore) async throws {
         try store.save(place)
+    }
+
+    @concurrent
+    private static func readOrders(_ store: OrderStore) async throws -> [Order] {
+        try store.read()
+    }
+
+    @concurrent
+    private static func write(_ order: Order, to store: OrderStore) async throws {
+        try store.record(order)
     }
 }

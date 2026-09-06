@@ -49,6 +49,10 @@ extension NewDeliveryView {
         let optionsSummary: String
         let whenSummary: String
         let commentSummary: String?
+        /// The CTA's words, or `nil` when the bar has no place on screen — derived on the
+        /// root's side of the seam with everything else (R5; review, PR #22).
+        var orderBarTitle: String? = nil
+        var canOrder: Bool = false
         let canSwap: Bool
         let canReorder: Bool
         let pick: (UUID) -> Void
@@ -70,6 +74,8 @@ extension NewDeliveryView {
         @State private var camera: MapCameraPosition = .automatic
         @State private var editMode: EditMode = .inactive
 
+        let openReview: () -> Void
+
         var body: some View {
             VStack(spacing: 0) {
                 RouteMap(pins: pins, legs: estimateLegs, camera: $camera)
@@ -82,6 +88,9 @@ extension NewDeliveryView {
                     }
                     .containerRelativeFrame(.vertical) { length, _ in length * Self.mapShare }
                 routeCard
+            }
+            .safeAreaInset(edge: .bottom) {
+                OrderBar(title: orderBarTitle, canOrder: canOrder, openReview: openReview)
             }
         }
 
@@ -352,6 +361,39 @@ extension NewDeliveryView.Content {
                 .padding(.horizontal, Layout.Spacing.gutter)
                 .frame(minHeight: Layout.MinHeight.bar)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Layout.Radius.bar))
+            }
+        }
+    }
+}
+
+// MARK: - Order bar
+
+extension NewDeliveryView.Content {
+    /// The one CTA (board `1b`): named and priced once a class is chosen, visibly
+    /// waiting otherwise — never confused with the estimate bar above, which informs and
+    /// never acts (decision #13). Ordering itself happens behind the review sheet.
+    /// The one CTA. Plain values only: it renders a title and whether it may be pressed,
+    /// and knows nothing about offer states — the root view reduces those, since deriving
+    /// them here coupled the bar to the model's `Offers` (R1; review, PR #22).
+    struct OrderBar: View {
+        /// Absent while the bar has no place on screen at all — no route, no prices asked.
+        let title: String?
+        let canOrder: Bool
+        let openReview: () -> Void
+
+        var body: some View {
+            if let title {
+                Button(action: openReview) {
+                    Text(title)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!canOrder)
+                .padding(.horizontal, Layout.Spacing.edge)
+                .padding(.vertical, Layout.Spacing.unit)
+                .background(.bar)
             }
         }
     }
@@ -666,7 +708,8 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
-        editOptions: {}
+        editOptions: {},
+        openReview: {}
     )
 }
 
@@ -731,7 +774,8 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
-        editOptions: {}
+        editOptions: {},
+        openReview: {}
     )
 }
 

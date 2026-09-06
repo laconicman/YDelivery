@@ -18,7 +18,15 @@ struct RootView: View {
                 .tabItem { Label("Settings", systemSymbol: .gearshape) }
         }
         .sheet(isPresented: $isComposing) {
-            NewDeliveryView(draft: draft)
+            NewDeliveryView(
+                draft: draft,
+                placed: {
+                    // The order lives in history now; the draft's job is done. A fresh
+                    // model also mints a fresh idempotency token for the next run.
+                    isComposing = false
+                    draft = NewDeliveryView.Model()
+                }
+            )
         }
     }
 }

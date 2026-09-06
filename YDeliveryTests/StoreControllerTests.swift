@@ -145,6 +145,18 @@ struct StoreControllerTests {
                 "placed then cancelled still means they saw the strip and chose a class")
     }
 
+    @Test("Recording the same order twice keeps one row")
+    func recordingIsIdempotent() throws {
+        let store = OrderStore(directory: directory)
+        let order = Order(created: .now, status: .searching, route: [], claimID: "claim-1")
+
+        try store.record(order)
+        try store.record(order)
+
+        #expect(try store.read().count == 1,
+                "a reopened draft observing its own placed order must not add a second delivery")
+    }
+
     @Test("Recents cap at the limit — the empty-query list stays one screen tall")
     func recentsRespectLimit() {
         let orders = (0..<20).map { index in
