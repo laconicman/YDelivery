@@ -35,6 +35,8 @@ extension NewDeliveryView {
         var unresolvedDone: () -> Void = {}
         /// Asks what became of an acceptance whose answer was lost. A read, never a write.
         var reconcile: () -> Void = {}
+        /// Writes a placed order to history again after the first attempt failed.
+        var retryRecording: () -> Void = {}
 
         @Environment(\.dismiss) private var dismiss
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -157,14 +159,28 @@ extension NewDeliveryView {
                             Text(recordWarning)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
-                        }
-                        Button(action: done) {
-                            Text("Done")
-                                .font(.headline)
+                            // The order exists; this draft holds the only copy of it that
+                            // has not been written down. Done would retire the draft and
+                            // take that copy with it, so the offer here is to write it
+                            // again rather than to leave (review, PR #22).
+                            Button("Save it again", action: retryRecording)
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.large)
                                 .frame(maxWidth: .infinity)
+                            Button(action: unresolvedDone) {
+                                Text("Leave it for now")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .controlSize(.large)
+                        } else {
+                            Button(action: done) {
+                                Text("Done")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
                     }
                     .frame(maxWidth: .infinity)
                 case .failed(let reason):

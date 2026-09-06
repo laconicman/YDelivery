@@ -470,6 +470,17 @@ extension NewDeliveryView {
                 $0.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.cost == nil
             }) {
                 blockers.append(String(localized: "Every item needs a name and a declared value."))
+            } else if items.contains(where: { ($0.cost ?? 0) <= 0 }) {
+                // A declared value is what the parcel is insured for, so zero is not a
+                // value — and the bound is stated here rather than discovered as a 400
+                // (review, PR #22).
+                blockers.append(String(localized: "A declared value of nothing insures nothing — say what each item is worth."))
+            }
+            if items.contains(where: { ($0.weightKg ?? 1) <= 0 }) {
+                blockers.append(String(localized: "A stated weight has to be more than zero."))
+            }
+            if items.contains(where: { $0.quantity < 1 }) {
+                blockers.append(String(localized: "Every item needs a count of at least one."))
             }
             if selectedOffer == nil {
                 blockers.append(String(localized: "Pick a delivery class once prices arrive."))

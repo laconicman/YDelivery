@@ -17,6 +17,8 @@ struct NewDeliveryView: View {
     /// Bumped by «Check again» on an unresolved acceptance — its own owned run, keyed
     /// like the others so it is cancelled with the screen.
     @State private var reconcileAttempt = 0
+    /// Bumped by «Save it again» when history refused a placed order.
+    @State private var recordAttempt = 0
     @State private var pickingPoint: Model.Point?
     /// Bumped by the two Retry buttons. Each is part of its task's id, which is what
     /// makes a retry cancellable by the next edit instead of outliving it.
@@ -145,6 +147,17 @@ struct NewDeliveryView: View {
                     }
                 }
             }
+            .task(id: recordAttempt) {
+                guard recordAttempt > 0, draft.ordering == .placed,
+                      !draft.placedOrderIsRecorded, let order = draft.placedOrder
+                else { return }
+                do {
+                    try await store.record(order)
+                    draft.notePlacedOrderRecorded()
+                } catch {
+                    draft.notePlacedButUnrecorded(error)
+                }
+            }
             .task { await store.refresh() }
             // The first prices a beginner ever sees arrive with the explainer open
             // (board 3a). Both inputs matter and either can land last, so the observer
@@ -230,7 +243,8 @@ struct NewDeliveryView: View {
                     // token, so a later attempt reuses it rather than buying a second
                     // delivery.
                     unresolvedDone: { showsReview = false },
-                    reconcile: { reconcileAttempt += 1 }
+                    reconcile: { reconcileAttempt += 1 },
+                    retryRecording: { recordAttempt += 1 }
                 )
             }
         }

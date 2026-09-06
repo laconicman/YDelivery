@@ -113,7 +113,7 @@ extension NewDeliveryView {
                         }
                         // A stated size of nothing is not a size: three positive sides,
                         // or the toggle is off (review, PR #21).
-                        .disabled(hasSize && !sizeIsStated)
+                        .disabled(!itemIsStatable)
                     }
                 }
                 .onChange(of: hasSize) {
@@ -135,6 +135,17 @@ extension NewDeliveryView {
             if let words = selectedTariff?.fitWords(for: item) {
                 Text(words)
             }
+        }
+
+        /// The bounds this editor will not let a sender leave with: a stated size means
+        /// three positive sides, a stated weight or value means more than nothing, and a
+        /// count is at least one. Blank throughout is still fine — that removes the item.
+        private var itemIsStatable: Bool {
+            if item.isBlank { return true }
+            if hasSize && !sizeIsStated { return false }
+            if let weight = item.weightKg, weight <= 0 { return false }
+            if let cost = item.cost, cost <= 0 { return false }
+            return item.quantity >= 1
         }
 
         private var sizeIsStated: Bool {
