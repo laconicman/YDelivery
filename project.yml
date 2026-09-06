@@ -51,7 +51,8 @@ packages:
   YandexDeliveryExpress:
     url: https://github.com/laconicman/YandexDeliveryExpress
     minorVersion: 0.2.0
-  # The shared foundation below app + future widget/activity (DESIGN-HANDOFF §6):
+  # The shared foundation below app + future widget/activity (Design → the shared-package
+  # decision; DesignSystem holds its component contracts):
   # the semantic color set, StatusChip, and — from the store PR on — the order store.
   YDeliveryKit:
     path: YDeliveryKit
@@ -77,7 +78,8 @@ targets:
       groups: [signing]
       base:
         # The order store lives in the App Group container from day one — widgets read
-        # it directly (DESIGN-HANDOFF §6). File at the repo root per the house precedent.
+        # it directly (Design → "A point carries data, not coordinates"). File at the repo
+        # root per the house precedent.
         CODE_SIGN_ENTITLEMENTS: YDelivery.entitlements
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         ENABLE_PREVIEWS: YES
