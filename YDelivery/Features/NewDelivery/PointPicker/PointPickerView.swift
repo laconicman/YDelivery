@@ -81,8 +81,10 @@ struct PointPickerView: View {
                     confirm(PickedPlace(place.point), .replace(Contact(at: place.point)))
                     dismiss()
                 },
-                pickRecent: { address in
-                    guard let point = store.recentPoints.first(where: { $0.address == address }) else { return }
+                pickRecent: { id in
+                    guard let point = store.recentPoints.first(
+                        where: { StoreController.destinationKey($0) == id }
+                    ) else { return }
                     confirm(PickedPlace(point), .replace(Contact(at: point)))
                     dismiss()
                 },
@@ -162,7 +164,11 @@ extension PointPickerView.SearchContent.Recent {
     /// A remembered point as its row: the address, and the person who was at the door —
     /// never a timestamp (decision #10). Bridging lives at the root's side of the seam.
     init(_ point: RoutePoint) {
-        self.init(address: point.address, detail: point.contactName ?? "")
+        self.init(
+            id: StoreController.destinationKey(point),
+            address: point.address,
+            detail: point.contactName ?? ""
+        )
     }
 }
 

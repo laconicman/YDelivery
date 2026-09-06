@@ -83,7 +83,9 @@ final class StoreController {
     /// only the newest would offer a recent that restores the wrong apartment and the
     /// wrong contact (review, PR #18). The door details and the coordinates are part of
     /// the identity for exactly that reason.
-    private nonisolated static func destinationKey(_ point: RoutePoint) -> String {
+    /// Internal rather than private: the picker's rows identify themselves by the same
+    /// key, so what deduplicates a list and what selects from it cannot disagree.
+    nonisolated static func destinationKey(_ point: RoutePoint) -> String {
         let address = point.address.lowercased().trimmingCharacters(in: .whitespaces)
         let parts = point.addressParts.map {
             "\($0.entrance)|\($0.floor)|\($0.apartment)|\($0.intercom)".lowercased()

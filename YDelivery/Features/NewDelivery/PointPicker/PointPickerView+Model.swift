@@ -214,6 +214,12 @@ extension PointPickerView {
             searchText = ""
             isRefining = true
             adoptNewPoint()
+            // The point being replaced is gone the moment the search starts. Leaving it
+            // meant a failed search re-enabled Done over the *previous* destination —
+            // now stripped of the door details `adoptNewPoint` just cleared, so it would
+            // confirm somewhere the sender had already moved on from, incompletely
+            // (review, PR #18).
+            pin = nil
             beginLookup { [searchPlace, visibleRegion] in
                 try await searchPlace(query, visibleRegion)
             }
@@ -451,8 +457,15 @@ extension PointPickerView.Model {
     /// from such a provider report "could not expand" (review, PR #18). The body is
     /// discarded; only where it landed matters.
     nonisolated static let urlSessionExpander: LinkExpander = { url in
-        let (_, response) = try await URLSession.shared.data(from: url)
-        guard let final = response.url else { throw URLError(.badServerResponse) }
+        // Headers only. A short link may redirect anywhere, and `data(from:)` buffers
+        // whatever it finds there — an arbitrary body from an arbitrary host, for a
+        // request whose entire purpose is to learn one URL (review, PR #18). `bytes`
+        // returns once the response head has arrived; cancelling the task there means
+        // the body is never fetched.
+        let (bytes, response) = try await URLSession.shared.bytes(from: url)
+        bytes.task.cancel()
+        guard let final = response.url, final.scheme == "https" || final.scheme == "http"
+        else { throw URLError(.badServerResponse) }
         return final
     }
 

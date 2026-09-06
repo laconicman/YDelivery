@@ -108,6 +108,24 @@ struct StoreControllerTests {
         #expect(healthy.historyUnavailable == nil, "empty but readable explains nothing")
     }
 
+    @Test("Two doors at one address are two rows the picker can tell apart")
+    func recentRowsIdentifyTheirDoor() {
+        var twelve = RoutePoint(latitude: 55.75, longitude: 37.61, address: "Тверская, 6")
+        twelve.addressParts = AddressParts(apartment: "12")
+        twelve.contactName = "Иван"
+        var fortySix = RoutePoint(latitude: 55.75, longitude: 37.61, address: "Тверская, 6")
+        fortySix.addressParts = AddressParts(apartment: "46")
+        fortySix.contactName = "Анна"
+
+        let rows = [twelve, fortySix].map(PointPickerView.SearchContent.Recent.init)
+        #expect(rows[0].id != rows[1].id,
+                "one id for two doors let picking the second fill the first")
+
+        // And the id round-trips back to the right point.
+        let picked = [twelve, fortySix].first { StoreController.destinationKey($0) == rows[1].id }
+        #expect(picked?.contactName == "Анна")
+    }
+
     @Test("Recents cap at the limit — the empty-query list stays one screen tall")
     func recentsRespectLimit() {
         let orders = (0..<20).map { index in

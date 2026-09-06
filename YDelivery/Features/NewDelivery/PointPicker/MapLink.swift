@@ -59,13 +59,13 @@ nonisolated extension MapLink {
             return
         }
         guard let host = url.host()?.lowercased() else { return nil }
-        let parsed: MapLink? = if host.hasSuffix("yandex.ru") || host.hasSuffix("yandex.com") {
+        let parsed: MapLink? = if host.isWithin("yandex.ru") || host.isWithin("yandex.com") {
             Self.yandexMaps(url)
-        } else if host == "maps.app.goo.gl" || host == "goo.gl" || host.hasSuffix("google.com") {
+        } else if host == "maps.app.goo.gl" || host == "goo.gl" || host.isWithin("google.com") {
             Self.googleMaps(url, host: host)
-        } else if host.hasSuffix("2gis.ru") || host == "go.2gis.com" {
+        } else if host.isWithin("2gis.ru") || host == "go.2gis.com" {
             Self.twoGIS(url, host: host)
-        } else if host.hasSuffix("maps.apple.com") {
+        } else if host.isWithin("maps.apple.com") {
             Self.appleMaps(url)
         } else {
             nil
@@ -261,5 +261,15 @@ private nonisolated extension URL {
         return items.reduce(into: [:]) { result, item in
             result[item.name] = item.value
         }
+    }
+}
+
+private nonisolated extension String {
+    /// Whether this host is `domain` itself or a subdomain of it, matched on DNS label
+    /// boundaries. A bare `hasSuffix` accepts `notyandex.ru` and `evilgoogle.com`, which
+    /// would let an unrelated site's URL be read as a provider's map point and previewed
+    /// as a place (review, PR #18).
+    func isWithin(_ domain: String) -> Bool {
+        self == domain || hasSuffix(".\(domain)")
     }
 }

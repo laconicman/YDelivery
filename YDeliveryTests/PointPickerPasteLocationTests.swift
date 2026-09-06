@@ -234,8 +234,8 @@ struct PointPickerPasteLocationTests {
     @Test("While typing, matching recents pin above suggestions; an empty query pins none")
     func recentsMatchTheQuery() {
         let recents: [PointPickerView.SearchContent.Recent] = [
-            .init(address: "Москва, ул Москворечье, 6", detail: "Иван Петров"),
-            .init(address: "Москва, Арбат, 10", detail: ""),
+            .init(id: "a", address: "Москва, ул Москворечье, 6", detail: "Иван Петров"),
+            .init(id: "b", address: "Москва, Арбат, 10", detail: ""),
         ]
 
         #expect(PointPickerView.SearchContent.matching(recents, query: "москворечье").map(\.address)

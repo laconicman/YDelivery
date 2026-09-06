@@ -77,6 +77,30 @@ struct MapLinkTests {
         #expect(link == .noCoordinates(source: .twoGIS))
     }
 
+    @Test(
+        "A lookalike domain is not a provider — suffixes match on label boundaries",
+        arguments: [
+            "https://notyandex.ru/maps/?pt=37.62,55.75",
+            "https://evilgoogle.com/maps/@55.75,37.62,15z",
+            "https://not2gis.ru/geo/37.62,55.75",
+            "https://fakemaps.apple.com.example.org/?ll=55.75,37.62",
+        ]
+    )
+    func lookalikeDomainsAreNotProviders(link: String) {
+        #expect(MapLink(pasted: link) == nil,
+                "a suffix match would read an unrelated site's URL as a map point")
+    }
+
+    @Test("A real subdomain of a provider is still admitted by the host gate")
+    func subdomainsStillParse() {
+        // The path shape is the ordinary one; only the host is a subdomain here, which
+        // is the half the boundary check changed.
+        #expect(MapLink(pasted: "https://maps.yandex.ru/maps/?pt=37.668176,55.646068") == .point(
+            .init(latitude: 55.646068, longitude: 37.668176),
+            source: .yandexMaps
+        ))
+    }
+
     @Test("Yandex text may hold a bare lat,lon pair")
     func yandexSearchTextCoordinates() {
         let link = MapLink(pasted: "https://yandex.ru/maps/?text=55.762611,36.982528")

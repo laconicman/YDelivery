@@ -14,12 +14,15 @@ extension PointPickerView {
             let symbol: SFSymbol
         }
 
-        /// A remembered point, reduced to its row. Identity is the address — the
-        /// substrate deduplicates by it upstream (R8: identity from the datum).
+        /// A remembered point, reduced to its row. Identity is the *destination* — two
+        /// flats in one building share a street address and are different doors with
+        /// different people behind them, so keying the row on the address let picking one
+        /// fill the other (R8: identity from the datum; review, PR #18). The key is
+        /// computed where `RoutePoint` is known and arrives here as a plain value.
         struct Recent: Identifiable, Hashable {
+            let id: String
             let address: String
             let detail: String
-            var id: String { address }
         }
 
         let chips: [Chip]
@@ -415,8 +418,8 @@ extension PointPickerView.SearchContent {
                 .init(id: UUID(), name: "Склад на Невском", symbol: .building2),
             ],
             recents: [
-                .init(address: "Москва, ул Москворечье, 6", detail: "Москва · Иван Петров"),
-                .init(address: "Москва, Каширское шоссе, 52", detail: "Москва"),
+                .init(id: "moskvorechye-6", address: "Москва, ул Москворечье, 6", detail: "Москва · Иван Петров"),
+                .init(id: "kashirskoye-52", address: "Москва, Каширское шоссе, 52", detail: "Москва"),
             ],
             searchText: $text,
             suggestions: [],
