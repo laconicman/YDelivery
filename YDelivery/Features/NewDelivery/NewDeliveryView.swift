@@ -13,6 +13,8 @@ struct NewDeliveryView: View {
     @State private var estimateAttempt = 0
     @State private var offersAttempt = 0
     @State private var editingContactPoint: Model.Point?
+    @State private var editingItem: ParcelItem?
+    @State private var isEditingOptions = false
     @State private var showsExplainer = false
     /// The explainer opens itself once per compose session until the first order exists
     /// (board `3a`); after that it lives behind the ⓘ.
@@ -61,6 +63,10 @@ struct NewDeliveryView: View {
                 estimate: draft.estimate,
                 offers: draft.offers,
                 selectedOfferID: draft.selectedOfferID,
+                itemRows: contentItemRows,
+                optionsSummary: draft.options.summary,
+                whenSummary: draft.options.effective().whenSummary,
+                commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
@@ -73,20 +79,23 @@ struct NewDeliveryView: View {
                 retryEstimate: { estimateAttempt += 1 },
                 selectOffer: { draft.selectedOfferID = $0 },
                 retryOffers: { offersAttempt += 1 },
-                openExplainer: { showsExplainer = true }
+                openExplainer: { showsExplainer = true },
+                // A fresh item exists only in the sheet until Save: cancelling leaves
+                // no ghost row behind.
+                addItem: { editingItem = ParcelItem() },
+                editItem: { editingItem = draft.item(withID: $0) },
+                removeItems: { draft.removeItems(at: $0) },
+                editOptions: { isEditingOptions = true }
             )
-            // Structured re-pricing: the ids are the route itself, so any edit cancels
-            // the stale runs and starts the right ones; dismissal cancels outright. The
-            // estimate's id also carries its attempt count, so Retry re-runs the same
-            // owned task rather than a loose one racing it (review, PR #19).
+            // Structured re-pricing: the ids are what pricing answers to — the route for
+            // the estimate; route, parcel, and options for offers — so any edit cancels
+            // the stale run and starts the right one; dismissal cancels outright. Each id
+            // also carries its Retry's attempt count, so a retry is that same owned task
+            // run again rather than a loose one racing it (review, PR #19 and #20).
             .task(id: Run(inputs: draft.routeWaypoints, attempt: estimateAttempt)) {
                 await draft.calculateEstimate()
             }
-            // Offers answer to `offerWaypoints`, not the coordinates: the provider is
-            // sent `fullname` beside every pair, so correcting an address without moving
-            // the pin changes the price it would quote. Keying on coordinates alone let
-            // an edited address keep the old quote, and an order spend it (review, PR #20).
-            .task(id: Run(inputs: draft.offerWaypoints, attempt: offersAttempt)) {
+            .task(id: Run(inputs: draft.pricingInputs, attempt: offersAttempt)) {
                 await draft.loadOffers { try await session.offers(for: $0) }
             }
             .task { await store.refresh() }
@@ -132,6 +141,21 @@ struct NewDeliveryView: View {
                     title: point.role.contactPrompt,
                     contact: point.contact ?? Contact(),
                     save: { draft.setContact($0, for: point.id) }
+                )
+            }
+            .sheet(item: $editingItem) { item in
+                ItemEditor(
+                    item: item,
+                    stops: itemStops,
+                    selectedTariff: draft.chosenTariff,
+                    save: { draft.setItem($0) }
+                )
+            }
+            .sheet(isPresented: $isEditingOptions) {
+                OptionsEditor(
+                    options: draft.options,
+                    selectedTariff: draft.chosenTariff,
+                    save: { draft.options = $0 }
                 )
             }
         }
@@ -181,6 +205,28 @@ private extension NewDeliveryView {
         }
     }
 
+    var contentItemRows: [Content.ItemRow] {
+        draft.items.map { item in
+            Content.ItemRow(
+                id: item.id,
+                name: item.name.isEmpty ? String(localized: "Item") : item.name,
+                summary: item.summary,
+                misfit: draft.selectedOffer.flatMap { offer in
+                    offer.tariff.fits(item)
+                        ? nil
+                        : String(localized: "Doesn't fit \(offer.tariff.words)")
+                }
+            )
+        }
+    }
+
+    /// The stops an item can board or leave at — labels for the editor's pickers.
+    var itemStops: [ItemEditor.Stop] {
+        draft.points.compactMap { point in
+            point.place.map { ItemEditor.Stop(id: point.id, label: $0.displayAddress) }
+        }
+    }
+
     /// Every class the app knows, priced where the strip has a price — the explainer
     /// teaches the vocabulary even for classes the route was not offered.
     var explainerCards: [TariffExplainer.Card] {
@@ -188,7 +234,12 @@ private extension NewDeliveryView {
         let known: [TariffClass] = [.courier, .express, .cargo]
         let extra = offers.map(\.tariff).filter { !known.contains($0) }
         return (known + extra).map { tariff in
-            TariffExplainer.Card(tariff: tariff, offer: offers.first { $0.tariff == tariff })
+            TariffExplainer.Card(
+                tariff: tariff,
+                offer: offers.first { $0.tariff == tariff },
+                misfits: draft.itemsThatDontFit(tariff),
+                parcelIsTooHeavy: draft.parcelIsTooHeavy(for: tariff)
+            )
         }
     }
 }
@@ -226,7 +277,7 @@ extension NewDeliveryView.Model.Role {
         for: draft.points[0].id
     )
     draft.setContact(
-        Contact(name: "Иван Петров", phone: "+7 912 345-67-89"),
+        Contact(givenName: "Иван", familyName: "Петров", phone: "+7 912 345-67-89"),
         for: draft.points[0].id
     )
     draft.setPlace(
@@ -245,7 +296,7 @@ extension NewDeliveryView.Model.Role {
         for: draft.points[0].id
     )
     draft.setContact(
-        Contact(name: "Менеджер склада", phone: "+7 495 123-45-67", phoneExtension: "123"),
+        Contact(givenName: "Менеджер склада", phone: "+7 495 123-45-67", phoneExtension: "123"),
         for: draft.points[0].id
     )
     draft.setPlace(

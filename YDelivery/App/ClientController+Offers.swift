@@ -6,17 +6,17 @@ import YandexDeliveryExpressAPI
 // `Offer`s, and neither side ever sees `Components.Schemas.*`.
 
 extension ClientController {
-    /// Priced ways to run the route. Throws ``OffersUnavailable`` when signed out — the
-    /// strip renders an invitation, not an error — and rethrows transport/decoding
-    /// failures for the strip's failed state.
-    func offers(for waypoints: [OfferWaypoint]) async throws -> [Offer] {
+    /// Priced ways to run the route, the parcel and options counted in. Throws
+    /// ``OffersUnavailable`` when signed out — the strip renders an invitation, not an
+    /// error — and rethrows transport/decoding failures for the strip's failed state.
+    func offers(for request: OfferRequest) async throws -> [Offer] {
         guard let client else { throw OffersUnavailable() }
         let response = try await client.calculateOffers(
             .init(
                 // The provider answers in the market's language; the strip renders the
                 // app's own words, so the header stays fixed rather than tracking locale.
                 headers: .init(acceptLanguage: .ru),
-                body: .json(Self.offersRequest(for: waypoints))
+                body: .json(Self.offersRequest(for: request))
             )
         )
         let wire = try response.ok.body.json.offers
@@ -29,22 +29,108 @@ extension ClientController {
         return offers
     }
 
-    /// The request, built flat. **Coordinates are `[longitude, latitude]` on the wire** —
-    /// the one ordering bug that yields a plausible wrong answer instead of an error
-    /// (handoff §4), which is why this mapping is a pure function with a test pinning
-    /// the order.
+    /// The request, built flat. **Coordinates are `[longitude, latitude]` on the wire**,
+    /// and **item sizes are metres** where the sender typed centimetres — the two silent
+    /// unit traps of handoff §4, each pinned by a test. Item point ids resolve against
+    /// the same one-based visit order the route points carry.
     nonisolated static func offersRequest(
-        for waypoints: [OfferWaypoint]
+        for request: OfferRequest
     ) -> Components.Schemas.OffersCalculateRequest {
-        .init(
-            routePoints: waypoints.enumerated().map { index, waypoint in
+        // `nil` means the route's ends, and by `OfferRequest`'s initializer it is the
+        // *only* thing it can mean — every surviving id resolves.
+        let pointID: (UUID?, _ fallback: Int) -> Int64 = { id, fallback in
+            Int64(id.flatMap { candidate in
+                request.waypoints.firstIndex { $0.pointID == candidate }.map { $0 + 1 }
+            } ?? fallback)
+        }
+        return .init(
+            routePoints: request.waypoints.enumerated().map { index, waypoint in
                 .init(
                     id: Int64(index + 1),
                     fullname: waypoint.address,
                     coordinates: [waypoint.longitude, waypoint.latitude]
                 )
-            }
+            },
+            items: request.items.isEmpty ? nil : request.items.map { item in
+                .init(
+                    quantity: item.quantity,
+                    pickupPoint: pointID(item.pickupPointID, 1),
+                    dropoffPoint: pointID(item.dropoffPointID, request.waypoints.count),
+                    size: item.size.map {
+                        .init(
+                            length: $0.lengthCm / 100,
+                            width: $0.widthCm / 100,
+                            height: $0.heightCm / 100
+                        )
+                    },
+                    weight: item.weightKg
+                )
+            },
+            requirements: Self.requirements(for: request.options)
         )
+    }
+
+    /// Only what departs from the provider's defaults goes on the wire; all-default
+    /// options send no container at all.
+    ///
+    /// `due` is priced, not merely recorded: a scheduled pickup is what the provider
+    /// searches for, and quoting it as immediate returns a price for a different job
+    /// (review, PR #21). It counts toward the container being non-empty for the same
+    /// reason — a due-only request must keep its `requirements`.
+    private nonisolated static func requirements(
+        for options: DeliveryOptions
+    ) -> Components.Schemas.OfferRequirements? {
+        let requirements = Components.Schemas.OfferRequirements(
+            cargoLoaders: options.loaders > 0 ? options.loaders : nil,
+            cargoOptions: options.thermobag ? [.thermobag] : nil,
+            due: options.due,
+            proCourier: options.proCourier ? true : nil,
+            skipDoorToDoor: options.toDoor ? nil : true
+        )
+        let isEmpty = requirements.cargoLoaders == nil
+            && requirements.cargoOptions == nil
+            && requirements.due == nil
+            && requirements.proCourier == nil
+            && requirements.skipDoorToDoor == nil
+        return isEmpty ? nil : requirements
+    }
+}
+
+/// Everything an offers request needs, in app vocabulary — assembled by the draft,
+/// mapped here.
+nonisolated struct OfferRequest: Hashable, Sendable {
+    var waypoints: [RequestWaypoint]
+    private(set) var items: [ParcelItem]
+    var options: DeliveryOptions
+
+    /// Item stops are normalised against these waypoints on the way in: an id naming no
+    /// waypoint here becomes `nil`. That is what lets the mapping below read `nil` as
+    /// exactly one thing — "the route's ends", the documented default — rather than as
+    /// either that *or* a stop that has since been deleted. Collapsing those two is how
+    /// an item silently changes where it travels (review, PR #21).
+    ///
+    /// The draft repairs its own items when a stop goes, so this should never have work
+    /// to do. It is here because the mapping's correctness should not depend on that:
+    /// the boundary type makes the ambiguous state unrepresentable instead.
+    init(waypoints: [RequestWaypoint], items: [ParcelItem], options: DeliveryOptions) {
+        self.waypoints = waypoints
+        self.options = options
+        let live = Set(waypoints.map(\.pointID))
+        self.items = items.map { item in
+            var item = item
+            if let id = item.pickupPointID, !live.contains(id) { item.pickupPointID = nil }
+            if let id = item.dropoffPointID, !live.contains(id) { item.dropoffPointID = nil }
+            return item
+        }
+    }
+
+    /// A waypoint that remembers which draft point it was, so items can name their
+    /// boarding and leaving stops.
+    nonisolated struct RequestWaypoint: Hashable, Sendable {
+        var pointID: UUID
+        var latitude: Double
+        var longitude: Double
+        var address: String
     }
 }
 

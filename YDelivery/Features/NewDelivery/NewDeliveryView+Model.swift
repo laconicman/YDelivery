@@ -75,9 +75,36 @@ extension NewDeliveryView {
         private(set) var estimate: Estimate = .idle
         private(set) var offers: Offers = .idle
 
+        /// What the courier carries (board `3d`). Empty is a valid draft — the provider
+        /// then prices against the class's maximum dimensions.
+        private(set) var items: [ParcelItem] = []
+        var options = DeliveryOptions()
+
         /// The card the order button will spend — auto-selected to the first offer when
-        /// prices land, switchable by tapping the strip.
-        var selectedOfferID: Offer.ID?
+        /// prices land, switchable by tapping the strip. Changing class renormalizes the
+        /// options that are bound to one (§4): a thermal bag cannot leave with anything
+        /// but a courier, loaders only ride the cargo van — enforced here, never
+        /// discovered via API errors.
+        var selectedOfferID: Offer.ID? {
+            didSet {
+                if let tariff = selectedOffer?.tariff { chosenTariff = tariff }
+                normalizeOptions()
+            }
+        }
+
+        /// The class the sender last chose, kept independently of ``offers``.
+        /// `selectedOffer` reads through that state and goes nil the moment repricing
+        /// starts — which is not the sender changing their mind, and everything that asks
+        /// "which class is this for" got the wrong answer during a reload: the options
+        /// editor clamped a multi-day cargo pickup into four hours, the item editor's
+        /// bounds went blank (review, PR #21).
+        private(set) var chosenTariff: TariffClass?
+
+        private func normalizeOptions() {
+            guard let tariff = selectedOffer?.tariff else { return }
+            if tariff != .courier { options.thermobag = false }
+            if tariff != .cargo { options.loaders = 0 }
+        }
 
         private let estimateRoute: RouteEstimator
 
@@ -165,6 +192,47 @@ extension NewDeliveryView {
                 .map { points[$0] }
             guard remaining.contains(where: { $0.role == .dropoff }) else { return }
             points = remaining
+            repairItemJourneys()
+        }
+
+        /// An item names the stop it boards and the stop it leaves at. Two edits can make
+        /// that pair untrue: deleting a named stop leaves the name pointing at nothing,
+        /// and reordering can put the handover *before* the pickup. Both are repaired
+        /// here, because both mean the same thing downstream — a journey the sender did
+        /// not describe (review, PR #21).
+        ///
+        /// Forgetting is the honest repair: `nil` genuinely means the route's ends, which
+        /// is the common case and what the item editor offers by default. Keeping a
+        /// dangling or reversed id and resolving it later would be the silent version of
+        /// the same thing.
+        private func repairItemJourneys() {
+            let order = Dictionary(uniqueKeysWithValues: points.enumerated().map { ($1.id, $0) })
+            for index in items.indices {
+                if let id = items[index].pickupPointID, order[id] == nil {
+                    items[index].pickupPointID = nil
+                }
+                if let id = items[index].dropoffPointID, order[id] == nil {
+                    items[index].dropoffPointID = nil
+                }
+                // A box cannot be handed over before it is collected, nor at the door it
+                // was collected from. A default end is a position too — `nil` pickup is
+                // the route's start, `nil` handover its end — so a pair with one default
+                // can be just as impossible as one with neither (review, PR #21). The
+                // handover is the half that gives way, since the pickup is where the
+                // parcel physically is.
+                let pickup = items[index].pickupPointID.flatMap { order[$0] } ?? 0
+                let handover = items[index].dropoffPointID.flatMap { order[$0] }
+                    ?? max(points.count - 1, 0)
+                if handover <= pickup {
+                    items[index].dropoffPointID = nil
+                    // Clearing the handover restores the route's end; if the pickup is
+                    // itself the last stop, the pair is still impossible and the pickup
+                    // is what has to give.
+                    if pickup >= max(points.count - 1, 0) {
+                        items[index].pickupPointID = nil
+                    }
+                }
+            }
         }
 
         /// Reorders stops. The pickup is pinned first and the return last; a move that
@@ -175,6 +243,7 @@ extension NewDeliveryView {
             guard source.allSatisfy({ $0 >= lowerBound && $0 < upperBound }) else { return }
             let clamped = min(max(destination, lowerBound), upperBound)
             points.move(fromOffsets: source, toOffset: clamped)
+            repairItemJourneys()
         }
 
         func setPlace(_ place: PickedPlace, for id: Point.ID) {
@@ -231,17 +300,70 @@ extension NewDeliveryView {
             }
         }
 
+        // MARK: Parcel
+
+        func item(withID id: ParcelItem.ID) -> ParcelItem? {
+            items.first { $0.id == id }
+        }
+
+        /// A blank card saves as nothing — the «Add an item» invitation returns. The
+        /// journey is repaired on the way in as well: the editor's pickers now decline
+        /// an impossible pair, and the model does not depend on them to.
+        func setItem(_ item: ParcelItem) {
+            defer { repairItemJourneys() }
+            guard let index = items.firstIndex(where: { $0.id == item.id }) else {
+                if !item.isBlank { items.append(item) }
+                return
+            }
+            if item.isBlank {
+                items.remove(at: index)
+            } else {
+                items[index] = item
+            }
+        }
+
+        func removeItems(at offsets: IndexSet) {
+            items.remove(atOffsets: offsets)
+        }
+
+        /// The heaviest reading of the parcel against a class's bounds — what the strip
+        /// and the explainer warn with (board `3a`: the mismatch note).
+        func itemsThatDontFit(_ tariff: TariffClass) -> [ParcelItem] {
+            items.filter { !tariff.fits($0) }
+        }
+
+        /// True when every box passes on its own and the parcel is still too heavy for
+        /// the class — the case no per-row warning can show, because no row is at fault
+        /// (review, PR #21).
+        func parcelIsTooHeavy(for tariff: TariffClass) -> Bool {
+            !items.isEmpty
+                && items.allSatisfy { tariff.fits($0) }
+                && !tariff.fitsParcel(items)
+        }
+
         // MARK: Offers
 
-        /// The route as an offers request sees it — address included, since the provider
-        /// wants `fullname` beside every coordinate pair.
-        var offerWaypoints: [OfferWaypoint] {
-            guard isRouteComplete else { return [] }
-            return points.compactMap { point in
+        /// Everything pricing answers to — route, parcel, options. Also the re-price
+        /// trigger: the root's `.task(id:)` watches this, so an edit to any of the three
+        /// cancels the stale run.
+        var pricingInputs: OfferRequest? {
+            guard isRouteComplete else { return nil }
+            let waypoints = points.compactMap { point in
                 point.place.map {
-                    OfferWaypoint(latitude: $0.latitude, longitude: $0.longitude, address: $0.address)
+                    OfferRequest.RequestWaypoint(
+                        pointID: point.id,
+                        latitude: $0.latitude,
+                        longitude: $0.longitude,
+                        address: $0.address
+                    )
                 }
             }
+            // The note the courier reads is carried to claim creation, never to pricing —
+            // the offers request has nowhere to put it. Leaving it in the identity made
+            // every keystroke in that field re-fetch identical offers (review, PR #21).
+            var priced = options.effective()
+            priced.comment = ""
+            return OfferRequest(waypoints: waypoints, items: items, options: priced)
         }
 
         /// Loads priced offers through the caller's fetch — the root view hands in the
@@ -249,21 +371,28 @@ extension NewDeliveryView {
         /// selection survives a reload when the same offer returns; otherwise the first
         /// offer is selected, so the strip always has an answer for the order button.
         func loadOffers(
-            _ fetch: ([OfferWaypoint]) async throws -> [Offer]
+            _ fetch: (OfferRequest) async throws -> [Offer]
         ) async {
-            let waypoints = offerWaypoints
-            guard waypoints.count >= 2 else {
+            guard let request = pricingInputs else {
                 offers = .idle
                 selectedOfferID = nil
                 return
             }
             offers = .loading
             do {
-                let loaded = try await fetch(waypoints)
+                let loaded = try await fetch(request)
                 guard !Task.isCancelled else { return }
+                // Payloads are short-lived, so matching the selection by id alone moved
+                // the sender to the first class on every recalculation — and the `didSet`
+                // then renormalised away the options bound to the class they had chosen
+                // (review, PR #21). The *class* is what they picked; the payload is only
+                // what gets spent.
                 offers = .ready(loaded)
                 if !loaded.contains(where: { $0.id == selectedOfferID }) {
-                    selectedOfferID = loaded.first?.id
+                    let sameClass = chosenTariff.flatMap { tariff in
+                        loaded.first { $0.tariff == tariff }
+                    }
+                    selectedOfferID = (sameClass ?? loaded.first)?.id
                 }
             } catch is CancellationError {
             } catch is OffersUnavailable {
@@ -294,6 +423,10 @@ extension NewDeliveryView {
             points[index].role = role
             if role == .return {
                 points.append(points.remove(at: index))
+                // Becoming the return moves this stop behind the others, which can put an
+                // item's handover before its pickup exactly as a drag would (review,
+                // PR #21). Every path that changes visit order repairs the journeys.
+                repairItemJourneys()
             }
         }
     }

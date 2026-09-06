@@ -60,7 +60,12 @@ of concerns, low coupling / high cohesion first. Error types conform to `Localiz
 with a filled `errorDescription` where they could ever surface — a properly filled error
 can be passed around and displayed as is (author, 2026-09-02). Prefer implicit returns
 wherever the compiler allows, including single-expression `switch`/`if` expressions
-(author, 2026-09-02).
+(author, 2026-09-02). No magic numbers or strings: shared measures come from
+`YDeliveryKit`'s `Layout` tokens, one-off measures are *named* constants beside their
+component, and repeated string fragments (separators, joins) get one named home (author,
+2026-09-06). Person names are explicit components (`givenName`/`familyName`) concatenated
+via `PersonNameComponents`/its formatter, parsed with its parse strategy — never
+hand-split or hand-joined (author, 2026-09-06).
 
 ## Related skills
 

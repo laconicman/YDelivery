@@ -8,12 +8,16 @@ import YandexDeliveryExpressAPI
 @Suite("Offers mapping")
 @MainActor
 struct ClientControllerOffersTests {
+    private func request(_ waypoints: [OfferRequest.RequestWaypoint]) -> OfferRequest {
+        OfferRequest(waypoints: waypoints, items: [], options: DeliveryOptions())
+    }
+
     @Test("Coordinates go lon,lat on the wire — the trap that answers plausibly, not loudly")
     func coordinatesAreLonLatOnTheWire() {
-        let request = ClientController.offersRequest(for: [
-            OfferWaypoint(latitude: 55.646068, longitude: 37.668176, address: "Москва, ул Москворечье, 6"),
-            OfferWaypoint(latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52"),
-        ])
+        let request = ClientController.offersRequest(for: request([
+            .init(pointID: UUID(), latitude: 55.646068, longitude: 37.668176, address: "Москва, ул Москворечье, 6"),
+            .init(pointID: UUID(), latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52"),
+        ]))
 
         #expect(request.routePoints[0].coordinates == [37.668176, 55.646068],
                 "longitude first (handoff §4) — a swap pins the Barents Sea, silently")
@@ -22,14 +26,54 @@ struct ClientControllerOffersTests {
 
     @Test("Point ids are one-based visit order, and the courier-readable address rides along")
     func requestCarriesOrderAndAddresses() {
-        let request = ClientController.offersRequest(for: [
-            OfferWaypoint(latitude: 1, longitude: 2, address: "Первый"),
-            OfferWaypoint(latitude: 3, longitude: 4, address: "Второй"),
-            OfferWaypoint(latitude: 5, longitude: 6, address: "Третий"),
-        ])
+        let request = ClientController.offersRequest(for: request([
+            .init(pointID: UUID(), latitude: 1, longitude: 2, address: "Первый"),
+            .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Второй"),
+            .init(pointID: UUID(), latitude: 5, longitude: 6, address: "Третий"),
+        ]))
 
         #expect(request.routePoints.map(\.id) == [1, 2, 3])
         #expect(request.routePoints.map(\.fullname) == ["Первый", "Второй", "Третий"])
+    }
+
+    @Test("A scheduled pickup is priced as scheduled, not as immediate")
+    func scheduledPickupReachesPricing() {
+        let due = Date(timeIntervalSince1970: 1_800_000_000)
+        var options = DeliveryOptions()
+        options.due = due
+        let wire = ClientController.offersRequest(for: OfferRequest(
+            waypoints: [
+                .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А"),
+                .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Б"),
+            ],
+            items: [],
+            options: options
+        ))
+
+        #expect(wire.requirements?.due == due,
+                "the provider searches for the time asked; quoting it as now prices another job")
+    }
+
+    @Test("A due on its own keeps the requirements container it is the only member of")
+    func dueOnlyKeepsItsContainer() {
+        var options = DeliveryOptions()
+        options.due = Date(timeIntervalSince1970: 1_800_000_000)
+        let scheduled = ClientController.offersRequest(for: OfferRequest(
+            waypoints: [
+                .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А"),
+                .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Б"),
+            ],
+            items: [],
+            options: options
+        ))
+        #expect(scheduled.requirements != nil)
+
+        let immediate = ClientController.offersRequest(for: request([
+            .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А"),
+            .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Б"),
+        ]))
+        #expect(immediate.requirements == nil,
+                "all-default options still send no container at all")
     }
 
     @Test("A wire offer reads into the app's vocabulary; the with-VAT total is the price")
@@ -83,10 +127,10 @@ struct ClientControllerOffersTests {
     func signedOutThrowsUnavailable() async {
         let controller = ClientController(tokenStore: TokenStore(service: "test.offers.\(UUID())"))
         await #expect(throws: OffersUnavailable.self) {
-            _ = try await controller.offers(for: [
-                OfferWaypoint(latitude: 1, longitude: 2, address: "А"),
-                OfferWaypoint(latitude: 3, longitude: 4, address: "Б"),
-            ])
+            _ = try await controller.offers(for: request([
+                .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А"),
+                .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Б"),
+            ]))
         }
     }
 }

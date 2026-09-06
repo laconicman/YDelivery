@@ -30,11 +30,25 @@ extension NewDeliveryView {
             let badge: PointBadge.Role
         }
 
+        /// One parcel item, reduced to its row.
+        struct ItemRow: Identifiable {
+            let id: UUID
+            let name: String
+            let summary: String
+            /// Filled when the item is known not to fit the selected class — the row
+            /// carries the warning words, never color alone.
+            let misfit: String?
+        }
+
         let rows: [Row]
         let pins: [Pin]
         let estimate: NewDeliveryView.Model.Estimate
         let offers: NewDeliveryView.Model.Offers
         let selectedOfferID: Offer.ID?
+        let itemRows: [ItemRow]
+        let optionsSummary: String
+        let whenSummary: String
+        let commentSummary: String?
         let canSwap: Bool
         let canReorder: Bool
         let pick: (UUID) -> Void
@@ -48,6 +62,10 @@ extension NewDeliveryView {
         let selectOffer: (Offer.ID) -> Void
         let retryOffers: () -> Void
         let openExplainer: () -> Void
+        let addItem: () -> Void
+        let editItem: (UUID) -> Void
+        let removeItems: (IndexSet) -> Void
+        let editOptions: () -> Void
 
         @State private var camera: MapCameraPosition = .automatic
         @State private var editMode: EditMode = .inactive
@@ -59,16 +77,39 @@ extension NewDeliveryView {
                     // every mark clear of the bar instead of hiding the end pin under it.
                     .safeAreaInset(edge: .bottom) {
                         EstimateBar(estimate: estimate, retry: retryEstimate)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 10)
+                            .padding(.horizontal, Layout.Spacing.edge)
+                            .padding(.bottom, Layout.Spacing.cards)
                     }
-                    .containerRelativeFrame(.vertical) { length, _ in length * 0.33 }
+                    .containerRelativeFrame(.vertical) { length, _ in length * Self.mapShare }
                 routeCard
             }
         }
 
+        /// The board's proportion: the map above, the card fully readable below (`1b`).
+        private static let mapShare: CGFloat = 1.0 / 3.0
+
         private var estimateLegs: [[RouteEstimate.Coordinate]] {
             if case .ready(let estimate) = estimate { estimate.legs } else { [] }
+        }
+
+        /// One summary line per group, expanding to typed rows — the draft reads in
+        /// three seconds; density lives one tap down (DesignSystem → field rule 1).
+        private func summaryRow(symbol: SFSymbol, title: LocalizedStringKey, value: String) -> some View {
+            HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
+                Image(systemSymbol: symbol)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                    Text(title)
+                    Text(value)
+                        .font(.footnote)
+                        .foregroundStyle(Color.secondary)
+                }
+                Spacer()
+                Image(systemSymbol: .chevronForward)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
         }
 
         private var routeCard: some View {
@@ -102,7 +143,12 @@ extension NewDeliveryView {
                             select: selectOffer,
                             retry: retryOffers
                         )
-                        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                        .listRowInsets(EdgeInsets(
+                            top: Layout.Spacing.tight,
+                            leading: Layout.Spacing.gutter,
+                            bottom: Layout.Spacing.tight,
+                            trailing: Layout.Spacing.gutter
+                        ))
                         .listRowBackground(Color.clear)
                     } header: {
                         HStack {
@@ -116,6 +162,59 @@ extension NewDeliveryView {
                         }
                     }
                 }
+
+                Section {
+                    ForEach(itemRows) { item in
+                        Button {
+                            editItem(item.id)
+                        } label: {
+                            HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
+                                Image(systemSymbol: .shippingbox)
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                                    Text(item.name)
+                                    Text(item.summary)
+                                        .font(.footnote)
+                                        .foregroundStyle(Color.secondary)
+                                    if let misfit = item.misfit {
+                                        Label(misfit, systemSymbol: .exclamationmarkTriangle)
+                                            .font(.footnote)
+                                            .foregroundStyle(Color.secondary)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .onDelete(perform: removeItems)
+
+                    Button(action: addItem) {
+                        Label(itemRows.isEmpty ? "What's inside" : "Add an item", systemSymbol: .plus)
+                    }
+                } header: {
+                    Text("Parcel")
+                } footer: {
+                    Text("The declared value is what the insurance covers.")
+                }
+
+                Section {
+                    Button(action: editOptions) {
+                        summaryRow(symbol: .gearshape, title: "Options", value: optionsSummary)
+                    }
+                    Button(action: editOptions) {
+                        summaryRow(symbol: .clock, title: "When", value: whenSummary)
+                    }
+                    Button(action: editOptions) {
+                        summaryRow(
+                            symbol: .pencilLine,
+                            title: "Note for the courier",
+                            value: commentSummary ?? String(localized: "not set")
+                        )
+                    }
+                }
+                .buttonStyle(.plain)
             }
             .environment(\.editMode, $editMode)
             .onChange(of: rows.count) {
@@ -126,11 +225,14 @@ extension NewDeliveryView {
             }
         }
 
+        /// Row actions sit apart so a thumb cannot confuse them.
+        private static let actionSpacing: CGFloat = 24
+
         /// The card's own affordances (board `2b`): two points swap; three or more
         /// reorder. Swap stays visible but disabled while an end is empty — unavailable
         /// affordances state themselves rather than vanish (DesignSystem → field rules).
         private var actions: some View {
-            HStack(spacing: 24) {
+            HStack(spacing: Self.actionSpacing) {
                 if rows.count == 2 {
                     Button(action: swapEnds) {
                         Label("Swap", systemSymbol: .arrowUpArrowDown)
@@ -169,13 +271,17 @@ extension NewDeliveryView.Content {
         let legs: [[RouteEstimate.Coordinate]]
         @Binding var camera: MapCameraPosition
 
+        private static let routeLineWidth: CGFloat = 5
+        private static let markShadowRadius: CGFloat = 1.5
+        private static let markShadowDrop: CGFloat = 1
+
         var body: some View {
             Map(position: $camera) {
                 ForEach(Array(legs.enumerated()), id: \.offset) { _, leg in
                     MapPolyline(coordinates: leg.map {
                         CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                     })
-                    .stroke(.tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .stroke(.tint, style: StrokeStyle(lineWidth: Self.routeLineWidth, lineCap: .round))
                 }
                 ForEach(pins) { pin in
                     Annotation(
@@ -187,7 +293,7 @@ extension NewDeliveryView.Content {
                         anchor: pin.badge.mapAnchor
                     ) {
                         PointBadge(role: pin.badge)
-                            .shadow(radius: 1.5, y: 1)
+                            .shadow(radius: Self.markShadowRadius, y: Self.markShadowDrop)
                     } label: {
                         EmptyView()
                     }
@@ -218,7 +324,7 @@ extension NewDeliveryView.Content {
 
         var body: some View {
             if estimate != .idle {
-                HStack(spacing: 6) {
+                HStack(spacing: Layout.Spacing.chip) {
                     switch estimate {
                     case .idle:
                         EmptyView()
@@ -243,9 +349,9 @@ extension NewDeliveryView.Content {
                 }
                 .font(.subheadline)
                 .lineLimit(1)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 36)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, Layout.Spacing.gutter)
+                .frame(minHeight: Layout.MinHeight.bar)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Layout.Radius.bar))
             }
         }
     }
@@ -269,8 +375,8 @@ extension NewDeliveryView.Content {
             case .idle:
                 EmptyView()
             case .loading:
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: Layout.Spacing.chip) {
+                    HStack(spacing: Layout.Spacing.cards) {
                         ForEach(TariffClass.placeholders, id: \.self) { tariff in
                             TariffCard(
                                 emoji: tariff.emoji,
@@ -301,7 +407,7 @@ extension NewDeliveryView.Content {
                 .frame(minHeight: 88)
             case .ready(let offers):
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 10) {
+                    HStack(alignment: .top, spacing: Layout.Spacing.cards) {
                         ForEach(offers) { offer in
                             TariffCard(
                                 emoji: offer.tariff.emoji,
@@ -322,12 +428,12 @@ extension NewDeliveryView.Content {
                     Button("Retry", action: retry)
                 }
                 .font(.subheadline)
-                .frame(minHeight: 88)
+                .frame(minHeight: Layout.MinHeight.strip)
             case .signedOut:
                 Text("Add your Yandex Delivery token in Settings to see prices. The route and parcel can be drafted meanwhile.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .frame(minHeight: 88)
+                    .frame(minHeight: Layout.MinHeight.strip)
             }
         }
     }
@@ -342,11 +448,18 @@ extension NewDeliveryView.Content {
         let isSelected: Bool
         let select: () -> Void
 
+        /// The selected card holds room for its bounds line; the rest compress (board
+        /// `1b`). Component-local measures, named rather than inlined.
+        private static let selectedMinWidth: CGFloat = 150
+        private static let compactMinWidth: CGFloat = 96
+        private static let selectionStroke: CGFloat = 2
+        private static let hairlineStroke: CGFloat = 0.5
+
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         var body: some View {
             Button(action: select) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Layout.Spacing.tight) {
                     Text(emoji)
                         .font(.title2)
                     Text(name)
@@ -365,12 +478,15 @@ extension NewDeliveryView.Content {
                         // (DesignSystem → "Motion"); Reduce Motion gets the instant swap.
                         .contentTransition(reduceMotion ? .identity : .numericText())
                 }
-                .padding(12)
-                .frame(minWidth: isSelected ? 150 : 96, alignment: .leading)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                .padding(Layout.Spacing.gutter)
+                .frame(minWidth: isSelected ? Self.selectedMinWidth : Self.compactMinWidth, alignment: .leading)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: Layout.Radius.card))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(isSelected ? Color.accentColor : Color(.separator), lineWidth: isSelected ? 2 : 0.5)
+                    RoundedRectangle(cornerRadius: Layout.Radius.card)
+                        .strokeBorder(
+                            isSelected ? Color.accentColor : Color(.separator),
+                            lineWidth: isSelected ? Self.selectionStroke : Self.hairlineStroke
+                        )
                 }
             }
             .buttonStyle(.plain)
@@ -399,9 +515,9 @@ extension NewDeliveryView.Content {
         let setRole: (NewDeliveryView.Model.Role) -> Void
 
         var body: some View {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
                 PointBadge(role: row.badge)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
                     Button(action: pick) {
                         Group {
                             if let address = row.address {
@@ -530,6 +646,10 @@ private extension MKCoordinateRegion {
         estimate: .idle,
         offers: .idle,
         selectedOfferID: nil,
+        itemRows: [],
+        optionsSummary: "to the door",
+        whenSummary: "as soon as possible",
+        commentSummary: nil,
         canSwap: false,
         canReorder: false,
         pick: { _ in },
@@ -542,7 +662,11 @@ private extension MKCoordinateRegion {
         retryEstimate: {},
         selectOffer: { _ in },
         retryOffers: {},
-        openExplainer: {}
+        openExplainer: {},
+        addItem: {},
+        editItem: { _ in },
+        removeItems: { _ in },
+        editOptions: {}
     )
 }
 
@@ -585,6 +709,12 @@ private extension MKCoordinateRegion {
             Offer(tariff: .cargo, price: 3400, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-3"),
         ]),
         selectedOfferID: "offer-2",
+        itemRows: [
+            .init(id: UUID(), name: "Комплект учебников", summary: "5 pcs · 2 kg · 25 × 18 × 15 cm · 2 500 ₽", misfit: nil),
+        ],
+        optionsSummary: "pro courier · to the door",
+        whenSummary: "as soon as possible",
+        commentSummary: nil,
         canSwap: true,
         canReorder: false,
         pick: { _ in },
@@ -597,7 +727,11 @@ private extension MKCoordinateRegion {
         retryEstimate: {},
         selectOffer: { _ in },
         retryOffers: {},
-        openExplainer: {}
+        openExplainer: {},
+        addItem: {},
+        editItem: { _ in },
+        removeItems: { _ in },
+        editOptions: {}
     )
 }
 
@@ -655,7 +789,7 @@ private extension MKCoordinateRegion {
 }
 
 #Preview("Tariff card: selected shows its bounds, unselected stays scannable") {
-    HStack(alignment: .top, spacing: 12) {
+    HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
         NewDeliveryView.Content.TariffCard(
             emoji: "🛵",
             name: "Courier",
