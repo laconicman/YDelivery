@@ -1,3 +1,4 @@
+import SFSafeSymbols
 import SwiftUI
 import YDeliveryKit
 
@@ -17,6 +18,10 @@ extension NewDeliveryView {
             let explanation: String?
             let limits: [String]
             let priceText: String?
+            /// What in this parcel this class cannot take, when anything doesn't fit.
+            /// The strip warns per item; here the sender learns *which class* the box
+            /// rules out, which is the vocabulary the explainer exists to teach.
+            var misfit: String? = nil
 
             var id: String { name }
         }
@@ -71,6 +76,11 @@ extension NewDeliveryView.TariffExplainer {
                         Text(limit)
                             .font(.footnote)
                     }
+                    if let misfit = card.misfit {
+                        Label(misfit, systemSymbol: .exclamationmarkTriangle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 if let priceText = card.priceText {
@@ -85,14 +95,26 @@ extension NewDeliveryView.TariffExplainer {
 
 extension NewDeliveryView.TariffExplainer.Card {
     /// A class and, when the strip already has one, its price.
-    init(tariff: TariffClass, offer: Offer?) {
+    init(tariff: TariffClass, offer: Offer?, misfits: [ParcelItem] = []) {
         self.init(
             name: tariff.words,
             emoji: tariff.emoji,
             explanation: tariff.explanation,
             limits: tariff.limits,
-            priceText: offer?.priceText
+            priceText: offer?.priceText,
+            misfit: misfits.isEmpty ? nil : Self.misfitWords(misfits)
         )
+    }
+
+    /// Names what doesn't fit rather than counting it — «Комплект учебников won't fit»
+    /// tells the sender which box to reconsider; «1 item won't fit» sends them looking.
+    private static func misfitWords(_ items: [ParcelItem]) -> String {
+        let named = items.map { item in
+            item.name.trimmingCharacters(in: .whitespaces).isEmpty
+                ? String(localized: "one item")
+                : item.name
+        }
+        return String(localized: "Won't fit: \(named.formatted(.list(type: .and)))")
     }
 }
 

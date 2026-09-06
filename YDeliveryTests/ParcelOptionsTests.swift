@@ -62,6 +62,93 @@ struct ParcelOptionsTests {
         #expect(items[1].dropoffPoint == 3, "nil reads as the route's end")
     }
 
+    @Test("Deleting a stop an item named releases the reference rather than rerouting it")
+    func deletingAStopReleasesItemReferences() {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "А"), for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Б"), for: model.points[1].id)
+        let middle = model.addStop()
+        model.setPlace(PickedPlace(latitude: 55.70, longitude: 37.63, address: "Между"), for: middle)
+
+        var item = ParcelItem()
+        item.name = "Коробка"
+        item.dropoffPointID = middle
+        model.setItem(item)
+
+        // The stop the item was going to leave at goes away.
+        let index = model.points.firstIndex { $0.id == middle }!
+        model.removePoints(at: IndexSet(integer: index))
+
+        #expect(model.items[0].dropoffPointID == nil,
+                "a reference to nothing would read downstream as 'no preference' and move the box")
+    }
+
+    @Test("A request cannot carry an item stop it has no waypoint for")
+    func requestNormalisesDanglingItemStops() throws {
+        let first = UUID()
+        let last = UUID()
+        var item = ParcelItem()
+        item.name = "Коробка"
+        item.dropoffPointID = UUID() // a stop that is not in this route
+
+        let request = OfferRequest(
+            waypoints: [waypoint(first, address: "А"), waypoint(last, address: "Б")],
+            items: [item],
+            options: DeliveryOptions()
+        )
+
+        #expect(request.items[0].dropoffPointID == nil,
+                "the boundary type makes the ambiguous state unrepresentable")
+        let wire = ClientController.offersRequest(for: request)
+        #expect(try #require(wire.items)[0].dropoffPoint == 2, "and nil means the ends, unambiguously")
+    }
+
+    @Test("Scheduling on writes a time; scheduling off takes it away")
+    func schedulingWritesItsTime() {
+        let window = DeliveryOptions.dueWindow(now: Date(timeIntervalSince1970: 1_800_000_000))
+        var options = DeliveryOptions()
+
+        options.setScheduled(true, within: window)
+        #expect(options.due == window.lowerBound,
+                "saving straight after the toggle must not depart as an immediate delivery")
+
+        let chosen = window.lowerBound.addingTimeInterval(7200)
+        options.due = chosen
+        options.setScheduled(true, within: window)
+        #expect(options.due == chosen, "a time already chosen is not overwritten")
+
+        options.setScheduled(false, within: window)
+        #expect(options.due == nil)
+    }
+
+    @Test("The courier's note is carried, but it does not re-price the route")
+    func theNoteDoesNotReprice() {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "А"), for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Б"), for: model.points[1].id)
+
+        let before = model.pricingInputs
+        model.options.comment = "Позвоните за 10 минут"
+        #expect(model.pricingInputs == before,
+                "the offers request has nowhere to put it, so every keystroke refetched the same prices")
+        #expect(model.options.comment == "Позвоните за 10 минут", "it still rides to claim creation")
+    }
+
+    @Test("The explainer names what a class cannot take — the promise the item row keeps too")
+    func explainerNamesWhatDoesNotFit() {
+        var big = ParcelItem()
+        big.name = "Комплект учебников"
+        big.weightKg = 400
+
+        let card = NewDeliveryView.TariffExplainer.Card(tariff: .courier, offer: nil, misfits: [big])
+        let misfit = card.misfit ?? ""
+        #expect(misfit.contains("Комплект учебников"),
+                "naming the box beats counting it — the sender knows which one to reconsider")
+
+        let fine = NewDeliveryView.TariffExplainer.Card(tariff: .cargo, offer: nil, misfits: [])
+        #expect(fine.misfit == nil)
+    }
+
     @Test("Only departures from the defaults go on the wire; all-default sends nothing")
     func requirementsStayHonest() {
         let base = OfferRequest(

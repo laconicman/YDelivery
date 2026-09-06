@@ -12,6 +12,11 @@ extension NewDeliveryView {
 
         @State private var options: DeliveryOptions
         @State private var isScheduled: Bool
+        /// One window for the life of this sheet. The range the picker offers and the
+        /// value a fresh schedule starts at must come from the same `Date.now`, or the
+        /// initial value can sit microseconds outside its own range; `@State` also keeps
+        /// it from drifting forward on every body re-evaluation (review, PR #21).
+        @State private var dueWindow: ClosedRange<Date>
         @Environment(\.dismiss) private var dismiss
 
         init(options: DeliveryOptions, selectedTariff: TariffClass?, save: @escaping (DeliveryOptions) -> Void) {
@@ -19,6 +24,7 @@ extension NewDeliveryView {
             self.save = save
             _options = State(initialValue: options)
             _isScheduled = State(initialValue: options.due != nil)
+            _dueWindow = State(initialValue: DeliveryOptions.dueWindow())
         }
 
         private var thermobagAllowed: Bool { selectedTariff == .courier }
@@ -61,7 +67,7 @@ extension NewDeliveryView {
                             DatePicker(
                                 "Courier arrives",
                                 selection: dueBinding,
-                                in: DeliveryOptions.dueWindow()
+                                in: dueWindow
                             )
                         }
                     } footer: {
@@ -87,14 +93,14 @@ extension NewDeliveryView {
                     }
                 }
                 .onChange(of: isScheduled) {
-                    if !isScheduled { options.due = nil }
+                    options.setScheduled(isScheduled, within: dueWindow)
                 }
             }
         }
 
         private var dueBinding: Binding<Date> {
             Binding(
-                get: { options.due ?? DeliveryOptions.dueWindow().lowerBound },
+                get: { options.due ?? dueWindow.lowerBound },
                 set: { options.due = $0 }
             )
         }

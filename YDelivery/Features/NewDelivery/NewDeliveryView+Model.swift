@@ -181,6 +181,27 @@ extension NewDeliveryView {
                 .map { points[$0] }
             guard remaining.contains(where: { $0.role == .dropoff }) else { return }
             points = remaining
+            releaseItemStops()
+        }
+
+        /// An item names the stop it boards and the stop it leaves at. Deleting that stop
+        /// leaves the name behind, pointing at nothing — and a reference to nothing is
+        /// indistinguishable, downstream, from "no preference", so the item would quietly
+        /// travel between the route's ends instead (review, PR #21).
+        ///
+        /// Forgetting the reference is the honest repair: `nil` genuinely means the ends,
+        /// which is the common case and what the item editor offers by default. Keeping a
+        /// dangling id and guessing would be the silent version of the same thing.
+        private func releaseItemStops() {
+            let live = Set(points.map(\.id))
+            for index in items.indices {
+                if let id = items[index].pickupPointID, !live.contains(id) {
+                    items[index].pickupPointID = nil
+                }
+                if let id = items[index].dropoffPointID, !live.contains(id) {
+                    items[index].dropoffPointID = nil
+                }
+            }
         }
 
         /// Reorders stops. The pickup is pinned first and the return last; a move that
@@ -293,7 +314,12 @@ extension NewDeliveryView {
                     )
                 }
             }
-            return OfferRequest(waypoints: waypoints, items: items, options: options)
+            // The note the courier reads is carried to claim creation, never to pricing —
+            // the offers request has nowhere to put it. Leaving it in the identity made
+            // every keystroke in that field re-fetch identical offers (review, PR #21).
+            var priced = options
+            priced.comment = ""
+            return OfferRequest(waypoints: waypoints, items: items, options: priced)
         }
 
         /// Loads priced offers through the caller's fetch — the root view hands in the

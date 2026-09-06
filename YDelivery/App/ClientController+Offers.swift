@@ -36,6 +36,8 @@ extension ClientController {
     nonisolated static func offersRequest(
         for request: OfferRequest
     ) -> Components.Schemas.OffersCalculateRequest {
+        // `nil` means the route's ends, and by `OfferRequest`'s initializer it is the
+        // *only* thing it can mean — every surviving id resolves.
         let pointID: (UUID?, _ fallback: Int) -> Int64 = { id, fallback in
             Int64(id.flatMap { candidate in
                 request.waypoints.firstIndex { $0.pointID == candidate }.map { $0 + 1 }
@@ -70,17 +72,24 @@ extension ClientController {
 
     /// Only what departs from the provider's defaults goes on the wire; all-default
     /// options send no container at all.
+    ///
+    /// `due` is priced, not merely recorded: a scheduled pickup is what the provider
+    /// searches for, and quoting it as immediate returns a price for a different job
+    /// (review, PR #21). It counts toward the container being non-empty for the same
+    /// reason — a due-only request must keep its `requirements`.
     private nonisolated static func requirements(
         for options: DeliveryOptions
     ) -> Components.Schemas.OfferRequirements? {
         let requirements = Components.Schemas.OfferRequirements(
             cargoLoaders: options.loaders > 0 ? options.loaders : nil,
             cargoOptions: options.thermobag ? [.thermobag] : nil,
+            due: options.due,
             proCourier: options.proCourier ? true : nil,
             skipDoorToDoor: options.toDoor ? nil : true
         )
         let isEmpty = requirements.cargoLoaders == nil
             && requirements.cargoOptions == nil
+            && requirements.due == nil
             && requirements.proCourier == nil
             && requirements.skipDoorToDoor == nil
         return isEmpty ? nil : requirements
@@ -91,8 +100,29 @@ extension ClientController {
 /// mapped here.
 nonisolated struct OfferRequest: Hashable, Sendable {
     var waypoints: [RequestWaypoint]
-    var items: [ParcelItem]
+    private(set) var items: [ParcelItem]
     var options: DeliveryOptions
+
+    /// Item stops are normalised against these waypoints on the way in: an id naming no
+    /// waypoint here becomes `nil`. That is what lets the mapping below read `nil` as
+    /// exactly one thing — "the route's ends", the documented default — rather than as
+    /// either that *or* a stop that has since been deleted. Collapsing those two is how
+    /// an item silently changes where it travels (review, PR #21).
+    ///
+    /// The draft repairs its own items when a stop goes, so this should never have work
+    /// to do. It is here because the mapping's correctness should not depend on that:
+    /// the boundary type makes the ambiguous state unrepresentable instead.
+    init(waypoints: [RequestWaypoint], items: [ParcelItem], options: DeliveryOptions) {
+        self.waypoints = waypoints
+        self.options = options
+        let live = Set(waypoints.map(\.pointID))
+        self.items = items.map { item in
+            var item = item
+            if let id = item.pickupPointID, !live.contains(id) { item.pickupPointID = nil }
+            if let id = item.dropoffPointID, !live.contains(id) { item.dropoffPointID = nil }
+            return item
+        }
+    }
 
     /// A waypoint that remembers which draft point it was, so items can name their
     /// boarding and leaving stops.

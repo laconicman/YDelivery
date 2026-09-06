@@ -27,6 +27,15 @@ nonisolated struct DeliveryOptions: Hashable, Sendable {
     static func dueWindow(now: Date = .now) -> ClosedRange<Date> {
         now.addingTimeInterval(3600)...now.addingTimeInterval(30 * 24 * 3600)
     }
+
+    /// What the «Scheduled pickup» switch *means*: on, and this run has a time; off, and
+    /// it goes as soon as possible. The switch is a view control but its meaning is a
+    /// model decision (R6) — and putting it here is what makes it testable. Turning it on
+    /// must write a due rather than only display one, or a schedule saved without
+    /// touching the picker departs as an immediate delivery (review, PR #21).
+    mutating func setScheduled(_ isScheduled: Bool, within window: ClosedRange<Date>) {
+        due = isScheduled ? (due ?? window.lowerBound) : nil
+    }
 }
 
 nonisolated extension DeliveryOptions {

@@ -36,6 +36,46 @@ struct ClientControllerOffersTests {
         #expect(request.routePoints.map(\.fullname) == ["Первый", "Второй", "Третий"])
     }
 
+    @Test("A scheduled pickup is priced as scheduled, not as immediate")
+    func scheduledPickupReachesPricing() {
+        let due = Date(timeIntervalSince1970: 1_800_000_000)
+        var options = DeliveryOptions()
+        options.due = due
+        let wire = ClientController.offersRequest(for: OfferRequest(
+            waypoints: [
+                .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А"),
+                .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Б"),
+            ],
+            items: [],
+            options: options
+        ))
+
+        #expect(wire.requirements?.due == due,
+                "the provider searches for the time asked; quoting it as now prices another job")
+    }
+
+    @Test("A due on its own keeps the requirements container it is the only member of")
+    func dueOnlyKeepsItsContainer() {
+        var options = DeliveryOptions()
+        options.due = Date(timeIntervalSince1970: 1_800_000_000)
+        let scheduled = ClientController.offersRequest(for: OfferRequest(
+            waypoints: [
+                .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А"),
+                .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Б"),
+            ],
+            items: [],
+            options: options
+        ))
+        #expect(scheduled.requirements != nil)
+
+        let immediate = ClientController.offersRequest(for: request([
+            .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А"),
+            .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Б"),
+        ]))
+        #expect(immediate.requirements == nil,
+                "all-default options still send no container at all")
+    }
+
     @Test("A wire offer reads into the app's vocabulary; the with-VAT total is the price")
     func offerMapsToAppVocabulary() throws {
         let offer = try #require(Offer(Components.Schemas.CalculatedOffer(

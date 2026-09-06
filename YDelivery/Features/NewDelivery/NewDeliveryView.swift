@@ -234,7 +234,11 @@ private extension NewDeliveryView {
         let known: [TariffClass] = [.courier, .express, .cargo]
         let extra = offers.map(\.tariff).filter { !known.contains($0) }
         return (known + extra).map { tariff in
-            TariffExplainer.Card(tariff: tariff, offer: offers.first { $0.tariff == tariff })
+            TariffExplainer.Card(
+                tariff: tariff,
+                offer: offers.first { $0.tariff == tariff },
+                misfits: draft.itemsThatDontFit(tariff)
+            )
         }
     }
 }
