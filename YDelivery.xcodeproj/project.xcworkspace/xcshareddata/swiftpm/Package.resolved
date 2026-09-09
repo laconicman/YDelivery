@@ -1,5 +1,5 @@
 {
-  "originHash" : "02c7becea0428a9e048ceb5af37bae42f9366daf87ab5556da3fea010f2cf7f5",
+  "originHash" : "da6434c2accc0c4df72e1638f2d82b52373d0defa88ee017679d9f8dd2d005b2",
   "pins" : [
     {
       "identity" : "openapikit",
@@ -116,6 +116,15 @@
       "state" : {
         "revision" : "dfb0fdba67ac4165ffa96f73453978e7461550d4",
         "version" : "0.2.0"
+      }
+    },
+    {
+      "identity" : "ydeliverykit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/laconicman/YDeliveryKit",
+      "state" : {
+        "revision" : "66016717f85af066572320399e7d91ed94c92a63",
+        "version" : "0.1.0"
       }
     }
   ],

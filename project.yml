@@ -52,10 +52,12 @@ packages:
     url: https://github.com/laconicman/YandexDeliveryExpress
     minorVersion: 0.2.0
   # The shared foundation below app + future widget/activity (Design → the shared-package
-  # decision; DesignSystem holds its component contracts):
-  # the semantic color set, StatusChip, and — from the store PR on — the order store.
+  # decision; DesignSystem holds its component contracts): the semantic color set,
+  # StatusChip, the app models, and the order/place stores. Its own repo since 0.1.0,
+  # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
-    path: YDeliveryKit
+    url: https://github.com/laconicman/YDeliveryKit
+    minorVersion: 0.1.0
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols

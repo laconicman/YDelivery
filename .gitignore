@@ -34,4 +34,3 @@ YDelivery.xcodeproj/xcshareddata/xcschemes/
 .thumbnail
 
 # The Kit is a library: consumers pin the graph (the app does, in its xcodeproj).
-YDeliveryKit/Package.resolved
