@@ -26,7 +26,7 @@ struct NewDeliveryView: View {
     @State private var offersAttempt = 0
     @State private var editingContactPoint: Model.Point?
     @State private var editingItem: ParcelItem?
-    @State private var isEditingOptions = false
+    @State private var editingOptions: OptionsEditor.Focus?
     @State private var showsExplainer = false
     /// The explainer opens itself once per compose session until the first order exists
     /// (board `3a`); after that it lives behind the ⓘ.
@@ -99,7 +99,7 @@ struct NewDeliveryView: View {
                 addItem: { editingItem = ParcelItem() },
                 editItem: { editingItem = draft.item(withID: $0) },
                 removeItems: { draft.removeItems(at: $0) },
-                editOptions: { isEditingOptions = true },
+                editOptions: { editingOptions = $0 },
                 openReview: { showsReview = true }
             )
             // Structured re-pricing: the ids are what pricing answers to — the route for
@@ -211,8 +211,9 @@ struct NewDeliveryView: View {
                     save: { draft.setItem($0) }
                 )
             }
-            .sheet(isPresented: $isEditingOptions) {
+            .sheet(item: $editingOptions) { focus in
                 OptionsEditor(
+                    focus: focus,
                     options: draft.options,
                     selectedTariff: draft.chosenTariff,
                     save: { draft.options = $0 }

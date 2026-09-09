@@ -69,7 +69,7 @@ extension NewDeliveryView {
         let addItem: () -> Void
         let editItem: (UUID) -> Void
         let removeItems: (IndexSet) -> Void
-        let editOptions: () -> Void
+        let editOptions: (NewDeliveryView.OptionsEditor.Focus) -> Void
 
         @State private var camera: MapCameraPosition = .automatic
         @State private var editMode: EditMode = .inactive
@@ -209,13 +209,15 @@ extension NewDeliveryView {
                 }
 
                 Section {
-                    Button(action: editOptions) {
+                    // Three entrances, one editor — each lands on its own section
+                    // ("density lives one tap down" names the destination).
+                    Button { editOptions(.options) } label: {
                         summaryRow(symbol: .gearshape, title: "Options", value: optionsSummary)
                     }
-                    Button(action: editOptions) {
+                    Button { editOptions(.when) } label: {
                         summaryRow(symbol: .clock, title: "When", value: whenSummary)
                     }
-                    Button(action: editOptions) {
+                    Button { editOptions(.note) } label: {
                         summaryRow(
                             symbol: .pencilLine,
                             title: "Note for the courier",
@@ -708,7 +710,7 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
-        editOptions: {},
+        editOptions: { _ in },
         openReview: {}
     )
 }
@@ -774,7 +776,7 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
-        editOptions: {},
+        editOptions: { _ in },
         openReview: {}
     )
 }

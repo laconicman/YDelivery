@@ -7,6 +7,16 @@ extension NewDeliveryView {
     /// (DesignSystem → field rules; §4 interdependencies, enforced here, never
     /// discovered via API errors).
     struct OptionsEditor: View {
+        /// Where the sheet opens. Three summary rows share this editor, and one tap
+        /// down must land on what was tapped — "density lives one tap down" is a
+        /// promise about the destination, not just the distance (DesignSystem → field
+        /// rule 1; author, 2026-09-09).
+        enum Focus: String, Identifiable, CaseIterable {
+            case options, when, note
+            var id: String { rawValue }
+        }
+
+        let focus: Focus
         let selectedTariff: TariffClass?
         let save: (DeliveryOptions) -> Void
 
@@ -19,7 +29,13 @@ extension NewDeliveryView {
         @State private var dueWindow: ClosedRange<Date>
         @Environment(\.dismiss) private var dismiss
 
-        init(options: DeliveryOptions, selectedTariff: TariffClass?, save: @escaping (DeliveryOptions) -> Void) {
+        init(
+            focus: Focus = .options,
+            options: DeliveryOptions,
+            selectedTariff: TariffClass?,
+            save: @escaping (DeliveryOptions) -> Void
+        ) {
+            self.focus = focus
             self.selectedTariff = selectedTariff
             self.save = save
             // A parked draft can outlive its own pickup time; opening the editor on a
@@ -42,51 +58,61 @@ extension NewDeliveryView {
 
         var body: some View {
             NavigationStack {
-                Form {
-                    Section {
-                        Toggle("Pro courier", isOn: $options.proCourier)
-                        Toggle("To the door", isOn: $options.toDoor)
-                        Toggle("Thermal bag", isOn: $options.thermobag)
-                            .disabled(!thermobagAllowed)
-                    } footer: {
-                        // The reason, not a hint — and only when it declines.
-                        if !thermobagAllowed {
-                            Text("A thermal bag rides only with the courier class.")
+                ScrollViewReader { proxy in
+                    Form {
+                        Section {
+                            Toggle("Pro courier", isOn: $options.proCourier)
+                            Toggle("To the door", isOn: $options.toDoor)
+                            Toggle("Thermal bag", isOn: $options.thermobag)
+                                .disabled(!thermobagAllowed)
+                        } footer: {
+                            // The reason, not a hint — and only when it declines.
+                            if !thermobagAllowed {
+                                Text("A thermal bag rides only with the courier class.")
+                            }
                         }
-                    }
+                        .id(Focus.options)
 
-                    Section {
-                        Stepper(
-                            value: $options.loaders,
-                            in: DeliveryOptions.loadersRange
-                        ) {
-                            LabeledContent("Loaders", value: options.loaders.formatted())
-                        }
-                        .disabled(!loadersAllowed)
-                    } footer: {
-                        Text(
-                            loadersAllowed
-                                ? "One or two — the cargo van's bound."
-                                : "Loaders ride only in the cargo van — one or two there."
-                        )
-                    }
-
-                    Section {
-                        Toggle("Scheduled pickup", isOn: $isScheduled)
-                        if isScheduled {
-                            DatePicker(
-                                "Courier arrives",
-                                selection: dueBinding,
-                                in: dueWindow
+                        Section {
+                            Stepper(
+                                value: $options.loaders,
+                                in: DeliveryOptions.loadersRange
+                            ) {
+                                LabeledContent("Loaders", value: options.loaders.formatted())
+                            }
+                            .disabled(!loadersAllowed)
+                        } footer: {
+                            Text(
+                                loadersAllowed
+                                    ? "One or two — the cargo van's bound."
+                                    : "Loaders ride only in the cargo van — one or two there."
                             )
                         }
-                    } footer: {
-                        Text(dueBoundWords)
-                    }
 
-                    Section("Note for the courier") {
-                        TextField("How to find you, what to mind…", text: $options.comment, axis: .vertical)
-                            .lineLimit(2...5)
+                        Section {
+                            Toggle("Scheduled pickup", isOn: $isScheduled)
+                            if isScheduled {
+                                DatePicker(
+                                    "Courier arrives",
+                                    selection: dueBinding,
+                                    in: dueWindow
+                                )
+                            }
+                        } footer: {
+                            Text(dueBoundWords)
+                        }
+                        .id(Focus.when)
+
+                        Section("Note for the courier") {
+                            TextField("How to find you, what to mind…", text: $options.comment, axis: .vertical)
+                                .lineLimit(2...5)
+                        }
+                        .id(Focus.note)
+                    }
+                    .onAppear {
+                        // Landing, not travel: the sheet opens already on the tapped
+                        // row's section, so no scroll animation to branch for motion.
+                        proxy.scrollTo(focus, anchor: .top)
                     }
                 }
                 .navigationTitle("Options")
@@ -144,6 +170,17 @@ extension NewDeliveryView {
         NewDeliveryView.OptionsEditor(
             options: options,
             selectedTariff: .cargo,
+            save: { _ in }
+        )
+    }
+}
+
+#Preview("Opened on the note — the tapped row is the landing") {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        NewDeliveryView.OptionsEditor(
+            focus: .note,
+            options: DeliveryOptions(),
+            selectedTariff: .courier,
             save: { _ in }
         )
     }
