@@ -29,8 +29,8 @@ final class StoreController {
     private let placeStore: SavedPlaceStore?
 
     init(
-        orderStore: OrderStore? = .inAppGroup(),
-        placeStore: SavedPlaceStore? = .inAppGroup()
+        orderStore: OrderStore? = .inAppGroup(id: AppGroup.id),
+        placeStore: SavedPlaceStore? = .inAppGroup(id: AppGroup.id)
     ) {
         self.orderStore = orderStore
         self.placeStore = placeStore
