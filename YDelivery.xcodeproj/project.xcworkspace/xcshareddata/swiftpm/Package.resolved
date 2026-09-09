@@ -1,5 +1,5 @@
 {
-  "originHash" : "da6434c2accc0c4df72e1638f2d82b52373d0defa88ee017679d9f8dd2d005b2",
+  "originHash" : "457f92c26d620e35fac544afcab2770bbd807bd1bb4530beabc64d2aff22d77b",
   "pins" : [
     {
       "identity" : "openapikit",
@@ -17,6 +17,24 @@
       "state" : {
         "revision" : "52150c4b254f71765f197c42b9064fd7518c3a17",
         "version" : "1.0.1"
+      }
+    },
+    {
+      "identity" : "phonenumberkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PhoneNumberKit/PhoneNumberKit",
+      "state" : {
+        "revision" : "cf2f1df6f2fe8b49701f4b43f0e97c7bd113d034",
+        "version" : "5.0.8"
+      }
+    },
+    {
+      "identity" : "phonenumberkitui",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PhoneNumberKit/PhoneNumberKitUI",
+      "state" : {
+        "revision" : "2e328c979cce62871be946f25c4d537c76526689",
+        "version" : "1.1.0"
       }
     },
     {
