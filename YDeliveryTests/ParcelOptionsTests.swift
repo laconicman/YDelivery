@@ -177,6 +177,10 @@ struct ParcelOptionsTests {
         let model = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
         model.setPlace(PickedPlace(latitude: 55, longitude: 37, address: "А"), for: model.points[0].id)
         model.setPlace(PickedPlace(latitude: 56, longitude: 38, address: "Б"), for: model.points[1].id)
+        var pricedItem = ParcelItem()
+        pricedItem.name = "Коробка"
+        pricedItem.cost = 1000
+        model.setItem(pricedItem)
 
         func offer(_ id: String, _ tariff: TariffClass) -> Offer {
             Offer(tariff: tariff, price: 1, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: id)
@@ -214,6 +218,10 @@ struct ParcelOptionsTests {
         let model = NewDeliveryView.Model()
         model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "А"), for: model.points[0].id)
         model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Б"), for: model.points[1].id)
+        var pricedItem = ParcelItem()
+        pricedItem.name = "Коробка"
+        pricedItem.cost = 1000
+        model.setItem(pricedItem)
 
         func offer(_ payload: String, _ tariff: TariffClass) -> Offer {
             Offer(tariff: tariff, price: 100, currency: "RUB",
@@ -292,6 +300,10 @@ struct ParcelOptionsTests {
         let model = NewDeliveryView.Model()
         model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "А"), for: model.points[0].id)
         model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Б"), for: model.points[1].id)
+        var pricedItem = ParcelItem()
+        pricedItem.name = "Коробка"
+        pricedItem.cost = 1000
+        model.setItem(pricedItem)
 
         await model.loadOffers { _ in
             [Offer(tariff: .cargo, price: 1, currency: "RUB",
