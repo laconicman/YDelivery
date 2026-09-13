@@ -58,13 +58,17 @@ extension NewDeliveryView {
         private var loadersAllowed: Bool { selectedTariff == .cargo }
 
         /// Trailing scroll room so the When and Note sections can reach the top on any
-        /// sheet height — sized to the tallest case that needs covering: a full-height
-        /// sheet minus the shortest trailing section (roughly one iPhone 16 Pro Max
-        /// viewport less the note section), rounded to the design grid.
-        private static let landingRunway: CGFloat = 480
+        /// sheet height. Proportional to the *container*, not a fixed count: a constant
+        /// sized for a phone left When stranded mid-sheet on a tall iPad, where the
+        /// content after it is a fraction of the viewport (review, PR #26, edited ask).
+        /// The share is the viewport minus the smallest trailing content a landing
+        /// section can have below it (When's toggle row + the note section, well under
+        /// a seventh of any supported sheet).
+        private static let landingRunwayShare: CGFloat = 0.85
 
         var body: some View {
             NavigationStack {
+                GeometryReader { container in
                 ScrollViewReader { proxy in
                     Form {
                         Section {
@@ -120,10 +124,12 @@ extension NewDeliveryView {
                     // Landing needs range: `scrollTo` clamps to content bounds, and a
                     // form shorter than its viewport cannot bring a later section to the
                     // top at all (review, PR #26). The runway exists only for the two
-                    // later landings — entering at Options keeps the form's honest end.
+                    // later landings — entering at Options keeps the form's honest end —
+                    // and scales with the container, so a tall iPad sheet grants the
+                    // same landing a phone does (review, PR #26, edited ask).
                     .contentMargins(
                         .bottom,
-                        focus == .options ? 0 : Self.landingRunway,
+                        focus == .options ? 0 : container.size.height * Self.landingRunwayShare,
                         for: .scrollContent
                     )
                     .task {
@@ -136,6 +142,7 @@ extension NewDeliveryView {
                         // keyboard, and the system keeps the field in view thereafter.
                         if focus == .note { noteIsFocused = true }
                     }
+                }
                 }
                 .navigationTitle("Options")
                 .navigationBarTitleDisplayMode(.inline)
