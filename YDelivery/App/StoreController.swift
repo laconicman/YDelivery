@@ -169,12 +169,21 @@ final class StoreController {
     func save(_ place: SavedPlace) async throws {
         guard let placeStore else { throw StoreUnavailable() }
         try await Self.write(place, to: placeStore)
-        savedPlaces = try await Self.readPlaces(placeStore)
-        // That re-read succeeded, so whatever the last refresh recorded about *places*
-        // is stale news. Orders were not looked at: their error, if any, stands — a
-        // successful bookmark must not dress an unreadable history as an empty one
-        // (review, PR #18 post-merge).
-        placesError = nil
+        do {
+            savedPlaces = try await Self.readPlaces(placeStore)
+            // That re-read succeeded, so whatever the last refresh recorded about
+            // *places* is stale news. Orders were not looked at: their error, if any,
+            // stands — a successful bookmark must not dress an unreadable history as
+            // an empty one (review, PR #18 post-merge).
+            placesError = nil
+        } catch {
+            // The write held but the confirming read did not: the sheet gets the
+            // thrown error to render, and the channel records it — otherwise closing
+            // the sheet exposed stale chips as healthy memory (review, PR #28, same
+            // truth as record()'s: the write and the read report different facts).
+            placesError = error
+            throw error
+        }
     }
 
     /// Records a placed order and republishes history. Throws — an order that was
