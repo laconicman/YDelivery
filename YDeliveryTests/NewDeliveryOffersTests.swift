@@ -13,6 +13,11 @@ struct NewDeliveryOffersTests {
         let model = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
         model.setPlace(office, for: model.points[0].id)
         model.setPlace(home, for: model.points[1].id)
+        // Pricing needs a parcel since 2026-09-14 — one item feeds every priced test.
+        var pricedItem = ParcelItem()
+        pricedItem.name = "Коробка"
+        pricedItem.cost = 1000
+        model.setItem(pricedItem)
         return model
     }
 
@@ -73,4 +78,26 @@ struct NewDeliveryOffersTests {
     }
 
     private struct Unexpected: Error {}
+}
+extension NewDeliveryOffersTests {
+    @Test("No parcel, no pricing — the precondition never dresses as a failure")
+    func pricingWaitsForTheParcel() async {
+        let model = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
+        model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "Офис"), for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Дом"), for: model.points[1].id)
+        // Route complete, parcel empty: no request exists to fail (author, 2026-09-14).
+        #expect(model.isRouteComplete)
+        #expect(model.pricingInputs == nil)
+        await model.loadOffers { _ in
+            Issue.record("an empty parcel must never reach the provider")
+            return []
+        }
+        #expect(model.offers == .idle, "idle names the missing prerequisite; failed would lie")
+
+        var item = ParcelItem()
+        item.name = "Ноутбук"
+        item.cost = 1000
+        model.setItem(item)
+        #expect(model.pricingInputs != nil, "the parcel arrives, pricing may begin")
+    }
 }

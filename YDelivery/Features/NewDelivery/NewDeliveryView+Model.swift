@@ -355,7 +355,10 @@ extension NewDeliveryView {
         /// trigger: the root's `.task(id:)` watches this, so an edit to any of the three
         /// cancels the stale run.
         var pricingInputs: OfferRequest? {
-            guard isRouteComplete else { return nil }
+            // No parcel, no request: pricing an empty order surfaced the provider's
+            // refusal as «couldn't get prices» — a failure state for a precondition
+            // (author, 2026-09-14). The idle footer names what is missing instead.
+            guard isRouteComplete, !items.isEmpty else { return nil }
             let waypoints = points.compactMap { point in
                 point.place.map {
                     OfferRequest.RequestWaypoint(

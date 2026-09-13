@@ -46,6 +46,9 @@ extension NewDeliveryView {
         let offers: NewDeliveryView.Model.Offers
         let selectedOfferID: Offer.ID?
         let itemRows: [ItemRow]
+        /// Whether both ends are placed — the idle footer names the *missing*
+        /// prerequisite, and route-versus-parcel is exactly that difference.
+        var routeIsComplete: Bool = false
         let optionsSummary: String
         let whenSummary: String
         let commentSummary: String?
@@ -140,7 +143,15 @@ extension NewDeliveryView {
                     actions
                 } footer: {
                     if offers == .idle {
-                        Text("Prices appear when the route is complete.")
+                        // Which prerequisite is missing is the difference between an
+                        // invitation and a false error: pricing an empty parcel used
+                        // to surface as «couldn't get prices», a statement about the
+                        // wrong thing (author, 2026-09-14).
+                        Text(
+                            routeIsComplete
+                                ? "Prices come after the parcel — add what's inside first."
+                                : "Prices appear when the route is complete."
+                        )
                     }
                 }
 
@@ -200,30 +211,37 @@ extension NewDeliveryView {
                     .onDelete(perform: removeItems)
 
                     Button(action: addItem) {
-                        Label(itemRows.isEmpty ? "What's inside" : "Add an item", systemSymbol: .plus)
+                        Label("Add an item", systemSymbol: .plus)
                     }
                 } header: {
-                    Text("Parcel")
+                    // «What's inside», not «Parcel»: several items ride one order,
+                    // and the singular read as a bound that does not exist (author,
+                    // 2026-09-14).
+                    Text("What's inside")
                 } footer: {
                     Text("The declared value is what the insurance covers.")
                 }
 
                 Section {
-                    // Three entrances, one editor — each lands on its own section
-                    // ("density lives one tap down" names the destination).
+                    // One entrance; the editor opens in canonical order. The When and
+                    // Note rows are commented out, not redesigned again: three summary
+                    // rows into one shuffling editor made things worse, as the review
+                    // said and the author confirmed (Devin, r3999795256; author,
+                    // 2026-09-14 — "just comment out those rows"). Their sections
+                    // remain reachable inside Options.
                     Button { editOptions(.options) } label: {
                         summaryRow(symbol: .gearshape, title: "Options", value: optionsSummary)
                     }
-                    Button { editOptions(.when) } label: {
-                        summaryRow(symbol: .clock, title: "When", value: whenSummary)
-                    }
-                    Button { editOptions(.note) } label: {
-                        summaryRow(
-                            symbol: .pencilLine,
-                            title: "Note for the courier",
-                            value: commentSummary ?? String(localized: "not set")
-                        )
-                    }
+                    // Button { editOptions(.when) } label: {
+                    //     summaryRow(symbol: .clock, title: "When", value: whenSummary)
+                    // }
+                    // Button { editOptions(.note) } label: {
+                    //     summaryRow(
+                    //         symbol: .pencilLine,
+                    //         title: "Note for the courier",
+                    //         value: commentSummary ?? String(localized: "not set")
+                    //     )
+                    // }
                 }
                 .buttonStyle(.plain)
             }

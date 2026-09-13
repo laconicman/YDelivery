@@ -4,27 +4,22 @@ import SwiftUI
 import YDeliveryKit
 
 extension PointPickerView {
-    /// The refine stage — «Уточните точку», the one Done (board `2a`). Pure
-    /// presentation: the map, the pin, the editable address with its parts, and the
-    /// confirm bar. Camera position is view state (R7); everything the screen decides
-    /// arrives as values and closures.
+    /// The refine stage — «Уточните точку» (board `2a`): the map, the pin, the
+    /// editable address, and Continue. Door details and the person moved one push
+    /// on, to Describe (Round 5, decision #40). Camera position is view state (R7);
+    /// everything the screen decides arrives as values and closures.
     struct RefineContent: View {
         let pin: PickedPlace?
         @Binding var pinAddress: String
-        @Binding var parts: AddressParts
         let isResolving: Bool
         let isApproximate: Bool
         let errorText: String?
-        /// Why keeping this place is unavailable, or `nil` when it is available —
-        /// the reason is the input, so the view never has to invent one.
-        let saveUnavailableReason: String?
         /// Where an empty map starts — the Settings start city when set; the built-in
         /// anchor otherwise.
         let fallbackRegion: MKCoordinateRegion?
         let onTap: (_ latitude: Double, _ longitude: Double) -> Void
         let onVisibleRegionChange: (MKCoordinateRegion) -> Void
-        let savePlace: () -> Void
-        let done: () -> Void
+        let continueToDescribe: () -> Void
 
         @State private var camera: MapCameraPosition
         /// Whether the sender has driven this map themselves. Counting camera settles
@@ -46,29 +41,23 @@ extension PointPickerView {
         init(
             pin: PickedPlace?,
             pinAddress: Binding<String>,
-            parts: Binding<AddressParts>,
             isResolving: Bool,
             isApproximate: Bool = false,
             errorText: String?,
-            saveUnavailableReason: String? = nil,
             fallbackRegion: MKCoordinateRegion? = nil,
             onTap: @escaping (_ latitude: Double, _ longitude: Double) -> Void,
             onVisibleRegionChange: @escaping (MKCoordinateRegion) -> Void,
-            savePlace: @escaping () -> Void = {},
-            done: @escaping () -> Void = {}
+            continueToDescribe: @escaping () -> Void = {}
         ) {
             self.pin = pin
             _pinAddress = pinAddress
-            _parts = parts
             self.isResolving = isResolving
             self.isApproximate = isApproximate
             self.errorText = errorText
-            self.saveUnavailableReason = saveUnavailableReason
             self.fallbackRegion = fallbackRegion
             self.onTap = onTap
             self.onVisibleRegionChange = onVisibleRegionChange
-            self.savePlace = savePlace
-            self.done = done
+            self.continueToDescribe = continueToDescribe
             // Always a concrete region, never `.automatic`: automatic follows content, so
             // editing would reframe on every tap-moved marker, defeating the suppression
             // below. A fresh picker starts over the service's home market; editing starts
@@ -146,13 +135,10 @@ extension PointPickerView {
                 ConfirmBar(
                     hasPin: pin != nil,
                     address: $pinAddress,
-                    parts: $parts,
                     isResolving: isResolving,
                     isApproximate: isApproximate,
                     errorText: errorText,
-                    saveUnavailableReason: saveUnavailableReason,
-                    savePlace: savePlace,
-                    done: done
+                    continueToDescribe: continueToDescribe
                 )
             }
         }
@@ -160,22 +146,17 @@ extension PointPickerView {
 }
 
 extension PointPickerView.RefineContent {
-    /// The bottom bar: resolved address (editable), its parts, progress, or the
-    /// invitation to tap — and the one Done (board `2a`, «Уточните точку»). Progress and
-    /// errors render regardless of a pin — a search launched from a fresh picker has no
-    /// pin yet, and silence there reads as a dead search box.
+    /// The bottom bar: resolved address (editable), progress, or the invitation to
+    /// tap — and Continue. Progress and errors render regardless of a pin — a search
+    /// launched from a fresh picker has no pin yet, and silence there reads as a dead
+    /// search box.
     struct ConfirmBar: View {
         let hasPin: Bool
         @Binding var address: String
-        @Binding var parts: AddressParts
         let isResolving: Bool
         let isApproximate: Bool
         let errorText: String?
-        /// Why keeping this place is unavailable, or `nil` when it is available —
-        /// the reason is the input, so the view never has to invent one.
-        let saveUnavailableReason: String?
-        let savePlace: () -> Void
-        let done: () -> Void
+        let continueToDescribe: () -> Void
 
         var body: some View {
             VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
@@ -188,7 +169,6 @@ extension PointPickerView.RefineContent {
                             ProgressView()
                         }
                     }
-                    PartsFields(parts: $parts)
                 } else if isResolving {
                     HStack(spacing: Layout.Spacing.unit) {
                         ProgressView()
@@ -213,113 +193,55 @@ extension PointPickerView.RefineContent {
                         .foregroundStyle(.red)
                 }
 
-                HStack(spacing: Layout.Spacing.unit) {
-                    Button(action: done) {
-                        Text("Done")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!hasPin || isResolving)
-
-                    // Unavailable renders disabled with its reason, never absent —
-                    // a vocabulary the sender cannot see is one they cannot learn
-                    // (DesignSystem → field rule 2; review, PR #18).
-                    Button(action: savePlace) {
-                        Image(systemSymbol: .bookmark)
-                            .font(.headline)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .disabled(!hasPin || isResolving || saveUnavailableReason != nil)
-                    .accessibilityLabel(Text("Save as a place"))
-                    .accessibilityHint(saveUnavailableReason.map(Text.init) ?? Text(""))
+                Button(action: continueToDescribe) {
+                    Text("Continue")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
                 }
-                if let saveUnavailableReason {
-                    Text(saveUnavailableReason)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!hasPin || isResolving)
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.bar)
         }
     }
-
-    /// The parts of the address the pin cannot know, as compact typed fields — entrance
-    /// is text («со двора», «А»), floor and apartment take the number pad, the intercom
-    /// code is its own field (DesignSystem → "Field taxonomy").
-    struct PartsFields: View {
-        @Binding var parts: AddressParts
-
-        var body: some View {
-            HStack(spacing: Layout.Spacing.chip) {
-                partField("entrance", text: $parts.entrance)
-                partField("floor", text: $parts.floor)
-                    .keyboardType(.numberPad)
-                partField("apt.", text: $parts.apartment)
-                    .keyboardType(.numberPad)
-                partField("intercom", text: $parts.intercom)
-            }
-            .font(.footnote)
-        }
-
-        private func partField(_ prompt: LocalizedStringKey, text: Binding<String>) -> some View {
-            TextField(prompt, text: text)
-                .padding(.horizontal, Layout.Spacing.cards)
-                .padding(.vertical, Layout.Spacing.chip)
-                .background(Color(.secondarySystemFill), in: Capsule())
-        }
-    }
 }
 
 #Preview("Confirm bar: searching from an empty picker") {
     @Previewable @State var address = ""
-    @Previewable @State var parts = AddressParts()
     PointPickerView.RefineContent.ConfirmBar(
         hasPin: false,
         address: $address,
-        parts: $parts,
         isResolving: true,
         isApproximate: false,
         errorText: nil,
-        saveUnavailableReason: nil,
-        savePlace: {},
-        done: {}
+        continueToDescribe: {}
     )
 }
 
 #Preview("Confirm bar: search failed, still no pin") {
     @Previewable @State var address = ""
-    @Previewable @State var parts = AddressParts()
     PointPickerView.RefineContent.ConfirmBar(
         hasPin: false,
         address: $address,
-        parts: $parts,
         isResolving: false,
         isApproximate: false,
         errorText: "No address found.",
-        saveUnavailableReason: nil,
-        savePlace: {},
-        done: {}
+        continueToDescribe: {}
     )
 }
 
-#Preview("Confirm bar: approximate fix, parts filled") {
+#Preview("Confirm bar: approximate fix") {
     @Previewable @State var address = "Москва, ул Москворечье, 6"
-    @Previewable @State var parts = AddressParts(entrance: "А", floor: "3", apartment: "301")
     PointPickerView.RefineContent.ConfirmBar(
         hasPin: true,
         address: $address,
-        parts: $parts,
         isResolving: false,
         isApproximate: true,
         errorText: nil,
-        saveUnavailableReason: nil,
-        savePlace: {},
-        done: {}
+        continueToDescribe: {}
     )
 }
 
@@ -366,11 +288,9 @@ private extension PickedPlace {
 
 #Preview("No pin yet") {
     @Previewable @State var address = ""
-    @Previewable @State var parts = AddressParts()
     PointPickerView.RefineContent(
         pin: nil,
         pinAddress: $address,
-        parts: $parts,
         isResolving: false,
         errorText: nil,
         onTap: { _, _ in },
@@ -380,11 +300,9 @@ private extension PickedPlace {
 
 #Preview("Pin resolving") {
     @Previewable @State var address = ""
-    @Previewable @State var parts = AddressParts()
     PointPickerView.RefineContent(
         pin: PickedPlace(latitude: 55.7558, longitude: 37.6173, address: ""),
         pinAddress: $address,
-        parts: $parts,
         isResolving: true,
         errorText: nil,
         onTap: { _, _ in },
@@ -394,14 +312,11 @@ private extension PickedPlace {
 
 #Preview("Pin resolved") {
     @Previewable @State var address = "Москва, Красная площадь, 1"
-    @Previewable @State var parts = AddressParts()
     PointPickerView.RefineContent(
         pin: PickedPlace(latitude: 55.7539, longitude: 37.6208, address: "Москва, Красная площадь, 1"),
         pinAddress: $address,
-        parts: $parts,
         isResolving: false,
         errorText: nil,
-        saveUnavailableReason: nil,
         onTap: { _, _ in },
         onVisibleRegionChange: { _ in }
     )
