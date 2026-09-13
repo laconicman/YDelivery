@@ -16,6 +16,26 @@ nonisolated enum MapLink: Hashable, Sendable {
     /// object id) — decline gracefully, never geocode a guess.
     case noCoordinates(source: Source)
 
+    /// Whether this link already answers the paste with coordinates — the redirect
+    /// gate stops expanding at the first hop that does (review, PR #18, edited ask).
+    var isReadable: Bool {
+        switch self {
+        case .point, .route: true
+        case .shortLink, .noCoordinates: false
+        }
+    }
+
+    /// The hosts this grammar reads — the single list the parser dispatch and the
+    /// redirect gate both consult, so "a host the expander may contact" and "a host
+    /// the parser understands" cannot drift apart (review, PR #28: an allowlist beats
+    /// reasoning about where arbitrary hostnames might resolve).
+    nonisolated static func isProviderHost(_ host: String) -> Bool {
+        host.isWithin("yandex.ru") || host.isWithin("yandex.com")
+            || host == "maps.app.goo.gl" || host == "goo.gl" || host.isWithin("google.com")
+            || host.isWithin("2gis.ru") || host == "go.2gis.com"
+            || host.isWithin("maps.apple.com")
+    }
+
     /// A coordinate pair as parsed — plain degrees, order already normalized to lat/lon.
     nonisolated struct Parsed: Hashable, Sendable {
         var latitude: Double
@@ -58,7 +78,7 @@ nonisolated extension MapLink {
             self = geo
             return
         }
-        guard let host = url.host()?.lowercased() else { return nil }
+        guard let host = url.host()?.lowercased(), Self.isProviderHost(host) else { return nil }
         let parsed: MapLink? = if host.isWithin("yandex.ru") || host.isWithin("yandex.com") {
             Self.yandexMaps(url)
         } else if host == "maps.app.goo.gl" || host == "goo.gl" || host.isWithin("google.com") {
@@ -85,9 +105,16 @@ nonisolated extension MapLink {
             return .shortLink(url, source: .yandexMaps)
         }
         let query = url.queryItems
-        // Strongest signal first: an explicit point beats the map's own center.
+        // Strongest signal first: an explicit point beats the map's own center. And a
+        // point parameter that is *present but unreadable* declines rather than falling
+        // through — `ll` is the map's center, not the marked place, and offering it
+        // would look right while pointing somewhere else (review, PR #18 post-merge;
+        // same rule as rtext below).
         for name in ["pt", "whatshere[point]"] {
-            if let pair = query[name].flatMap({ Parsed(lonLat: $0) }), pair.isPlausible {
+            if let value = query[name] {
+                guard let pair = Parsed(lonLat: value), pair.isPlausible else {
+                    return .noCoordinates(source: .yandexMaps)
+                }
                 return .point(pair, source: .yandexMaps)
             }
         }
@@ -221,8 +248,14 @@ nonisolated extension MapLink {
             of: /(-?[0-9]{1,3}(?:\.[0-9]+)?)\s*([NSns])?\s*[,;]\s*(-?[0-9]{1,3}(?:\.[0-9]+)?)\s*([EWew])?/
         ) else { return nil }
         guard var latitude = Double(match.1), var longitude = Double(match.3) else { return nil }
-        if let hemisphere = match.2, hemisphere.lowercased() == "s" { latitude = -latitude }
-        if let hemisphere = match.4, hemisphere.lowercased() == "w" { longitude = -longitude }
+        // A hemisphere letter *dictates* the sign — negating an already signed number
+        // flipped `-33.8688S` into the northern hemisphere (review, PR #18 post-merge).
+        if let hemisphere = match.2 {
+            latitude = hemisphere.lowercased() == "s" ? -abs(latitude) : abs(latitude)
+        }
+        if let hemisphere = match.4 {
+            longitude = hemisphere.lowercased() == "w" ? -abs(longitude) : abs(longitude)
+        }
         let pair = Parsed(latitude: latitude, longitude: longitude)
         guard pair.isPlausible else { return nil }
         return .point(pair, source: .rawCoordinates)

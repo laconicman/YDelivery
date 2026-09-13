@@ -15,9 +15,13 @@ final class StoreController {
     private(set) var orders: [Order] = []
     private(set) var savedPlaces: [SavedPlace] = []
 
-    /// The most recent read/write failure — *could not look* must never render as
-    /// *nothing there*.
-    private(set) var storeError: (any Error)?
+    /// The most recent failure reading *orders* — *could not look* must never render
+    /// as *nothing there*. Places carry their own channel below: a place save that
+    /// succeeds says nothing about whether history is readable, so it must not be able
+    /// to clear this (review, PR #18 post-merge).
+    private(set) var ordersError: (any Error)?
+    /// The most recent failure reading *saved places* — the chips' side of the seam.
+    private(set) var placesError: (any Error)?
 
     /// Whether the store has been read through at least once, successfully. Until it
     /// has, an empty ``orders`` means *not looked yet*, not *nothing there* — and a
@@ -46,7 +50,18 @@ final class StoreController {
     /// anything yet" (review, PR #18). `nil` when the store is healthy, whether or not
     /// it holds anything.
     var historyUnavailable: String? {
-        if let storeError { return storeError.localizedDescription }
+        if let ordersError { return ordersError.localizedDescription }
+        if orderStore == nil, placeStore == nil { return StoreUnavailable().localizedDescription }
+        return nil
+    }
+
+    /// Why the picker's memory — chips *and* recents — may be missing pieces. The
+    /// picker draws on both files (recents from orders, chips from places), so either
+    /// error deserves a word there; the deliveries list stays keyed to orders alone.
+    /// Without this, a failed place read left chips silently absent while
+    /// ``historyUnavailable`` reported health (review, PR #28).
+    var pickerMemoryUnavailable: String? {
+        if let error = ordersError ?? placesError { return error.localizedDescription }
         if orderStore == nil, placeStore == nil { return StoreUnavailable().localizedDescription }
         return nil
     }
@@ -119,16 +134,28 @@ final class StoreController {
         return "\(address)#\(parts)#\(coordinates)"
     }
 
-    /// Reads both files off the main actor and publishes the result here.
+    /// Reads both files off the main actor and publishes the result here — each file
+    /// onto its own error channel, so one side's failure is never mistaken for the
+    /// other's emptiness.
     func refresh() async {
-        do {
-            let (orders, places) = try await Self.read(orderStore: orderStore, placeStore: placeStore)
-            self.orders = orders
-            savedPlaces = places
-            storeError = nil
+        if let orderStore {
+            do {
+                orders = try await Self.readOrders(orderStore)
+                ordersError = nil
+                hasLoaded = true
+            } catch {
+                ordersError = error
+            }
+        } else {
             hasLoaded = true
-        } catch {
-            storeError = error
+        }
+        if let placeStore {
+            do {
+                savedPlaces = try await Self.readPlaces(placeStore)
+                placesError = nil
+            } catch {
+                placesError = error
+            }
         }
     }
 
@@ -142,9 +169,21 @@ final class StoreController {
     func save(_ place: SavedPlace) async throws {
         guard let placeStore else { throw StoreUnavailable() }
         try await Self.write(place, to: placeStore)
-        savedPlaces = try await Self.readPlaces(placeStore)
-        // That re-read succeeded, so whatever the last refresh recorded is stale news.
-        storeError = nil
+        do {
+            savedPlaces = try await Self.readPlaces(placeStore)
+            // That re-read succeeded, so whatever the last refresh recorded about
+            // *places* is stale news. Orders were not looked at: their error, if any,
+            // stands — a successful bookmark must not dress an unreadable history as
+            // an empty one (review, PR #18 post-merge).
+            placesError = nil
+        } catch {
+            // The write held but the confirming read did not: the sheet gets the
+            // thrown error to render, and the channel records it — otherwise closing
+            // the sheet exposed stale chips as healthy memory (review, PR #28, same
+            // truth as record()'s: the write and the read report different facts).
+            placesError = error
+            throw error
+        }
     }
 
     /// Records a placed order and republishes history. Throws — an order that was
@@ -154,9 +193,17 @@ final class StoreController {
         guard let orderStore else { throw StoreUnavailable() }
         try await Self.write(order, to: orderStore)
         // The write held; if the confirming read stumbles, the order still leads the
-        // list rather than vanishing until the next refresh.
-        orders = (try? await Self.readOrders(orderStore)) ?? ([order] + orders)
-        storeError = nil
+        // list rather than vanishing until the next refresh — but the write and the
+        // read report different facts, and only the read may clear the error: a
+        // partial fallback list dressed as healthy history omits orders silently
+        // (review, PR #28).
+        do {
+            orders = try await Self.readOrders(orderStore)
+            ordersError = nil
+        } catch {
+            orders = [order] + orders
+            ordersError = error
+        }
     }
 
     struct StoreUnavailable: LocalizedError {
@@ -170,20 +217,23 @@ final class StoreController {
     // under Approachable Concurrency).
 
     @concurrent
-    private static func read(
-        orderStore: OrderStore?,
-        placeStore: SavedPlaceStore?
-    ) async throws -> ([Order], [SavedPlace]) {
-        (try orderStore?.read() ?? [], try placeStore?.read() ?? [])
-    }
-
-    @concurrent
     private static func readPlaces(_ store: SavedPlaceStore) async throws -> [SavedPlace] {
         try store.read()
     }
 
     @concurrent
     private static func write(_ place: SavedPlace, to store: SavedPlaceStore) async throws {
+        // Dedupe against the *file*, not the controller's memory: the retry that this
+        // guards against exists precisely because a read failed, so memory may not
+        // know about the copy already written (review, PR #18 post-merge). Same
+        // destination — same `destinationKey` the chips deduplicate recents by —
+        // means the write adopts the stored identity and the Kit's save upserts.
+        var place = place
+        if let existing = (try? store.read())?.first(where: {
+            destinationKey($0.point) == destinationKey(place.point)
+        }) {
+            place.id = existing.id
+        }
         try store.save(place)
     }
 

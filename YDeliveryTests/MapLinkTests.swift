@@ -260,6 +260,30 @@ struct MapLinkTests {
         ))
     }
 
+    @Test("A hemisphere letter dictates the sign — a signed southern pair stays south")
+    func rawPairSignedWithHemisphere() {
+        // -33.8688S once double-negated into the northern hemisphere
+        // (review, PR #18 post-merge).
+        #expect(MapLink(pasted: "-33.8688S, 151.2093E") == .point(
+            .init(latitude: -33.8688, longitude: 151.2093),
+            source: .rawCoordinates
+        ))
+        #expect(MapLink(pasted: "55.7558N, -37.6173W") == .point(
+            .init(latitude: 55.7558, longitude: -37.6173),
+            source: .rawCoordinates
+        ))
+    }
+
+    @Test("A pt the grammar cannot read declines — ll is the map's center, not the mark")
+    func unreadablePinDeclinesRatherThanRecentering() {
+        // The marked place was unreadable; offering ll would look right and point
+        // somewhere else (review, PR #18 post-merge).
+        #expect(MapLink(pasted: "https://yandex.ru/maps/?pt=garbage&ll=30.31,59.95")
+            == .noCoordinates(source: .yandexMaps))
+        #expect(MapLink(pasted: "https://yandex.ru/maps/?whatshere%5Bpoint%5D=999,999&ll=30.31,59.95")
+            == .noCoordinates(source: .yandexMaps))
+    }
+
     // MARK: Not links
 
     @Test("Prose, empty strings, and unrelated URLs are not offered at all")

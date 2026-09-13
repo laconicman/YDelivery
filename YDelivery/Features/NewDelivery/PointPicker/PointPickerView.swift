@@ -70,7 +70,7 @@ struct PointPickerView: View {
                     SearchContent.Chip(id: $0.id, name: $0.name, symbol: $0.kind.symbol)
                 },
                 recents: store.recentPoints.map(SearchContent.Recent.init),
-                historyUnavailable: store.historyUnavailable,
+                historyUnavailable: store.pickerMemoryUnavailable,
                 searchText: $model.searchText,
                 suggestions: model.suggestions,
                 pasteState: model.pasteState,
@@ -150,6 +150,11 @@ struct PointPickerView: View {
             .task { await model.streamSuggestions() }
             .task { await store.refresh() }
             .task(id: startCity) { await model.resolveStartCity(startCity) }
+            // Every running task answers this sheet's question and no other's:
+            // dismissal retires the location fix, the lookup, and a paste expansion
+            // alike — an answer with nobody to receive it is only spent network
+            // (review, PR #18 post-merge; widened on the second round).
+            .onDisappear { model.retireOngoingWork() }
         }
         .sheet(item: $pendingSave) { pending in
             SavePlaceSheet(address: pending.place.displayAddress) { name, kind in
