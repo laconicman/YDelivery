@@ -138,7 +138,7 @@ extension PointPickerView {
         /// drops its pin over the address they just chose (review, PR #18). Called from
         /// the selection paths, never from the fix's own completion, which must be free
         /// to place the pin it was asked for.
-        private func retireLocationFix() {
+        func retireLocationFix() {
             locationTask?.cancel()
             locationTask = nil
             isLocating = false
@@ -490,12 +490,68 @@ extension PointPickerView.Model {
         // whatever it finds there — an arbitrary body from an arbitrary host, for a
         // request whose entire purpose is to learn one URL (review, PR #18). `bytes`
         // returns once the response head has arrived; cancelling the task there means
-        // the body is never fetched.
-        let (bytes, response) = try await URLSession.shared.bytes(from: url)
+        // the body is never fetched. The gate rules on every hop *before* it is
+        // contacted (review, PR #18, edited ask).
+        let gate = RedirectGate()
+        let (bytes, response) = try await URLSession.shared.bytes(from: url, delegate: gate)
         bytes.task.cancel()
+        if let recognized = gate.recognized { return recognized }
         guard let final = response.url, final.scheme == "https" || final.scheme == "http"
         else { throw URLError(.badServerResponse) }
         return final
+    }
+
+    /// Rules on each redirect before the session contacts it: a hop that already *is*
+    /// a readable map link is captured and never fetched; an unsupported scheme or a
+    /// chain past its cap stops where it stands. The judgement is ``verdict(for:hop:)``,
+    /// pure and tested; the delegate is its thinnest possible host.
+    nonisolated final class RedirectGate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+        enum Verdict: Equatable {
+            /// The target is itself a parseable map reference — done, do not contact it.
+            case capture
+            /// An ordinary hop worth following.
+            case follow
+            /// A scheme this flow must not touch, or a chain past its cap.
+            case refuse
+        }
+
+        /// Six hops covers every shortener chain seen in <doc:LinkGrammars> (they use
+        /// one or two) with honest headroom; past that, a chain is a maze, not a link.
+        static let hopCap = 6
+
+        static func verdict(for target: URL, hop: Int) -> Verdict {
+            guard hop <= hopCap, target.scheme == "https" || target.scheme == "http"
+            else { return .refuse }
+            if let link = MapLink(pasted: target.absoluteString), link.isReadable {
+                return .capture
+            }
+            return .follow
+        }
+
+        /// Written on the session's delegate queue, read after the task ends — the
+        /// `@unchecked Sendable` is exactly this one handoff.
+        private(set) var recognized: URL?
+        private var hops = 0
+
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest,
+            completionHandler: @escaping @Sendable (URLRequest?) -> Void
+        ) {
+            hops += 1
+            guard let target = request.url else { return completionHandler(nil) }
+            switch Self.verdict(for: target, hop: hops) {
+            case .capture:
+                recognized = target
+                completionHandler(nil)
+            case .follow:
+                completionHandler(request)
+            case .refuse:
+                completionHandler(nil)
+            }
+        }
     }
 
     /// The first usable fix from `CLLocationUpdate.liveUpdates()`, which also raises the

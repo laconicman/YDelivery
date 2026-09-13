@@ -177,7 +177,8 @@ struct StoreControllerTests {
 
         #expect(controller.orders.count == 1)
         #expect(controller.savedPlaces.map(\.name) == ["Дом"])
-        #expect(controller.storeError == nil)
+        #expect(controller.ordersError == nil)
+        #expect(controller.placesError == nil)
     }
 
     @Test("An unread store is not an empty one — first-run surfaces wait for the read")
@@ -199,6 +200,45 @@ struct StoreControllerTests {
 
         #expect(controller.savedPlaces.map(\.name) == ["Склад"])
         #expect(try SavedPlaceStore(directory: directory).read().count == 1)
+    }
+
+    @Test("A retried save is one chip — dedupe consults the file, not memory")
+    func retriedSaveDoesNotDuplicate() async throws {
+        let controller = controller
+        let point = RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100")
+        // Two saves of the same destination under different identities — exactly what
+        // a retry after a failed confirming read produces (review, PR #18 post-merge).
+        try await controller.save(SavedPlace(name: "Склад", kind: .warehouse, point: point))
+        try await controller.save(SavedPlace(name: "Склад (уточнил)", kind: .warehouse, point: point))
+
+        let stored = try SavedPlaceStore(directory: directory).read()
+        #expect(stored.count == 1, "same destination key — one memory, updated")
+        #expect(stored.first?.name == "Склад (уточнил)")
+    }
+
+    @Test("A successful bookmark does not dress unreadable history as empty")
+    func saveLeavesOrderErrorsStanding() async throws {
+        // An order store whose *file cannot be read at all* — a directory squatting on
+        // its path. (Malformed bytes deliberately read as empty in the Kit; this test
+        // needs the read to genuinely fail.)
+        try FileManager.default.createDirectory(
+            at: directory.appendingPathComponent("orders.json"),
+            withIntermediateDirectories: true
+        )
+        let controller = StoreController(
+            orderStore: OrderStore(directory: directory),
+            placeStore: SavedPlaceStore(directory: directory)
+        )
+        await controller.refresh()
+        #expect(controller.historyUnavailable != nil)
+
+        // ...stays reported after a place save succeeds: the save re-read *places*,
+        // it learned nothing about orders (review, PR #18 post-merge).
+        try await controller.save(
+            SavedPlace(name: "Дом", kind: .home, point: RoutePoint(latitude: 55, longitude: 37, address: "Дом"))
+        )
+        #expect(controller.historyUnavailable != nil)
+        #expect(controller.placesError == nil)
     }
 
     @Test("No container is a rendered state: saving reports, never crashes")
