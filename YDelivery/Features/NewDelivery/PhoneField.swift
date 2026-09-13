@@ -24,11 +24,16 @@ struct PhoneField: UIViewRepresentable {
         // from somewhere (DesignSystem → "Field taxonomy").
         field.textContentType = .telephoneNumber
         field.setContentHuggingPriority(.defaultHigh, for: .vertical)
+        // Two channels, deliberately: keyboard edits arrive as `.editingChanged`, but
+        // the flag picker sets `text` programmatically, and that setter posts only
+        // the notification — one channel alone saves a stale number after a country
+        // switch (review, PR #26).
         field.addTarget(
             context.coordinator,
             action: #selector(Coordinator.textDidChange),
             for: .editingChanged
         )
+        context.coordinator.observeProgrammaticChanges(of: field)
         return field
     }
 
@@ -41,6 +46,9 @@ struct PhoneField: UIViewRepresentable {
 
     final class Coordinator: NSObject {
         var text: Binding<String>
+        /// `nonisolated(unsafe)` so the nonisolated deinit may hand it back;
+        /// `removeObserver` is documented thread-safe.
+        private nonisolated(unsafe) var programmaticChanges: (any NSObjectProtocol)?
 
         init(text: Binding<String>) {
             self.text = text
@@ -49,13 +57,42 @@ struct PhoneField: UIViewRepresentable {
         @objc func textDidChange(_ field: UITextField) {
             text.wrappedValue = field.text ?? ""
         }
+
+        func observeProgrammaticChanges(of field: PhoneNumberTextField) {
+            programmaticChanges = NotificationCenter.default.addObserver(
+                forName: UITextField.textDidChangeNotification,
+                object: field,
+                queue: .main
+            ) { [weak self] note in
+                // Delivered on the main queue; only the String crosses into the
+                // isolation assumption — nothing non-Sendable is captured or sent.
+                let text = (note.object as? UITextField)?.text ?? ""
+                MainActor.assumeIsolated {
+                    guard let self, self.text.wrappedValue != text else { return }
+                    self.text.wrappedValue = text
+                }
+            }
+        }
+
+        deinit {
+            if let programmaticChanges {
+                NotificationCenter.default.removeObserver(programmaticChanges)
+            }
+        }
     }
 }
 
 /// One shared parser: creating `PhoneNumberUtility` loads the metadata, so it is paid
-/// for once, not per keystroke.
-enum PhoneFormat {
-    static let utility = PhoneNumberUtility()
+/// for once, not per keystroke. `nonisolated` — parsing is pure and reusable, and the
+/// target's MainActor default would otherwise pin it (review, PR #26; the same rule
+/// REVIEW.md carries for model extensions).
+nonisolated enum PhoneFormat {
+    /// `nonisolated(unsafe)`: upstream's 5.0 added `Sendable` to its value types but
+    /// not (yet) to `PhoneNumberUtility`, which after its init-time metadata load is
+    /// used read-only here — shared by the fields' formatting and this parser. The
+    /// marker is the boundary to revisit when upstream conforms, not a suppression
+    /// to copy (review, PR #26).
+    nonisolated(unsafe) static let utility = PhoneNumberUtility()
 
     /// The wire form of a number the courier can actually dial — E.164, no spaces to
     /// mis-copy — or `nil` while the digits do not amount to one.
@@ -65,7 +102,7 @@ enum PhoneFormat {
     }
 }
 
-extension Contact {
+nonisolated extension Contact {
     /// The contact as the order should carry it: the phone in E.164 when it parses,
     /// verbatim when it does not — never silently dropped, the blockers say the rest.
     func withDialablePhone() -> Contact {

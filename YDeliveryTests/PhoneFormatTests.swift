@@ -1,7 +1,8 @@
 import Testing
 @testable import YDelivery
 
-@MainActor
+// Deliberately not @MainActor: PhoneFormat is nonisolated, and this suite running
+// off the main actor is the proof (review, PR #26).
 @Suite("Phone format")
 struct PhoneFormatTests {
     @Test("A formatted number normalizes to E.164 — nothing to mis-copy on the wire")
