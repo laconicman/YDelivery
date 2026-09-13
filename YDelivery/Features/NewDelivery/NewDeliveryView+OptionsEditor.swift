@@ -57,14 +57,12 @@ extension NewDeliveryView {
         private var thermobagAllowed: Bool { selectedTariff == .courier }
         private var loadersAllowed: Bool { selectedTariff == .cargo }
 
-        /// Trailing scroll room so the When and Note sections can reach the top on any
-        /// sheet height. Proportional to the *container*, not a fixed count: a constant
-        /// sized for a phone left When stranded mid-sheet on a tall iPad, where the
-        /// content after it is a fraction of the viewport (review, PR #26, edited ask).
-        /// The share is the viewport minus the smallest trailing content a landing
-        /// section can have below it (When's toggle row + the note section, well under
-        /// a seventh of any supported sheet).
-        private static let landingRunwayShare: CGFloat = 0.85
+        // Trailing scroll room for the When/Note landings is the *full container
+        // height* — see the contentMargins comment. Two rounds taught the arithmetic:
+        // a 480-point constant stranded tall iPads, and an 0.85 share still missed
+        // Note, whose trailing content is only itself — under 15% of a tall sheet
+        // (review, PR #26, both edited asks). Full height top-aligns any section on
+        // any container, and the runway exists only behind the two later landings.
 
         var body: some View {
             NavigationStack {
@@ -129,7 +127,7 @@ extension NewDeliveryView {
                     // same landing a phone does (review, PR #26, edited ask).
                     .contentMargins(
                         .bottom,
-                        focus == .options ? 0 : container.size.height * Self.landingRunwayShare,
+                        focus == .options ? 0 : container.size.height,
                         for: .scrollContent
                     )
                     .task {
