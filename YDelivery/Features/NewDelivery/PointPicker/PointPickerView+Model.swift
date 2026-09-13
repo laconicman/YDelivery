@@ -144,6 +144,18 @@ extension PointPickerView {
             isLocating = false
         }
 
+        /// The sheet is gone; so is every question it was asking. Dismissal retires
+        /// the location fix *and* the lookup and paste expansions — each answers this
+        /// sheet and no other, and an answer with nobody to receive it is only spent
+        /// network and geocoding (review, PR #28).
+        func retireOngoingWork() {
+            retireLocationFix()
+            lookupTask?.cancel()
+            lookupTask = nil
+            pasteTask?.cancel()
+            pasteTask = nil
+        }
+
         private func adoptNewPoint(isApproximate: Bool = false) {
             addressParts = AddressParts()
             locationIsApproximate = isApproximate
@@ -496,6 +508,10 @@ extension PointPickerView.Model {
         let (bytes, response) = try await URLSession.shared.bytes(from: url, delegate: gate)
         bytes.task.cancel()
         if let recognized = gate.recognized { return recognized }
+        // A refused chain is an expansion *failure*, and must say so: returning the
+        // last host's URL instead read as "no coordinates in this link", which is a
+        // statement about the wrong thing (review, PR #28).
+        if gate.refused { throw URLError(.cannotConnectToHost) }
         guard let final = response.url, final.scheme == "https" || final.scheme == "http"
         else { throw URLError(.badServerResponse) }
         return final
@@ -532,6 +548,9 @@ extension PointPickerView.Model {
         /// Written on the session's delegate queue, read after the task ends — the
         /// `@unchecked Sendable` is exactly this one handoff.
         private(set) var recognized: URL?
+        /// Whether the gate stopped the chain — so the expander can report a refusal
+        /// as the failure it is, never as the last host's answer (review, PR #28).
+        private(set) var refused = false
         private var hops = 0
 
         func urlSession(
@@ -550,6 +569,7 @@ extension PointPickerView.Model {
             case .follow:
                 completionHandler(request)
             case .refuse:
+                refused = true
                 completionHandler(nil)
             }
         }

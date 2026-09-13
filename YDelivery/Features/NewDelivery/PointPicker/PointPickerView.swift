@@ -150,10 +150,11 @@ struct PointPickerView: View {
             .task { await model.streamSuggestions() }
             .task { await store.refresh() }
             .task(id: startCity) { await model.resolveStartCity(startCity) }
-            // The location task answers this sheet's question and no other's:
-            // dismissing mid-acquisition retires it, or liveUpdates would keep
-            // consuming fixes with nobody to give them to (review, PR #18 post-merge).
-            .onDisappear { model.retireLocationFix() }
+            // Every running task answers this sheet's question and no other's:
+            // dismissal retires the location fix, the lookup, and a paste expansion
+            // alike — an answer with nobody to receive it is only spent network
+            // (review, PR #18 post-merge; widened on the second round).
+            .onDisappear { model.retireOngoingWork() }
         }
         .sheet(item: $pendingSave) { pending in
             SavePlaceSheet(address: pending.place.displayAddress) { name, kind in
