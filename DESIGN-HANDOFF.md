@@ -18,25 +18,25 @@
 
 ## 0. How to use this package
 
-Six board files, three documents. The boards are the argument; the documents are the residue
-that should outlive them.
+What remains in the repo after the 2026-09-13 adoption — the rows below are the *current*
+retention state, not the design export's inventory (which re-lists boards this table had
+already retired; see the adoption note above).
 
-| File | Goes to | Keep? |
+| File | Where | Keep? |
 |---|---|---|
-| `DESIGN-HANDOFF.md` (this) | repo root, or `Documentation.docc/` | until implemented, then fold into `Design.md` |
+| `DESIGN-HANDOFF.md` (this) | repo root | until Round 5 is implemented, then fold into `Design.md` and delete |
 | `Positioning.md` | repo root | permanent — it is the README's and store page's source |
-| `Dossier-Update.md` | merge into `Design-Research-Dossier.md` | dies with the dossier |
+| `Dossier-Update.md` | — | **not adopted**: predates the dossier's consumption (2026-08) |
+| Round 1 boards (×3) | — | **deleted 2026-09-06**: their surfaces shipped; `2c`/`3f`/§4 specs live in `DesignSystem.md` |
 | `YDelivery — Shipped Today.dc.html` | `design/` | reference: the "before" |
-| `Round 1 - Route & Ordering.dc.html` | `design/` | until the draft screen ships |
-| `Round 1 - Picker & Points.dc.html` | `design/` | until the picker ships |
-| `Round 1 - Tariffs, Fields & XL.dc.html` | `design/` | until parcel/options ship |
 | `Round 2 - Callouts, Custom Fields & Motion.dc.html` | `design/` | until custom fields ship |
 | `Round 3 - System Surfaces.dc.html` | `design/` | until widgets/activity ship |
 | `Round 4 - Capture, Color & Keyboard.dc.html` | `design/` | colour + keyboard parts are permanent |
 | `Round 5 - Draft Anatomy.dc.html` | `design/` | until the draft's anatomy ships |
 
-Boards need `support.js` beside them to open. Download the whole design project and drop the
-folder in as `design/` — that keeps every board working offline with no bundling step.
+Boards need the **repo's patched** `support.js` beside them (offline `__resources`,
+cross-board `FRAME_BOARDS`); links into the deleted Round 1 boards render as
+"(folded into DesignSystem.md)" spans.
 
 **What to lift into permanent docs, once:** the semantic colour table (§5), the pin/badge
 spec (`2c`), the field taxonomy (§4), and the motion table (`4c`). Those four outlive the
