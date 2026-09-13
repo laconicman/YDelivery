@@ -62,6 +62,15 @@ packages:
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
     from: 7.0.0
+  # Google's libphonenumber metadata, in Swift (author, 2026-09-09): phone entry gets the
+  # field users know worldwide instead of a plain TextField. Core parses and validates;
+  # the UI package carries PhoneNumberTextField and its SwiftUI representable.
+  PhoneNumberKit:
+    url: https://github.com/PhoneNumberKit/PhoneNumberKit
+    from: 5.0.8
+  PhoneNumberKitUI:
+    url: https://github.com/PhoneNumberKit/PhoneNumberKitUI
+    from: 1.1.0
 
 targets:
   YDelivery:
@@ -74,6 +83,10 @@ targets:
         product: YandexDeliveryExpressAPI
       - package: YDeliveryKit
         product: YDeliveryKit
+      - package: PhoneNumberKit
+        product: PhoneNumberKit
+      - package: PhoneNumberKitUI
+        product: PhoneNumberKitUI
       - package: SFSafeSymbols
         product: SFSafeSymbols
     settings:

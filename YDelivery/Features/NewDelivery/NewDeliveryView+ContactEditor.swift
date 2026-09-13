@@ -32,15 +32,19 @@ extension NewDeliveryView {
                             .textContentType(.givenName)
                         TextField("Family name", text: $contact.familyName)
                             .textContentType(.familyName)
-                        TextField("Phone", text: $contact.phone)
-                            .textContentType(.telephoneNumber)
-                            .keyboardType(.phonePad)
+                        PhoneField(text: $contact.phone)
                         // No `textContentType`: UIKit has no content type for a dial
                         // extension — the number pad is all the system can offer here.
                         TextField("Extension", text: $contact.phoneExtension)
                             .keyboardType(.numberPad)
                     } footer: {
-                        Text("The courier calls this number on arrival. Clear the fields to remove the contact.")
+                        // The hint states the bound without blocking: a contact may be
+                        // saved half-typed, and ordering's blockers say the rest.
+                        if !contact.phone.isEmpty, PhoneFormat.dialable(contact.phone) == nil {
+                            Text("This isn't a dialable number yet — the courier calls it on arrival.")
+                        } else {
+                            Text("The courier calls this number on arrival. Clear the fields to remove the contact.")
+                        }
                     }
                 }
                 .navigationTitle(title)
@@ -51,7 +55,7 @@ extension NewDeliveryView {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            save(contact)
+                            save(contact.withDialablePhone())
                             dismiss()
                         }
                     }
