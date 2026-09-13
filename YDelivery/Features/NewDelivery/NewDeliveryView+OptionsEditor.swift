@@ -27,6 +27,7 @@ extension NewDeliveryView {
         /// initial value can sit microseconds outside its own range; `@State` also keeps
         /// it from drifting forward on every body re-evaluation (review, PR #21).
         @State private var dueWindow: ClosedRange<Date>
+        @FocusState private var noteIsFocused: Bool
         @Environment(\.dismiss) private var dismiss
 
         init(
@@ -55,6 +56,12 @@ extension NewDeliveryView {
 
         private var thermobagAllowed: Bool { selectedTariff == .courier }
         private var loadersAllowed: Bool { selectedTariff == .cargo }
+
+        /// Trailing scroll room so the When and Note sections can reach the top on any
+        /// sheet height — sized to the tallest case that needs covering: a full-height
+        /// sheet minus the shortest trailing section (roughly one iPhone 16 Pro Max
+        /// viewport less the note section), rounded to the design grid.
+        private static let landingRunway: CGFloat = 480
 
         var body: some View {
             NavigationStack {
@@ -106,13 +113,28 @@ extension NewDeliveryView {
                         Section("Note for the courier") {
                             TextField("How to find you, what to mind…", text: $options.comment, axis: .vertical)
                                 .lineLimit(2...5)
+                                .focused($noteIsFocused)
                         }
                         .id(Focus.note)
                     }
-                    .onAppear {
-                        // Landing, not travel: the sheet opens already on the tapped
-                        // row's section, so no scroll animation to branch for motion.
+                    // Landing needs range: `scrollTo` clamps to content bounds, and a
+                    // form shorter than its viewport cannot bring a later section to the
+                    // top at all (review, PR #26). The runway exists only for the two
+                    // later landings — entering at Options keeps the form's honest end.
+                    .contentMargins(
+                        .bottom,
+                        focus == .options ? 0 : Self.landingRunway,
+                        for: .scrollContent
+                    )
+                    .task {
+                        // Landing, not travel: positioned before the sheet is read, so
+                        // no scroll animation to branch for motion. `.task` runs after
+                        // the first layout pass — `onAppear` fired before the Form knew
+                        // its bounds, and the clamp ate the scroll (review, PR #26).
                         proxy.scrollTo(focus, anchor: .top)
+                        // The note landing means "start typing": focusing raises the
+                        // keyboard, and the system keeps the field in view thereafter.
+                        if focus == .note { noteIsFocused = true }
                     }
                 }
                 .navigationTitle("Options")
