@@ -57,90 +57,25 @@ extension NewDeliveryView {
         private var thermobagAllowed: Bool { selectedTariff == .courier }
         private var loadersAllowed: Bool { selectedTariff == .cargo }
 
-        // Trailing scroll room for the When/Note landings is the *full container
-        // height* — see the contentMargins comment. Two rounds taught the arithmetic:
-        // a 480-point constant stranded tall iPads, and an 0.85 share still missed
-        // Note, whose trailing content is only itself — under 15% of a tall sheet
-        // (review, PR #26, both edited asks). Full height top-aligns any section on
-        // any container, and the runway exists only behind the two later landings.
+        /// The tapped section leads; the rest follow in their canonical order. Landing
+        /// by *ordering* ends three rounds of scroll arithmetic (review, PR #26): a
+        /// 480-point runway stranded tall iPads, a 0.85 share still missed Note, and a
+        /// full-height margin let the whole form scroll into blankness. Ordering has
+        /// none of those failure modes — no runway, nothing to clamp, every option
+        /// still reachable below, and no scroll to branch for Reduce Motion.
+        private var sectionOrder: [Focus] {
+            [focus] + Focus.allCases.filter { $0 != focus }
+        }
 
         var body: some View {
             NavigationStack {
-                GeometryReader { container in
-                ScrollViewReader { proxy in
-                    Form {
-                        Section {
-                            Toggle("Pro courier", isOn: $options.proCourier)
-                            Toggle("To the door", isOn: $options.toDoor)
-                            Toggle("Thermal bag", isOn: $options.thermobag)
-                                .disabled(!thermobagAllowed)
-                        } footer: {
-                            // The reason, not a hint — and only when it declines.
-                            if !thermobagAllowed {
-                                Text("A thermal bag rides only with the courier class.")
-                            }
-                        }
-                        .id(Focus.options)
-
-                        Section {
-                            Stepper(
-                                value: $options.loaders,
-                                in: DeliveryOptions.loadersRange
-                            ) {
-                                LabeledContent("Loaders", value: options.loaders.formatted())
-                            }
-                            .disabled(!loadersAllowed)
-                        } footer: {
-                            Text(
-                                loadersAllowed
-                                    ? "One or two — the cargo van's bound."
-                                    : "Loaders ride only in the cargo van — one or two there."
-                            )
-                        }
-
-                        Section {
-                            Toggle("Scheduled pickup", isOn: $isScheduled)
-                            if isScheduled {
-                                DatePicker(
-                                    "Courier arrives",
-                                    selection: dueBinding,
-                                    in: dueWindow
-                                )
-                            }
-                        } footer: {
-                            Text(dueBoundWords)
-                        }
-                        .id(Focus.when)
-
-                        Section("Note for the courier") {
-                            TextField("How to find you, what to mind…", text: $options.comment, axis: .vertical)
-                                .lineLimit(2...5)
-                                .focused($noteIsFocused)
-                        }
-                        .id(Focus.note)
-                    }
-                    // Landing needs range: `scrollTo` clamps to content bounds, and a
-                    // form shorter than its viewport cannot bring a later section to the
-                    // top at all (review, PR #26). The runway exists only for the two
-                    // later landings — entering at Options keeps the form's honest end —
-                    // and scales with the container, so a tall iPad sheet grants the
-                    // same landing a phone does (review, PR #26, edited ask).
-                    .contentMargins(
-                        .bottom,
-                        focus == .options ? 0 : container.size.height,
-                        for: .scrollContent
-                    )
-                    .task {
-                        // Landing, not travel: positioned before the sheet is read, so
-                        // no scroll animation to branch for motion. `.task` runs after
-                        // the first layout pass — `onAppear` fired before the Form knew
-                        // its bounds, and the clamp ate the scroll (review, PR #26).
-                        proxy.scrollTo(focus, anchor: .top)
-                        // The note landing means "start typing": focusing raises the
-                        // keyboard, and the system keeps the field in view thereafter.
-                        if focus == .note { noteIsFocused = true }
-                    }
+                Form {
+                    ForEach(sectionOrder) { section(for: $0) }
                 }
+                .onAppear {
+                    // The note landing means "start typing": focusing raises the
+                    // keyboard, and the system keeps the field in view thereafter.
+                    if focus == .note { noteIsFocused = true }
                 }
                 .navigationTitle("Options")
                 .navigationBarTitleDisplayMode(.inline)
@@ -157,6 +92,62 @@ extension NewDeliveryView {
                 }
                 .onChange(of: isScheduled) {
                     options.setScheduled(isScheduled, within: dueWindow)
+                }
+            }
+        }
+
+        /// One group per entrance. `.options` brings the loaders along — they are not
+        /// an entrance of their own, and they stay behind the options wherever the
+        /// options land in the order.
+        @ViewBuilder
+        private func section(for focus: Focus) -> some View {
+            switch focus {
+            case .options:
+                Section {
+                    Toggle("Pro courier", isOn: $options.proCourier)
+                    Toggle("To the door", isOn: $options.toDoor)
+                    Toggle("Thermal bag", isOn: $options.thermobag)
+                        .disabled(!thermobagAllowed)
+                } footer: {
+                    // The reason, not a hint — and only when it declines.
+                    if !thermobagAllowed {
+                        Text("A thermal bag rides only with the courier class.")
+                    }
+                }
+
+                Section {
+                    Stepper(
+                        value: $options.loaders,
+                        in: DeliveryOptions.loadersRange
+                    ) {
+                        LabeledContent("Loaders", value: options.loaders.formatted())
+                    }
+                    .disabled(!loadersAllowed)
+                } footer: {
+                    Text(
+                        loadersAllowed
+                            ? "One or two — the cargo van's bound."
+                            : "Loaders ride only in the cargo van — one or two there."
+                    )
+                }
+            case .when:
+                Section {
+                    Toggle("Scheduled pickup", isOn: $isScheduled)
+                    if isScheduled {
+                        DatePicker(
+                            "Courier arrives",
+                            selection: dueBinding,
+                            in: dueWindow
+                        )
+                    }
+                } footer: {
+                    Text(dueBoundWords)
+                }
+            case .note:
+                Section("Note for the courier") {
+                    TextField("How to find you, what to mind…", text: $options.comment, axis: .vertical)
+                        .lineLimit(2...5)
+                        .focused($noteIsFocused)
                 }
             }
         }
