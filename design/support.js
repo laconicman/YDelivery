@@ -1930,6 +1930,8 @@
     "5c": "Round 3 - System Surfaces.dc.html", "5d": "Round 3 - System Surfaces.dc.html",
     "5e": "Round 3 - System Surfaces.dc.html", "5f": "Round 3 - System Surfaces.dc.html",
     "6a": "Round 4 - Capture, Color & Keyboard.dc.html", "6b": "Round 4 - Capture, Color & Keyboard.dc.html",
+    "7a": "Round 5 - Draft Anatomy.dc.html", "7b": "Round 5 - Draft Anatomy.dc.html",
+    "7c": "Round 5 - Draft Anatomy.dc.html", "7d": "Round 5 - Draft Anatomy.dc.html",
     "6c": "Round 4 - Capture, Color & Keyboard.dc.html", "6d": "Round 4 - Capture, Color & Keyboard.dc.html"
   };
   // Rewrite cross-board anchors to their owning file so every gesture — primary click,
