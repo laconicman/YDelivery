@@ -520,12 +520,31 @@ extension PointPickerView.Model {
         static let hopCap = 6
 
         static func verdict(for target: URL, hop: Int) -> Verdict {
-            guard hop <= hopCap, target.scheme == "https" || target.scheme == "http"
+            guard hop <= hopCap, target.scheme == "https" || target.scheme == "http",
+                  !isPrivateTarget(target)
             else { return .refuse }
             if let link = MapLink(pasted: target.absoluteString), link.isReadable {
                 return .capture
             }
             return .follow
+        }
+
+        /// A pasted short link must never walk this app onto someone's LAN: loopback,
+        /// RFC-1918 and link-local literals, and mDNS names are refused where they
+        /// stand (review, PR #28). Hostnames that merely *resolve* privately are out
+        /// of a client app's cheap reach — named, not silently covered.
+        static func isPrivateTarget(_ url: URL) -> Bool {
+            guard let host = url.host()?.lowercased(), !host.isEmpty else { return true }
+            if host == "localhost" || host.hasSuffix(".local") { return true }
+            if host == "::1" || host.hasPrefix("fe80:") || host.hasPrefix("fc") || host.hasPrefix("fd") {
+                return true
+            }
+            let octets = host.split(separator: ".").compactMap { UInt8($0) }
+            guard octets.count == 4 else { return false } // not an IPv4 literal
+            return switch (octets[0], octets[1]) {
+            case (10, _), (127, _), (169, 254), (192, 168), (172, 16...31): true
+            default: false
+            }
         }
 
         /// Written on the session's delegate queue, read after the task ends — the

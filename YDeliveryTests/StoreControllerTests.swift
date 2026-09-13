@@ -241,6 +241,23 @@ struct StoreControllerTests {
         #expect(controller.placesError == nil)
     }
 
+    @Test("The picker's memory speaks when either file fails; deliveries only for orders")
+    func pickerMemorySpeaksForBothChannels() async throws {
+        // A place store whose file cannot be read; orders healthy.
+        try FileManager.default.createDirectory(
+            at: directory.appendingPathComponent("places.json"),
+            withIntermediateDirectories: true
+        )
+        let controller = StoreController(
+            orderStore: OrderStore(directory: directory),
+            placeStore: SavedPlaceStore(directory: directory)
+        )
+        await controller.refresh()
+        // Chips would be silently absent without their own channel (review, PR #28).
+        #expect(controller.historyUnavailable == nil)
+        #expect(controller.pickerMemoryUnavailable != nil)
+    }
+
     @Test("No container is a rendered state: saving reports, never crashes")
     func unavailableStoreReports() async throws {
         let controller = StoreController(orderStore: nil, placeStore: nil)

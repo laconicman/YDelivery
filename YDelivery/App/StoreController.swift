@@ -55,6 +55,17 @@ final class StoreController {
         return nil
     }
 
+    /// Why the picker's memory — chips *and* recents — may be missing pieces. The
+    /// picker draws on both files (recents from orders, chips from places), so either
+    /// error deserves a word there; the deliveries list stays keyed to orders alone.
+    /// Without this, a failed place read left chips silently absent while
+    /// ``historyUnavailable`` reported health (review, PR #28).
+    var pickerMemoryUnavailable: String? {
+        if let error = ordersError ?? placesError { return error.localizedDescription }
+        if orderStore == nil, placeStore == nil { return StoreUnavailable().localizedDescription }
+        return nil
+    }
+
     /// Whether the sender has ever actually placed an order. The beginner's explainer
     /// runs "until the first successful order" (Roadmap, handoff §7) — and a draft is
     /// precisely an order that was never placed, so counting rows would retire the
@@ -173,9 +184,17 @@ final class StoreController {
         guard let orderStore else { throw StoreUnavailable() }
         try await Self.write(order, to: orderStore)
         // The write held; if the confirming read stumbles, the order still leads the
-        // list rather than vanishing until the next refresh.
-        orders = (try? await Self.readOrders(orderStore)) ?? ([order] + orders)
-        ordersError = nil
+        // list rather than vanishing until the next refresh — but the write and the
+        // read report different facts, and only the read may clear the error: a
+        // partial fallback list dressed as healthy history omits orders silently
+        // (review, PR #28).
+        do {
+            orders = try await Self.readOrders(orderStore)
+            ordersError = nil
+        } catch {
+            orders = [order] + orders
+            ordersError = error
+        }
     }
 
     struct StoreUnavailable: LocalizedError {

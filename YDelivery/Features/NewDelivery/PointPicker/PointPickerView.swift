@@ -70,7 +70,7 @@ struct PointPickerView: View {
                     SearchContent.Chip(id: $0.id, name: $0.name, symbol: $0.kind.symbol)
                 },
                 recents: store.recentPoints.map(SearchContent.Recent.init),
-                historyUnavailable: store.historyUnavailable,
+                historyUnavailable: store.pickerMemoryUnavailable,
                 searchText: $model.searchText,
                 suggestions: model.suggestions,
                 pasteState: model.pasteState,

@@ -39,4 +39,19 @@ struct RedirectGateTests {
         #expect(Gate.verdict(for: url, hop: Gate.hopCap) == .follow)
         #expect(Gate.verdict(for: url, hop: Gate.hopCap + 1) == .refuse)
     }
+
+    @Test("A short link never walks the app onto someone's LAN")
+    func refusesPrivateTargets() {
+        for target in [
+            "https://10.0.0.1/x", "https://127.0.0.1/x", "https://192.168.1.1/x",
+            "https://172.20.3.4/x", "https://169.254.1.1/x", "https://localhost/x",
+            "https://printer.local/x", "https://[::1]/x", "https://[fe80::1]/x",
+        ] {
+            #expect(Gate.verdict(for: URL(string: target)!, hop: 1) == .refuse, "\(target)")
+        }
+        // The private ranges are ranges, not prefixes-by-eye: 172.32 is public.
+        #expect(Gate.verdict(for: URL(string: "https://172.32.0.1/x")!, hop: 1) == .follow)
+        #expect(Gate.isPrivateTarget(URL(string: "https://tinyurl.com/a")!) == false,
+                "hostnames that merely resolve privately are named as out of reach, not covered")
+    }
 }
