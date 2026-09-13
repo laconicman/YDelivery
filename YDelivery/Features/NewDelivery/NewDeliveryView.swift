@@ -24,7 +24,6 @@ struct NewDeliveryView: View {
     /// makes a retry cancellable by the next edit instead of outliving it.
     @State private var estimateAttempt = 0
     @State private var offersAttempt = 0
-    @State private var editingContactPoint: Model.Point?
     @State private var editingItem: ParcelItem?
     @State private var editingOptions: OptionsEditor.Focus?
     @State private var showsExplainer = false
@@ -76,6 +75,7 @@ struct NewDeliveryView: View {
                 offers: draft.offers,
                 selectedOfferID: draft.selectedOfferID,
                 itemRows: contentItemRows,
+                routeIsComplete: draft.isRouteComplete,
                 optionsSummary: draft.options.summary,
                 whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
@@ -84,7 +84,10 @@ struct NewDeliveryView: View {
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
-                editContact: { editingContactPoint = draft.point(withID: $0) },
+                // The same one-flow sheet as the address — a point is one thing, and
+                // its editor answers both questions (Round 5, decision #40; author,
+                // 2026-09-14). With a place set it opens on Describe.
+                editContact: { pickingPoint = draft.point(withID: $0) },
                 setRole: { draft.setRole($1, for: $0) },
                 swapEnds: { draft.swapEnds() },
                 addStop: { pickingPoint = draft.point(withID: draft.addStop()) },
@@ -185,22 +188,12 @@ struct NewDeliveryView: View {
                     initialPlace: point.place,
                     initialContact: point.contact,
                     confirm: { place, contact in
+                        // The flow speaks for the whole point: the place and the
+                        // person, or nobody — stated, never inferred.
                         draft.setPlace(place, for: point.id)
-                        // A remembered point speaks for its own door — including when
-                        // nobody is behind it. Refining a pin says nothing, and the row
-                        // keeps whoever it had.
-                        if case .replace(let contact) = contact {
-                            draft.setContact(contact, for: point.id)
-                        }
+                        draft.setContact(contact, for: point.id)
                     },
                     fillEnds: { draft.fillEnds(from: $0, to: $1) }
-                )
-            }
-            .sheet(item: $editingContactPoint) { point in
-                ContactEditor(
-                    title: point.role.contactPrompt,
-                    contact: point.contact ?? Contact(),
-                    save: { draft.setContact($0, for: point.id) }
                 )
             }
             .sheet(item: $editingItem) { item in
