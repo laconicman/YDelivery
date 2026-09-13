@@ -3,8 +3,11 @@ import Testing
 @testable import YDelivery
 
 /// The expander's gate rules on every hop before the session contacts it — the
-/// judgement is pure, so it is tested here without a network (review, PR #18,
-/// the edited short-link ask).
+/// judgement is pure, so it is tested here without a network. Since PR #28's second
+/// round, the rule is an allowlist: the gate walks only hosts the grammar itself
+/// reads, so "where the expander may go" and "what the parser understands" are one
+/// list that cannot drift apart — and where an arbitrary hostname might *resolve*
+/// stops mattering at all.
 @Suite("Redirect gate")
 @MainActor
 struct RedirectGateTests {
@@ -20,38 +23,43 @@ struct RedirectGateTests {
         ) == .capture)
     }
 
-    @Test("An ordinary hop is followed; a provider page without coordinates too")
-    func followsOrdinaryHops() {
-        #expect(Gate.verdict(for: URL(string: "https://tinyurl.com/abc")!, hop: 1) == .follow)
-        // A shortener hopping to another shortener stays in the chain.
-        #expect(Gate.verdict(for: URL(string: "https://clck.ru/XYZ")!, hop: 2) == .follow)
+    @Test("Provider hops without coordinates yet are followed — the chain stays on the map")
+    func followsProviderHops() {
+        // A provider short link mid-chain: recognized host, no coordinates yet.
+        #expect(Gate.verdict(for: URL(string: "https://yandex.ru/maps/-/CHFsZB2l")!, hop: 1) == .follow)
+        #expect(Gate.verdict(for: URL(string: "https://go.2gis.com/abc123")!, hop: 2) == .follow)
     }
 
-    @Test("Schemes the flow must not touch are refused where they stand")
-    func refusesForeignSchemes() {
-        #expect(Gate.verdict(for: URL(string: "ftp://example.com/x")!, hop: 1) == .refuse)
-        #expect(Gate.verdict(for: URL(string: "file:///etc/hosts")!, hop: 1) == .refuse)
+    @Test("Hosts the grammar does not read are refused — resolution never enters into it")
+    func refusesForeignHosts() {
+        for target in [
+            "https://tinyurl.com/abc",          // generic shortener: not this grammar's
+            "https://10.0.0.1/x",               // private literal: not a provider either
+            "https://localhost/x",
+            "https://fdroid.org/x",             // hostname starting 'fd' — a *name*, not an IPv6 literal
+            "ftp://yandex.ru/x",                // provider host, foreign scheme
+        ] {
+            #expect(Gate.verdict(for: URL(string: target)!, hop: 1) == .refuse, "\(target)")
+        }
     }
 
     @Test("A chain past its cap is a maze, not a link")
     func refusesBeyondTheCap() {
-        let url = URL(string: "https://example.com/next")!
+        let url = URL(string: "https://yandex.ru/maps/-/next")!
         #expect(Gate.verdict(for: url, hop: Gate.hopCap) == .follow)
         #expect(Gate.verdict(for: url, hop: Gate.hopCap + 1) == .refuse)
     }
 
-    @Test("A short link never walks the app onto someone's LAN")
-    func refusesPrivateTargets() {
-        for target in [
-            "https://10.0.0.1/x", "https://127.0.0.1/x", "https://192.168.1.1/x",
-            "https://172.20.3.4/x", "https://169.254.1.1/x", "https://localhost/x",
-            "https://printer.local/x", "https://[::1]/x", "https://[fe80::1]/x",
-        ] {
-            #expect(Gate.verdict(for: URL(string: target)!, hop: 1) == .refuse, "\(target)")
+    @Test("The gate and the parser consult one host list")
+    func gateMatchesParserHosts() {
+        // Every source the grammar reads has its hosts admitted; the sample covers
+        // each provider family once.
+        for host in ["yandex.ru", "maps.yandex.ru", "yandex.com", "maps.app.goo.gl",
+                     "goo.gl", "www.google.com", "2gis.ru", "go.2gis.com", "maps.apple.com"] {
+            #expect(MapLink.isProviderHost(host), "\(host)")
         }
-        // The private ranges are ranges, not prefixes-by-eye: 172.32 is public.
-        #expect(Gate.verdict(for: URL(string: "https://172.32.0.1/x")!, hop: 1) == .follow)
-        #expect(Gate.isPrivateTarget(URL(string: "https://tinyurl.com/a")!) == false,
-                "hostnames that merely resolve privately are named as out of reach, not covered")
+        for host in ["notyandex.ru", "yandex.ru.evil.example", "fcbarcelona.com", "tinyurl.com"] {
+            #expect(!MapLink.isProviderHost(host), "\(host)")
+        }
     }
 }

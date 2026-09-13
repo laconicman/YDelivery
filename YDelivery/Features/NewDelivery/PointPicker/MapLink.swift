@@ -25,6 +25,17 @@ nonisolated enum MapLink: Hashable, Sendable {
         }
     }
 
+    /// The hosts this grammar reads — the single list the parser dispatch and the
+    /// redirect gate both consult, so "a host the expander may contact" and "a host
+    /// the parser understands" cannot drift apart (review, PR #28: an allowlist beats
+    /// reasoning about where arbitrary hostnames might resolve).
+    nonisolated static func isProviderHost(_ host: String) -> Bool {
+        host.isWithin("yandex.ru") || host.isWithin("yandex.com")
+            || host == "maps.app.goo.gl" || host == "goo.gl" || host.isWithin("google.com")
+            || host.isWithin("2gis.ru") || host == "go.2gis.com"
+            || host.isWithin("maps.apple.com")
+    }
+
     /// A coordinate pair as parsed — plain degrees, order already normalized to lat/lon.
     nonisolated struct Parsed: Hashable, Sendable {
         var latitude: Double
@@ -67,7 +78,7 @@ nonisolated extension MapLink {
             self = geo
             return
         }
-        guard let host = url.host()?.lowercased() else { return nil }
+        guard let host = url.host()?.lowercased(), Self.isProviderHost(host) else { return nil }
         let parsed: MapLink? = if host.isWithin("yandex.ru") || host.isWithin("yandex.com") {
             Self.yandexMaps(url)
         } else if host == "maps.app.goo.gl" || host == "goo.gl" || host.isWithin("google.com") {
