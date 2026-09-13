@@ -6,17 +6,48 @@ import SwiftUI
 /// an example placeholder — the field users know worldwide, because its metadata *is*
 /// Google's libphonenumber (author, 2026-09-09). Entry UX only: what the number is
 /// worth is `dialable`'s question, asked beside the field, never inside it.
-struct PhoneField: View {
+///
+/// Our own representable rather than the package's: the stock one constructs the field
+/// with `PhoneNumberTextField()`, whose default init makes a private
+/// `PhoneNumberUtility` — one metadata load *per field*. This one hands every field the
+/// shared `PhoneFormat.utility`, so entry and validation also agree on one parser
+/// (review, PR #25).
+struct PhoneField: UIViewRepresentable {
     @Binding var text: String
 
-    var body: some View {
-        PhoneNumberTextFieldRepresentable(text: $text) { field in
-            field.withFlag = true
-            field.withExamplePlaceholder = true
-            field.withDefaultPickerUI = true
-            // Autofill offers the sender's own number — they are always copying
-            // from somewhere (DesignSystem → "Field taxonomy").
-            field.textContentType = .telephoneNumber
+    func makeUIView(context: Context) -> PhoneNumberTextField {
+        let field = PhoneNumberTextField(frame: .zero, utility: PhoneFormat.utility)
+        field.withFlag = true
+        field.withExamplePlaceholder = true
+        field.withDefaultPickerUI = true
+        // Autofill offers the sender's own number — they are always copying
+        // from somewhere (DesignSystem → "Field taxonomy").
+        field.textContentType = .telephoneNumber
+        field.setContentHuggingPriority(.defaultHigh, for: .vertical)
+        field.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.textDidChange),
+            for: .editingChanged
+        )
+        return field
+    }
+
+    func updateUIView(_ field: PhoneNumberTextField, context: Context) {
+        context.coordinator.text = $text
+        if field.text != text { field.text = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        @objc func textDidChange(_ field: UITextField) {
+            text.wrappedValue = field.text ?? ""
         }
     }
 }

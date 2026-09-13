@@ -40,6 +40,22 @@ struct NewDeliveryOrderingTests {
         #expect(model.orderRequest != nil)
     }
 
+    @Test("A phone the editor let through half-typed still blocks the order")
+    func undialablePhoneBlocks() async {
+        let model = readyDraft()
+        await priced(model)
+        // Saving unfinished contacts is allowed (the editor only hints) — the order
+        // gate is where dialability is enforced, with the same rule (review, PR #25).
+        model.setContact(Contact(givenName: "Анна", phone: "домофон 12"), for: model.points[1].id)
+        #expect(model.orderBlockers == [
+            String(localized: "A phone the courier can't dial is no phone yet — finish the number.")
+        ])
+        #expect(model.orderRequest == nil)
+
+        model.setContact(Contact(givenName: "Анна", phone: "+7 998 765-43-21"), for: model.points[1].id)
+        #expect(model.orderBlockers.isEmpty, "a dialable number lifts the block")
+    }
+
     @Test("Create → watch → accept lands placed, with the order history remembers")
     func happyPathPlaces() async {
         let model = readyDraft()

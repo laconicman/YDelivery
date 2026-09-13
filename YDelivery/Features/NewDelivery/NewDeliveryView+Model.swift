@@ -471,6 +471,13 @@ extension NewDeliveryView {
             }
             if points.contains(where: { ($0.contact?.storable?.phone ?? "").isEmpty }) {
                 blockers.append(String(localized: "The courier calls ahead — every stop needs a person with a phone."))
+            } else if points.contains(where: {
+                // The same dialability rule the editor hints with: a half-typed contact
+                // may be *saved*, but an order carries only numbers the courier can
+                // actually call (review, PR #25).
+                PhoneFormat.dialable($0.contact?.storable?.phone ?? "") == nil
+            }) {
+                blockers.append(String(localized: "A phone the courier can't dial is no phone yet — finish the number."))
             }
             if items.isEmpty {
                 blockers.append(String(localized: "Say what's inside — the parcel is insured by its declared value."))
