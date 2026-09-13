@@ -7,8 +7,50 @@ import SwiftUI
 /// The draft lives here, above the sheet, so dismissing the flow parks it: navigation can
 /// no longer destroy a draft, which is what made the third tab wrong.
 struct RootView: View {
-    @State private var draft = NewDeliveryView.Model()
-    @State private var isComposing = false
+    @State private var draft = RootView.initialDraft()
+    @State private var isComposing = RootView.opensComposing
+
+    #if DEBUG
+    /// UI-test seeding: a three-stop draft with real-length addresses, opened on the
+    /// compose sheet — so screenshots exercise the layouts senders actually see
+    /// (author, 2026-09-14: verify visually, not only by test count). Seeded as the
+    /// @State *initial values* — an onAppear hook raced the sheet's first build and
+    /// seeded flakily. DEBUG-only; release builds compile the plain initials.
+    private static var opensComposing: Bool {
+        ProcessInfo.processInfo.arguments.contains("--uitest-three-stop-draft")
+    }
+
+    private static func initialDraft() -> NewDeliveryView.Model {
+        let model = NewDeliveryView.Model()
+        guard opensComposing else { return model }
+        model.setPlace(
+            PickedPlace(latitude: 55.7517, longitude: 37.6176,
+                        address: "Москва, Николоямская улица, 49с1, подъезд 3"),
+            for: model.points[0].id
+        )
+        model.setContact(Contact(givenName: "Иван", familyName: "Петров", phone: "+79123456789"), for: model.points[0].id)
+        _ = model.addStop()
+        model.setPlace(
+            PickedPlace(latitude: 55.7601, longitude: 37.6492,
+                        address: "Москва, Земляной Вал, 27с2, вход со двора, домофон 12"),
+            for: model.points[1].id
+        )
+        model.setContact(Contact(givenName: "Анна", familyName: "Сидорова", phone: "+79987654321"), for: model.points[1].id)
+        model.setPlace(
+            PickedPlace(latitude: 55.7887, longitude: 37.6064,
+                        address: "Москва, Новослободская улица, 73с1, офис 214"),
+            for: model.points[2].id
+        )
+        var item = ParcelItem()
+        item.name = "Ноутбук в чехле"
+        item.cost = 60000
+        model.setItem(item)
+        return model
+    }
+    #else
+    private static var opensComposing: Bool { false }
+    private static func initialDraft() -> NewDeliveryView.Model { NewDeliveryView.Model() }
+    #endif
 
     var body: some View {
         TabView {

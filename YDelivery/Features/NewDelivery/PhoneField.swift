@@ -27,7 +27,12 @@ struct PhoneField: UIViewRepresentable {
         // Two channels, deliberately: keyboard edits arrive as `.editingChanged`, but
         // the flag picker sets `text` programmatically, and that setter posts only
         // the notification — one channel alone saves a stale number after a country
-        // switch (review, PR #26).
+        // switch (review, PR #26; verified against upstream source, DeepWiki
+        // 2026-09-14: the setter posts and never sends the control event). Two
+        // upstream boundaries, named: `setTextUnformatted` mutates with *neither*
+        // signal (nothing here calls it; a future caller would go unobserved), and
+        // a country picked while the field is not first responder clears the text
+        // upstream — the binding mirrors that clear faithfully rather than fighting it.
         field.addTarget(
             context.coordinator,
             action: #selector(Coordinator.textDidChange),
