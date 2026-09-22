@@ -3,9 +3,10 @@ import SwiftUI
 import YDeliveryKit
 
 extension NewDeliveryView {
-    /// The beginner explainer (board `3a`): a vertical list — the shape that survives
-    /// accessibility sizes, which is why the paged cards lost (decision #3). It opens
-    /// itself until the first order exists, then lives behind the ⓘ. Bounds are stated
+    /// The explainer (board `3a`): a vertical list — the shape that survives
+    /// accessibility sizes, which is why the paged cards lost (decision #3). It lives
+    /// behind the ⓘ — it used to open itself for first-timers and the author found
+    /// the interruption worse than the reach (2026-09-22). Bounds are stated
     /// on every card; prices join when the strip has them.
     ///
     /// Static copy v1 (author, 2026-08-30): limits become live per-city data when the
