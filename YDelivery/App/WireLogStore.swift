@@ -110,11 +110,14 @@ actor WireLogStore {
             try FileManager.default.setAttributes(
                 [.protectionKey: FileProtectionType.complete], ofItemAtPath: fileURL.path
             )
-            exportContinuation.yield(exportURL)
         } catch {
             // A diagnostics store that can't write is a shrug, not a failure — the
             // request it was watching already returned.
         }
+        // Publish outside the do: a write that succeeded but failed to set
+        // protection still left evidence behind, and the share affordance must
+        // learn about it (review, PR #33).
+        exportContinuation.yield(exportURL)
     }
 
     func clear() {
