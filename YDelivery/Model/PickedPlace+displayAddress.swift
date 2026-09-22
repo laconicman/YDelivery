@@ -70,7 +70,7 @@ nonisolated extension PickedPlace {
     /// preposition *to*, and stripping the dot is how «вход к шлагбауму 2» once
     /// named a barrier a building (review, same round).
     private static let buildingLabels: Set<String> = [
-        "дом", "д.", "строение", "стр.", "стр", "корпус", "корп.", "корп", "к.",
+        "дом", "д.", "д", "строение", "стр.", "стр", "корпус", "корп.", "корп", "к.",
         "владение", "вл.", "вл", "литера", "лит.", "лит", "здание", "зд.", "зд",
     ]
 

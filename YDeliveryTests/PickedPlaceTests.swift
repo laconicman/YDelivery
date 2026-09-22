@@ -60,6 +60,8 @@ struct PickedPlaceTests {
         // Review, PR #30: «вход к шлагбауму 2» numbers the barrier, not a house.
         #expect(PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Красная площадь, вход к шлагбауму 2").lacksBuilding)
         #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, д. 10, к. 2").lacksBuilding)
+        // …and bare «д» is no preposition — it abbreviates дом even without the dot.
+        #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, д 10, кв 5").lacksBuilding)
     }
 
     @Test("A bare pin is honest by itself — the coordinates carry no warning")
