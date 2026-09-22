@@ -77,10 +77,12 @@ extension NewDeliveryView {
         private(set) var estimate: Estimate = .idle
         private(set) var offers: Offers = .idle
 
-        /// What the courier carries (board `3d`). Empty is a valid *draft* but not a
-        /// priceable one: ``pricingInputs`` waits for the first item, and the idle
-        /// footer names the parcel as the missing half (author, 2026-09-14). Placing
-        /// the order requires one as well (``orderBlockers``).
+        /// What the courier carries (board `3d`). Empty is a valid draft, and a
+        /// priceable one: the wire *omits* an empty item list rather than refusing
+        /// it — `items` is optional on `offers/calculate`, only a present-but-empty
+        /// array violates `minItems: 1` (DeepWiki consult on the spec, 2026-09-18;
+        /// author chose prices-on-geo). Placing the order still requires one
+        /// (``orderBlockers``).
         private(set) var items: [ParcelItem] = []
         var options = DeliveryOptions()
 
@@ -230,10 +232,10 @@ extension NewDeliveryView {
                 // the route's start, `nil` handover its end — so a pair with one default
                 // can be just as impossible as one with neither (review, PR #21). The
                 // handover is the half that gives way, since the pickup is where the
-                // parcel physically is.
-                let pickup = items[index].pickupPointID.flatMap { order[$0] } ?? 0
-                let handover = items[index].dropoffPointID.flatMap { order[$0] }
-                    ?? max(points.count - 1, 0)
+                // parcel physically is. The defaults are `pickupIndex`/`handoverIndex`'s
+                // — one home, so the rows and the repair can never disagree.
+                let pickup = pickupIndex(of: items[index])
+                let handover = handoverIndex(of: items[index])
                 if handover <= pickup {
                     items[index].dropoffPointID = nil
                     // Clearing the handover restores the route's end; if the pickup is
@@ -352,16 +354,59 @@ extension NewDeliveryView {
                 && !tariff.fitsParcel(items)
         }
 
+        // MARK: What happens at each stop
+
+        /// The index a journey end resolves to: a named stop, or the route's end —
+        /// `nil` pickup is the start, `nil` handover the last stop. The same
+        /// default ``repairItemJourneys`` and the editor's chooser already speak.
+        private func pickupIndex(of item: ParcelItem) -> Int {
+            item.pickupPointID.flatMap { id in points.firstIndex { $0.id == id } } ?? 0
+        }
+
+        private func handoverIndex(of item: ParcelItem) -> Int {
+            item.dropoffPointID.flatMap { id in points.firstIndex { $0.id == id } }
+                ?? max(points.count - 1, 0)
+        }
+
+        /// What the parcel does at one stop, as the counted sentence the point row
+        /// and the map callout both render (Round 5, #45–46; author, 2026-09-18 —
+        /// both directions stay visible until the layout chooses between them).
+        /// `nil` when nothing happens there.
+        func parcelActions(at index: Int) -> String? {
+            let boarding = items.filter { pickupIndex(of: $0) == index }.map(\.displayName)
+            let leaving = items.filter { handoverIndex(of: $0) == index }.map(\.displayName)
+            var actions: [String] = []
+            if !boarding.isEmpty {
+                actions.append(String(localized: "picks up \(boarding.formatted(.list(type: .and)))"))
+            }
+            if !leaving.isEmpty {
+                actions.append(String(localized: "hands over \(leaving.formatted(.list(type: .and)))"))
+            }
+            return actions.isEmpty ? nil : actions.joined(separator: " · ")
+        }
+
+        /// The item's own route in the stops' own words — «A → B». Shown only when
+        /// the route has middles, where a journey can differ from the route's
+        /// (YD-6).
+        func journeyLine(for item: ParcelItem) -> String? {
+            guard points.count > 2 else { return nil }
+            guard let from = points[pickupIndex(of: item)].place?.displayAddress,
+                  let to = points[handoverIndex(of: item)].place?.displayAddress
+            else { return nil }
+            return "\(from) → \(to)"
+        }
+
         // MARK: Offers
 
         /// Everything pricing answers to — route, parcel, options. Also the re-price
         /// trigger: the root's `.task(id:)` watches this, so an edit to any of the three
         /// cancels the stale run.
         var pricingInputs: OfferRequest? {
-            // No parcel, no request: pricing an empty order surfaced the provider's
-            // refusal as «couldn't get prices» — a failure state for a precondition
-            // (author, 2026-09-14). The idle footer names what is missing instead.
-            guard isRouteComplete, !items.isEmpty else { return nil }
+            // Geo alone prices: the wire omits an empty item list (it used to send
+            // `[]` and read the provider's `minItems` refusal as «couldn't get
+            // prices» — a failure state for what was never a failure). The parcel
+            // refines the quote when it exists; ordering still requires it.
+            guard isRouteComplete else { return nil }
             let waypoints = points.compactMap { point in
                 point.place.map {
                     OfferRequest.RequestWaypoint(
@@ -475,8 +520,14 @@ extension NewDeliveryView {
             if !isRouteComplete {
                 blockers.append(String(localized: "Every stop needs its place on the map."))
             }
-            if points.contains(where: { ($0.contact?.storable?.phone ?? "").isEmpty }) {
-                blockers.append(String(localized: "The courier calls ahead — every stop needs a person with a phone."))
+            if points.contains(where: {
+                // The wire's contact is `name` *and* `phone`, both required — a
+                // dialable number with nobody attached still 400s at claim time
+                // (DeepWiki consult on the spec, 2026-09-18).
+                let contact = $0.contact?.storable
+                return (contact?.phone ?? "").isEmpty || (contact?.fullName ?? "").isEmpty
+            }) {
+                blockers.append(String(localized: "The courier calls ahead — every stop needs a person: a name and a phone."))
             } else if points.contains(where: {
                 // The same dialability rule the editor hints with: a half-typed contact
                 // may be *saved*, but an order carries only numbers the courier can

@@ -35,4 +35,16 @@ struct PhoneFormatTests {
         let saved = Contact(givenName: "Анна", phone: "домофон 12").withDialablePhone()
         #expect(saved.phone == "домофон 12")
     }
+
+    @Test("Storing normalizes — no path keeps a formatted number for the wire")
+    func storableNormalizes() {
+        // The claim schema's phone pattern accepts only E.164, so `storable` — the
+        // single gate every save path reads — normalizes itself (review, PR #29:
+        // Describe's exits bypassed `withDialablePhone` when the rule lived only
+        // in the picker).
+        let stored = Contact(givenName: "Иван", phone: "+7 912 345-67-89").storable
+        #expect(stored?.phone == "+79123456789")
+        let unparseable = Contact(givenName: "Анна", phone: "домофон 12").storable
+        #expect(unparseable?.phone == "домофон 12", "verbatim, for the blockers to name")
+    }
 }

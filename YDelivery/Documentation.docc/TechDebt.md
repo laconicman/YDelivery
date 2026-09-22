@@ -71,16 +71,47 @@ claim that may be spending money; the vendor remembers.
   store-stack decision (<doc:Roadmap> → the research). Until then the window is one
   foregrounded flow wide.
 
-## YD-6 — Item rows do not show their journey — **open**
+## YD-6 — Item rows do not show their journey — **discharged**
 
 `repairItemJourneys()` keeps per-item stops valid across delete, reorder, `setRole` and
-`setItem` — but the row renders name and summary only, so a repaired (released) stop
-reference changes silently.
+`setItem` — but the row rendered name and summary only, so a repaired (released) stop
+reference changed silently.
 
-- **Cost:** on multi-stop routes a sender can believe an item still boards where it no
-  longer does; the truth is one editor-open away, which is one too far.
-- **Discharge:** the journey line on the item row (board `3d`'s «Маршрут вещи»
-  vocabulary), shown whenever the route has middles.
+- **The cost it carried:** on multi-stop routes a sender could believe an item still
+  boarded where it no longer did; the truth was one editor-open away, which was one
+  too far.
+- **Discharged by:** `journeyLine(for:)` on the draft model — the item row carries
+  «A → B» in the stops' own words whenever the route has middles, and point rows
+  state what the parcel does at their door (`parcelActions(at:)`, Round 5, #45–46).
+  Both directions render while the author chooses between them (2026-09-18).
+
+## YD-9 — Editing a contact opens the whole point flow — **open**
+
+The point row's contact line pushes the same picker the address uses, landing on
+Describe (decision #40's one flow). It is usable — the author tried it — but a
+two-stage stack for what reads as "edit the person" is heavier than the ask
+(author, 2026-09-18).
+
+- **Cost:** an unusual re-entry for the most common edit; the design language for
+  "open the person, not the point" does not exist yet.
+- **Discharge:** a re-entry that targets the tapped fact *within* the one flow —
+  e.g. Describe scrolled to the contact section, or a lighter sub-editor — once the
+  next design round names it.
+
+## YD-10 — The wire's `building` (корпус) field has no UI — **open**
+
+`AddressParts` covers entrance/floor/apartment/intercom; the claim schema also takes
+`building` — «строение или корпус» — which the app never collects (DeepWiki consult
+on `openapi.yaml`, 2026-09-18). The no-building warning added beside it catches a
+*missing house number*, a different fact.
+
+- **Cost:** addresses like «д. 15, корпус 2» can only be typed into the address line,
+  not structured — the wire field exists and goes unfilled.
+- **Discharge:** one more `AddressParts` field mapped to `building` at the claim
+  boundary; check whether `porch`/`sfloor`/`sflat` mappings already cover what the
+  field would duplicate. In the same pass, `CLPlacemark.subThoroughfare` carried
+  into `PickedPlace` would replace `lacksBuilding`'s last-token heuristic with a
+  known fact (review, PR #30).
 
 ## YD-7 — Post-draft statuses read as unknown — **open**
 

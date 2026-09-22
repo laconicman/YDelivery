@@ -9,7 +9,7 @@ struct NewDeliveryModelTests {
     private let office = PickedPlace(latitude: 55.7558, longitude: 37.6173, address: "Офис")
     private let home = PickedPlace(latitude: 55.6460, longitude: 37.6681, address: "Дом")
     private let shop = PickedPlace(latitude: 55.7499, longitude: 37.5934, address: "Магазин")
-    private let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+7 912 345-67-89")
+    private let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+79123456789")
 
     /// A draft with its two founding rows filled — the common A→B case.
     private func filledDraft() -> NewDeliveryView.Model {
@@ -207,6 +207,45 @@ struct NewDeliveryModelTests {
         model.movePoints(from: IndexSet(integer: 2), to: 1)
         #expect(model.points[1].id == added)
         #expect(model.points[1].place == shop)
+    }
+
+    @Test("A stop states what the parcel does at its door — both directions visible")
+    func parcelActions() {
+        let model = filledDraft()
+        _ = model.addStop()
+        model.setPlace(shop, for: model.points[2].id)
+        var item = ParcelItem()
+        item.name = "Ноутбук"
+        model.setItem(item)
+
+        // The default journey rides the route's ends: the start collects, the last
+        // stop hands over, the middle stands aside.
+        #expect(model.parcelActions(at: 0) == String(localized: "picks up Ноутбук"))
+        #expect(model.parcelActions(at: 1) == nil)
+        #expect(model.parcelActions(at: 2) == String(localized: "hands over Ноутбук"))
+
+        // A named boarding stop claims the action from the route's start.
+        item.pickupPointID = model.points[1].id
+        model.setItem(item)
+        #expect(model.parcelActions(at: 0) == nil)
+        #expect(model.parcelActions(at: 1) == String(localized: "picks up Ноутбук"))
+    }
+
+    @Test("An item's row carries its journey only when the route has middles")
+    func journeyLineNeedsMiddles() {
+        let model = filledDraft()
+        var item = ParcelItem()
+        item.name = "Ноутбук"
+        model.setItem(item)
+        #expect(model.journeyLine(for: item) == nil, "A→B is the whole route — nothing to say")
+
+        _ = model.addStop()
+        model.setPlace(shop, for: model.points[2].id)
+        #expect(model.journeyLine(for: item) == "Офис → Магазин")
+
+        item.dropoffPointID = model.points[1].id
+        model.setItem(item)
+        #expect(model.journeyLine(for: item) == "Офис → Дом")
     }
 }
 

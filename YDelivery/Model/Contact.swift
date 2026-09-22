@@ -17,12 +17,15 @@ nonisolated struct Contact: Hashable, Sendable {
         givenName.isEmpty && familyName.isEmpty && phone.isEmpty && phoneExtension.isEmpty
     }
 
-    /// What deserves storing: an extension without a phone is noise the courier cannot
-    /// dial, so it does not survive saving — and what remains may then be nothing at
-    /// all. One home for both rules, so a stored contact always renders a non-blank
-    /// summary (review, PR #17).
+    /// What deserves storing: the phone normalized to its wire form (E.164 — the
+    /// claim schema's pattern `^\+[1-9]\d{1,14}$` accepts nothing else, so a
+    /// formatted number saved verbatim would fail at claim time, review, PR #29),
+    /// and an extension without a phone is noise the courier cannot dial, so it
+    /// does not survive saving — and what remains may then be nothing at all. One
+    /// home for both rules, so a stored contact always renders a non-blank summary
+    /// (review, PR #17).
     var storable: Contact? {
-        var contact = self
+        var contact = withDialablePhone()
         if contact.phone.isEmpty {
             contact.phoneExtension = ""
         }
@@ -52,6 +55,17 @@ nonisolated extension Contact {
             phone: phone,
             phoneExtension: phoneExtension
         )
+    }
+
+    /// The contact as the order should carry it: the phone in E.164 when it parses,
+    /// verbatim when it does not — never silently dropped, the blockers say the rest.
+    /// A member of the type itself: `storable` depends on it, and a model type
+    /// borrowing its normalization from a feature file would invert the layers
+    /// (review, PR #30).
+    func withDialablePhone() -> Contact {
+        var contact = self
+        contact.phone = PhoneFormat.dialable(phone) ?? phone
+        return contact
     }
 
     /// The collapsed row's one line: «Иван Петров · +7 912 345-67-89, ext. 12». Display

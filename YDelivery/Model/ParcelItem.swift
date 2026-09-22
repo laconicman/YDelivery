@@ -38,6 +38,15 @@ nonisolated struct ParcelItem: Hashable, Sendable, Identifiable {
 }
 
 nonisolated extension ParcelItem {
+    /// What rows and journey sentences call this item — an unnamed box is still
+    /// «an item», never a blank spot in a sentence. `isBlank`'s rule, shared:
+    /// whitespace is no name, and its padding never enters the sentence either
+    /// (review, PR #30).
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? String(localized: "Item") : trimmed
+    }
+
     /// The collapsed row's one line: «5 pcs · 2 kg · 25 × 18 × 15 cm · 2 500 ₽» —
     /// display formatting lives here, not in a view body (R5).
     var summary: String {

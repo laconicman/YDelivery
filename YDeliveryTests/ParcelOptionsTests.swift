@@ -431,7 +431,7 @@ struct ParcelOptionsTests {
 
     @Test("Explicit name components survive the store exactly — parsing never enters it")
     func nameComponentsSurviveTheStore() throws {
-        let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+7 912 345-67-89")
+        let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+79123456789")
         #expect(ivan.fullName == "Иван Петров", "joined by the formatter, never by hand")
         #expect(ivan.summary.hasPrefix("Иван Петров"))
 
@@ -461,6 +461,16 @@ struct ParcelOptionsTests {
     func dimensionsLineHasOneHome() {
         #expect(Dimensions.centimeters([25, 18, 15]).contains(Dimensions.separator))
         #expect(TariffClass.courier.limits.contains(Dimensions.centimeters([80, 50, 50])))
+    }
+
+    @Test("A name of spaces is still no name — rows and sentences say «an item»")
+    func whitespaceNamesStayNamed() {
+        var blank = ParcelItem()
+        blank.name = "   "
+        #expect(blank.displayName == String(localized: "Item"))
+        var padded = ParcelItem()
+        padded.name = "  Ноутбук "
+        #expect(padded.displayName == "Ноутбук", "the padding never enters the sentence")
     }
 
     private struct Unexpected: Error {}

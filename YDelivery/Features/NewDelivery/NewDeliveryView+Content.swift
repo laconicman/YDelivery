@@ -18,6 +18,12 @@ extension NewDeliveryView {
             let contactInvitation: LocalizedStringKey
             /// Roles this row may switch to — empty for the pinned pickup row.
             let availableRoles: [NewDeliveryView.Model.Role]
+            /// The address names no building — unusual enough for a courier that
+            /// the row says so (author, 2026-09-18).
+            var addressWarning: String? = nil
+            /// What the parcel does at this door — the counted sentence Round 5
+            /// (#45–46) gives both the row and the map callout.
+            var parcelActions: String? = nil
             let isDeletable: Bool
             let isMovable: Bool
         }
@@ -38,6 +44,9 @@ extension NewDeliveryView {
             /// Filled when the item is known not to fit the selected class — the row
             /// carries the warning words, never color alone.
             let misfit: String?
+            /// The item's own route in the stops' words — «A → B» — whenever the
+            /// route has middles (YD-6).
+            var journey: String? = nil
         }
 
         let rows: [Row]
@@ -46,9 +55,6 @@ extension NewDeliveryView {
         let offers: NewDeliveryView.Model.Offers
         let selectedOfferID: Offer.ID?
         let itemRows: [ItemRow]
-        /// Whether both ends are placed — the idle footer names the *missing*
-        /// prerequisite, and route-versus-parcel is exactly that difference.
-        var routeIsComplete: Bool = false
         let optionsSummary: String
         let whenSummary: String
         let commentSummary: String?
@@ -143,15 +149,10 @@ extension NewDeliveryView {
                     actions
                 } footer: {
                     if offers == .idle {
-                        // Which prerequisite is missing is the difference between an
-                        // invitation and a false error: pricing an empty parcel used
-                        // to surface as «couldn't get prices», a statement about the
-                        // wrong thing (author, 2026-09-14).
-                        Text(
-                            routeIsComplete
-                                ? "Prices come after the parcel — add what's inside first."
-                                : "Prices appear when the route is complete."
-                        )
+                        // Prices follow the route alone — the wire omits an empty
+                        // parcel rather than refusing it, so the only precondition
+                        // left is a complete route (author, 2026-09-18).
+                        Text("Prices appear when the route is complete.")
                     }
                 }
 
@@ -196,6 +197,11 @@ extension NewDeliveryView {
                                     Text(item.summary)
                                         .font(.footnote)
                                         .foregroundStyle(Color.secondary)
+                                    if let journey = item.journey {
+                                        Text(journey) // stops' own words — wraps
+                                            .font(.footnote)
+                                            .foregroundStyle(Color.secondary)
+                                    }
                                     if let misfit = item.misfit {
                                         Label(misfit, systemSymbol: .exclamationmarkTriangle)
                                             .font(.footnote)
@@ -596,19 +602,40 @@ extension NewDeliveryView.Content {
                     }
                     .buttonStyle(.plain)
 
+                    if let warning = row.addressWarning {
+                        Label(warning, systemSymbol: .exclamationmarkTriangle)
+                            .font(.footnote)
+                            .foregroundStyle(Color.secondary)
+                    }
+
                     Button(action: editContact) {
-                        if let contactSummary = row.contactSummary {
-                            // Concrete `Color.secondary`: the hierarchical style would
-                            // resolve against the button's tint and read as blue.
-                            Text(contactSummary)
-                                .font(.footnote)
-                                .foregroundStyle(Color.secondary)
-                        } else {
-                            Label(row.contactInvitation, systemSymbol: .plus)
-                                .font(.footnote)
+                        VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                            if let contactSummary = row.contactSummary {
+                                // Concrete `Color.secondary`: the hierarchical style
+                                // would resolve against the button's tint and read
+                                // as blue.
+                                Text(contactSummary)
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.secondary)
+                            } else {
+                                Label(row.contactInvitation, systemSymbol: .plus)
+                                    .font(.footnote)
+                                // Steering, not a gate: prices don't ask who's at
+                                // the door — only the order does (author,
+                                // 2026-09-18). Fillable upfront all the same.
+                                Text("Only the order asks — prices don't.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                     }
                     .buttonStyle(.borderless)
+
+                    if let parcelActions = row.parcelActions {
+                        Label(parcelActions, systemSymbol: .shippingbox)
+                            .font(.footnote)
+                            .foregroundStyle(Color.secondary)
+                    }
                 }
             }
             .contextMenu {
@@ -746,6 +773,7 @@ private extension MKCoordinateRegion {
                 contactSummary: "Иван Петров · +7 912 345-67-89",
                 contactInvitation: "Who hands over — name and phone",
                 availableRoles: [],
+                parcelActions: "picks up Комплект учебников",
                 isDeletable: false,
                 isMovable: false
             ),
@@ -757,6 +785,7 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
                 availableRoles: [],
+                parcelActions: "hands over Комплект учебников",
                 isDeletable: false,
                 isMovable: true
             ),
@@ -773,7 +802,13 @@ private extension MKCoordinateRegion {
         ]),
         selectedOfferID: "offer-2",
         itemRows: [
-            .init(id: UUID(), name: "Комплект учебников", summary: "5 pcs · 2 kg · 25 × 18 × 15 cm · 2 500 ₽", misfit: nil),
+            .init(
+                id: UUID(),
+                name: "Комплект учебников",
+                summary: "5 pcs · 2 kg · 25 × 18 × 15 cm · 2 500 ₽",
+                misfit: nil,
+                journey: "Москва, ул Москворечье, 6 → Москва, Каширское шоссе, 52"
+            ),
         ],
         optionsSummary: "pro courier · to the door",
         whenSummary: "as soon as possible",
@@ -875,7 +910,7 @@ private extension MKCoordinateRegion {
     .background(Color(.systemGroupedBackground))
 }
 
-#Preview("Point row: unfilled, no contact") {
+#Preview("Point rows: empty, warned, with the parcel's verbs") {
     List {
         NewDeliveryView.Content.PointRow(
             row: .init(
@@ -886,6 +921,40 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
                 availableRoles: [.return],
+                isDeletable: true,
+                isMovable: true
+            ),
+            pick: {},
+            editContact: {},
+            setRole: { _ in }
+        )
+        NewDeliveryView.Content.PointRow(
+            row: .init(
+                id: UUID(),
+                badge: .stop(number: 3),
+                address: "Москва, Красная площадь",
+                placeholder: "Where to deliver?",
+                contactSummary: nil,
+                contactInvitation: "Who receives — name and phone",
+                availableRoles: [.return],
+                addressWarning: "No building number — the courier may have trouble finding the door.",
+                isDeletable: true,
+                isMovable: true
+            ),
+            pick: {},
+            editContact: {},
+            setRole: { _ in }
+        )
+        NewDeliveryView.Content.PointRow(
+            row: .init(
+                id: UUID(),
+                badge: .end,
+                address: "Москва, Каширское шоссе, 52",
+                placeholder: "Where to deliver?",
+                contactSummary: "Анна Сидорова · +7 998 765-43-21",
+                contactInvitation: "Who receives — name and phone",
+                availableRoles: [],
+                parcelActions: "hands over Комплект учебников and Документы",
                 isDeletable: true,
                 isMovable: true
             ),
