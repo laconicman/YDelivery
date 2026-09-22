@@ -125,6 +125,7 @@ struct PointPickerView: View {
                 .navigationDestination(isPresented: $model.isDescribing) {
                     DescribeContent(
                         addressLine: model.confirmedPlace?.displayAddress ?? model.pinAddress,
+                        addressLacksBuilding: model.pin?.lacksBuilding == true,
                         changeAddress: { model.isDescribing = false },
                         parts: $model.addressParts,
                         contact: $model.contact,

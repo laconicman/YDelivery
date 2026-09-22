@@ -268,6 +268,9 @@ private extension NewDeliveryView {
                 contactSummary: point.contact?.summary,
                 contactInvitation: point.role.contactInvitation,
                 availableRoles: draft.availableRoles(for: point.id),
+                addressWarning: point.place?.lacksBuilding == true
+                    ? String(localized: "No building number — the courier may have trouble finding the door.")
+                    : nil,
                 parcelActions: draft.parcelActions(at: index),
                 isDeletable: index > 0 && points.count > 2,
                 isMovable: index > 0 && point.role != .return

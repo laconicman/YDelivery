@@ -18,6 +18,9 @@ extension NewDeliveryView {
             let contactInvitation: LocalizedStringKey
             /// Roles this row may switch to — empty for the pinned pickup row.
             let availableRoles: [NewDeliveryView.Model.Role]
+            /// The address names no building — unusual enough for a courier that
+            /// the row says so (author, 2026-09-18).
+            var addressWarning: String? = nil
             /// What the parcel does at this door — the counted sentence Round 5
             /// (#45–46) gives both the row and the map callout.
             var parcelActions: String? = nil
@@ -599,16 +602,31 @@ extension NewDeliveryView.Content {
                     }
                     .buttonStyle(.plain)
 
+                    if let warning = row.addressWarning {
+                        Label(warning, systemSymbol: .exclamationmarkTriangle)
+                            .font(.footnote)
+                            .foregroundStyle(Color.secondary)
+                    }
+
                     Button(action: editContact) {
-                        if let contactSummary = row.contactSummary {
-                            // Concrete `Color.secondary`: the hierarchical style would
-                            // resolve against the button's tint and read as blue.
-                            Text(contactSummary)
-                                .font(.footnote)
-                                .foregroundStyle(Color.secondary)
-                        } else {
-                            Label(row.contactInvitation, systemSymbol: .plus)
-                                .font(.footnote)
+                        VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                            if let contactSummary = row.contactSummary {
+                                // Concrete `Color.secondary`: the hierarchical style
+                                // would resolve against the button's tint and read
+                                // as blue.
+                                Text(contactSummary)
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.secondary)
+                            } else {
+                                Label(row.contactInvitation, systemSymbol: .plus)
+                                    .font(.footnote)
+                                // Steering, not a gate: prices don't ask who's at
+                                // the door — only the order does (author,
+                                // 2026-09-18). Fillable upfront all the same.
+                                Text("Only the order asks — prices don't.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                     }
                     .buttonStyle(.borderless)
@@ -698,7 +716,6 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who hands over — name and phone",
                 availableRoles: [],
-                parcelActions: "picks up Комплект учебников",
                 isDeletable: false,
                 isMovable: false
             ),
@@ -710,7 +727,6 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
                 availableRoles: [],
-                parcelActions: "hands over Комплект учебников",
                 isDeletable: false,
                 isMovable: true
             ),
@@ -894,7 +910,7 @@ private extension MKCoordinateRegion {
     .background(Color(.systemGroupedBackground))
 }
 
-#Preview("Point rows: empty and with the parcel's verbs") {
+#Preview("Point rows: empty, warned, with the parcel's verbs") {
     List {
         NewDeliveryView.Content.PointRow(
             row: .init(
@@ -905,6 +921,23 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
                 availableRoles: [.return],
+                isDeletable: true,
+                isMovable: true
+            ),
+            pick: {},
+            editContact: {},
+            setRole: { _ in }
+        )
+        NewDeliveryView.Content.PointRow(
+            row: .init(
+                id: UUID(),
+                badge: .stop(number: 3),
+                address: "Москва, Красная площадь",
+                placeholder: "Where to deliver?",
+                contactSummary: nil,
+                contactInvitation: "Who receives — name and phone",
+                availableRoles: [.return],
+                addressWarning: "No building number — the courier may have trouble finding the door.",
                 isDeletable: true,
                 isMovable: true
             ),

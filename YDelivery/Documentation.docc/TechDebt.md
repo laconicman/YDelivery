@@ -85,6 +85,32 @@ reference changed silently.
   state what the parcel does at their door (`parcelActions(at:)`, Round 5, #45–46).
   Both directions render while the author chooses between them (2026-09-18).
 
+## YD-9 — Editing a contact opens the whole point flow — **open**
+
+The point row's contact line pushes the same picker the address uses, landing on
+Describe (decision #40's one flow). It is usable — the author tried it — but a
+two-stage stack for what reads as "edit the person" is heavier than the ask
+(author, 2026-09-18).
+
+- **Cost:** an unusual re-entry for the most common edit; the design language for
+  "open the person, not the point" does not exist yet.
+- **Discharge:** a re-entry that targets the tapped fact *within* the one flow —
+  e.g. Describe scrolled to the contact section, or a lighter sub-editor — once the
+  next design round names it.
+
+## YD-10 — The wire's `building` (корпус) field has no UI — **open**
+
+`AddressParts` covers entrance/floor/apartment/intercom; the claim schema also takes
+`building` — «строение или корпус» — which the app never collects (DeepWiki consult
+on `openapi.yaml`, 2026-09-18). The no-building warning added beside it catches a
+*missing house number*, a different fact.
+
+- **Cost:** addresses like «д. 15, корпус 2» can only be typed into the address line,
+  not structured — the wire field exists and goes unfilled.
+- **Discharge:** one more `AddressParts` field mapped to `building` at the claim
+  boundary; check whether `porch`/`sfloor`/`sflat` mappings already cover what the
+  field would duplicate.
+
 ## YD-7 — Post-draft statuses read as unknown — **open**
 
 `PlacedClaim.Progress` collapses exactly the statuses the ordering flow decides on;

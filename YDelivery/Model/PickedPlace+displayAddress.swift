@@ -18,6 +18,15 @@ nonisolated extension PickedPlace {
         address.isEmpty ? "\(formatted(latitude)), \(formatted(longitude))" : address
     }
 
+    /// Whether the address line names no building — a bare street or a landmark is
+    /// unusual enough for a courier that the point rows warn about it (author,
+    /// 2026-09-18). The wire carries the house number inside `fullname`, never a
+    /// field of its own, so the digit heuristic is all the string offers; a bare
+    /// pin (no address) is honest by itself and earns no warning.
+    var lacksBuilding: Bool {
+        !address.isEmpty && address.rangeOfCharacter(from: .decimalDigits) == nil
+    }
+
     private func formatted(_ degrees: Double) -> String {
         degrees.formatted(
             .number.precision(.fractionLength(5)).locale(Locale(identifier: "en_US_POSIX"))

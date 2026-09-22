@@ -10,6 +10,10 @@ extension PointPickerView {
     struct DescribeContent: View {
         /// The settled address, as the map stage resolved it.
         let addressLine: String
+        /// The address names no building — unusual enough for a courier that the
+        /// section says so while the point is still being described (author,
+        /// 2026-09-18).
+        var addressLacksBuilding: Bool = false
         /// Back to the map — the rare, destructive move, so it is a labeled action
         /// here rather than the screen's default (decision #44).
         let changeAddress: () -> Void
@@ -29,6 +33,10 @@ extension PointPickerView {
                     }
                 } header: {
                     Text("Address")
+                } footer: {
+                    if addressLacksBuilding {
+                        Text("No building number — the courier may have trouble finding the door.")
+                    }
                 }
 
                 Section {
@@ -59,7 +67,10 @@ extension PointPickerView {
                     if !contact.phone.isEmpty, PhoneFormat.dialable(contact.phone) == nil {
                         Text("This isn't a dialable number yet — the courier calls it on arrival.")
                     } else {
-                        Text("The courier calls this number on arrival. Leave the fields empty if nobody will be there.")
+                        // Steering, not a gate (author, 2026-09-18): prices need only
+                        // the address, so someone pricing options may skip this — but
+                        // filling it early is welcome; ordering asks for it.
+                        Text("Only the order asks who's at the door — prices don't. The courier calls this number on arrival; leave it empty if nobody will be there.")
                     }
                 }
             }
