@@ -132,6 +132,19 @@ pairs and hemisphere suffixes only, and the tests record the gap.
 - **Cost:** a pasted DMS pair is not offered at all — rare on phones, common on paper.
 - **Discharge:** a DMS arm in `MapLink`'s raw parser, tests citing the grammar table.
 
+## YD-11 — `createClaim`/`acceptClaim` still read `.ok` and bury refusals — **open**
+
+`offers(for:)`, `claimState`, and the cancel pair now switch the documented response
+cases so the provider's `{code, message}` reaches the strip as `ProviderRefusal`
+(PR #31, and the cancellation PR that followed). `createClaim` and `acceptClaim` still
+reach for `response.ok`, which throws an accessor error on a documented refusal — the
+provider's sentence lost at exactly the calls where money moves.
+
+- **Cost:** a refused create or accept renders the generic failure instead of the
+  provider's reason («tariff not available», «version mismatch», …).
+- **Discharge:** the same static `…(from:)` mapper both fixed call sites already use —
+  `claim(from:)` and `cancelAccepted(from:)` are the template.
+
 ## See Also
 
 - <doc:Design>
