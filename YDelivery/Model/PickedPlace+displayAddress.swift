@@ -22,21 +22,28 @@ nonisolated extension PickedPlace {
     /// unusual enough for a courier that the point rows warn about it (author,
     /// 2026-09-18). The wire carries the house number inside `fullname`, never a
     /// field of its own, so the string is all there is to read — conservatively:
-    /// only the last component's last token can be a house, because digits
-    /// mid-string name streets («улица 8 Марта») and postal codes lead (review,
-    /// PR #30). A bare pin (no address) is honest by itself and earns no warning.
+    /// a comma component can be a house only by its last word, because digits
+    /// mid-component name streets («улица 8 Марта»), postal codes lead, and the
+    /// sender may append directions after the number («…, 10, вход со двора» —
+    /// review, PR #30). A bare pin (no address) is honest by itself and earns no
+    /// warning.
     var lacksBuilding: Bool {
         !address.isEmpty && !namesAHouseNumber
     }
 
-    /// The `fullname` convention the geocoder composes: the house is the last token
-    /// of the last component — `52`, `15А`, `49с1`, `3/1`. A pure digit run longer
-    /// than five is a postal code, not a door. The imprecision that remains is
-    /// priced into the warning's wording — advisory, never a gate.
+    /// The `fullname` convention the geocoder composes: the house is a component
+    /// whose last word is number-shaped — `52`, `15А`, `49с1`, `3/1`, «строение 2».
+    /// A pure digit run longer than five is a postal code, not a door. The
+    /// imprecision that remains is priced into the warning's wording — advisory,
+    /// never a gate.
     private var namesAHouseNumber: Bool {
-        guard let token = address.split(separator: ",").last?.split(separator: " ").last
-        else { return false }
-        return token.wholeMatch(of: /\d{1,5}([\/]\d{1,3})?[A-Za-zА-Яа-я]?\d{0,3}/) != nil
+        // Trailing digits exist only behind a letter (49с1) — else a long pure run
+        // like a postal code would pass as «digits plus padding».
+        address.split(separator: ",").contains { component in
+            component.split(separator: " ").last?.wholeMatch(
+                of: /\d{1,5}([\/]\d{1,3})?([A-Za-zА-Яа-я]\d{0,3})?/
+            ) != nil
+        }
     }
 
     private func formatted(_ degrees: Double) -> String {

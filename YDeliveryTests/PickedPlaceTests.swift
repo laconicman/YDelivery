@@ -28,6 +28,14 @@ struct PickedPlaceTests {
         #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, улица 8 Марта, 12").lacksBuilding)
     }
 
+    @Test("Directions after the number don't unname the house — the string is editable")
+    func trailingDetailsKeepTheHouse() {
+        // Review, PR #30: the sender may append landmarks after the building number.
+        #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, 10, вход со двора").lacksBuilding)
+        // …while directions alone still can't fake one.
+        #expect(PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Красная площадь, вход со двора").lacksBuilding)
+    }
+
     @Test("A bare pin is honest by itself — the coordinates carry no warning")
     func barePinIsHonest() {
         #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "").lacksBuilding)
