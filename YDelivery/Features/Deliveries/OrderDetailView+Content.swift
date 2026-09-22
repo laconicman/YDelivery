@@ -9,7 +9,7 @@ extension OrderDetailView {
     struct Content: View {
         let order: Order
         let cancellation: Model.Cancellation
-        let reload: () -> Void
+        let retry: () -> Void
         let confirm: () -> Void
 
         @State private var showsConfirmation = false
@@ -69,12 +69,13 @@ extension OrderDetailView {
                             } else if current.terms != .unavailable {
                                 // Paid, but the amount never arrived — consenting
                                 // to an unseen charge is not offered (PR #32).
-                                Button("Try again", action: reload)
+                                Button("Try again", action: retry)
                             }
-                        case .failed(let message):
+                        case .failed(let message), .unconfirmed(let message),
+                             .unrecorded(let message):
                             Text(message)
                                 .font(.footnote)
-                            Button("Try again", action: reload)
+                            Button("Try again", action: retry)
                         case .cancelling:
                             HStack(spacing: Layout.Spacing.unit) {
                                 ProgressView()
@@ -129,7 +130,7 @@ nonisolated extension Order {
         OrderDetailView.Content(
             order: .previewSearching,
             cancellation: .ready(.init(status: .searching, version: 4, terms: .free)),
-            reload: {},
+            retry: {},
             confirm: {}
         )
     }
@@ -143,7 +144,7 @@ nonisolated extension Order {
                 status: .other("performer_found"), version: 4,
                 terms: .paid(price: 807.6, currency: "RUB")
             )),
-            reload: {},
+            retry: {},
             confirm: {}
         )
     }
@@ -157,7 +158,7 @@ nonisolated extension Order {
                 status: .other("performer_found"), version: 4,
                 terms: .paid(price: nil, currency: nil)
             )),
-            reload: {},
+            retry: {},
             confirm: {}
         )
     }
@@ -168,7 +169,20 @@ nonisolated extension Order {
         OrderDetailView.Content(
             order: .previewSearching,
             cancellation: .ready(.init(status: .other("pickuped"), version: 9, terms: .unavailable)),
-            reload: {},
+            retry: {},
+            confirm: {}
+        )
+    }
+}
+
+#Preview("Accepted — the check failed") {
+    NavigationStack {
+        OrderDetailView.Content(
+            order: .previewSearching,
+            cancellation: .unconfirmed(
+                CancellationUnconfirmed(status: nil).errorDescription ?? ""
+            ),
+            retry: {},
             confirm: {}
         )
     }
@@ -179,7 +193,7 @@ nonisolated extension Order {
         OrderDetailView.Content(
             order: .previewDone,
             cancellation: .loading,
-            reload: {},
+            retry: {},
             confirm: {}
         )
     }

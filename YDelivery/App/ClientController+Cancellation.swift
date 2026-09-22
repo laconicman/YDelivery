@@ -23,7 +23,8 @@ extension ClientController {
 
     /// Cancels, naming the version and the kind of cancellation the terms advertised.
     /// `unavailable` terms are refused here too — the screen's button is the first
-    /// guard, this is the second, because terms can go stale between them.
+    /// guard, this is the second, because terms can go stale between them. So is a
+    /// `paid` term that never named its amount.
     func cancelClaim(
         id: String,
         version: Int,
@@ -48,6 +49,21 @@ extension ClientController {
         // already learned: the answer is not assumed, the claim's fresh state is read
         // back (Russian doc, claims/cancel, 2026-09-22).
         try Self.cancelAccepted(from: response)
+        // From here the mutation is already accepted — a stumble means "cancelled,
+        // unproven", never "the cancel failed". That distinction picks the retry:
+        // re-read the claim, don't re-send the request (review, PR #32).
+        do {
+            return try await cancelledClaimState(id: id)
+        } catch let unconfirmed as CancellationUnconfirmed {
+            throw unconfirmed
+        } catch {
+            throw CancellationUnconfirmed(status: nil)
+        }
+    }
+
+    /// The confirming read, shared by the post-cancel check and the "still standing?"
+    /// retry — a 200 is the request's word; the claim's own status is the claim's.
+    func cancelledClaimState(id: String) async throws -> PlacedClaim {
         let standing = try await claimState(id: id)
         guard standing.status.isCancelled else {
             throw CancellationUnconfirmed(status: String(describing: standing.status))

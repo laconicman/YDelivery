@@ -90,13 +90,32 @@ nonisolated struct CancellationPriceUnknown: LocalizedError, Hashable {
     }
 }
 
-/// The cancel call answered 200 but the claim's status is not a cancelled one — the
-/// wire kept the claim standing. Named rather than generic so the sentence it renders
-/// says exactly that.
+/// The provider accepted the cancellation but the claim's cancelled standing was
+/// not observed — either the confirming read failed, or the claim answered with a
+/// status that is not a cancelled one. Distinct from a refused cancel on purpose:
+/// the mutation may already have landed, so the retry re-reads rather than
+/// re-sends (review, PR #32).
 nonisolated struct CancellationUnconfirmed: LocalizedError, Hashable {
-    var status: String
+    /// The standing the claim reported — `nil` when the confirming read itself failed.
+    var status: String?
     var errorDescription: String? {
-        String(localized: "The provider answered, but the claim was not cancelled (\(status)).")
+        if let status {
+            return String(localized: "The provider answered, but the claim was not cancelled (\(status)).")
+        }
+        return String(localized: "The cancellation was accepted, but checking the claim failed — try again.")
+    }
+}
+
+/// The provider cancelled but the local write failed — the order is cancelled
+/// everywhere except this install's memory of it. Retrying re-writes the row;
+/// the wire is never asked again (review, PR #32).
+nonisolated struct CancellationUnrecorded: LocalizedError, Hashable {
+    var detail: String
+    init(_ error: any Error) {
+        detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+    var errorDescription: String? {
+        String(localized: "Cancelled, but saving the order to history failed — \(detail)")
     }
 }
 

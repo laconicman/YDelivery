@@ -139,30 +139,6 @@ struct OrderCancellationTests {
         #expect(!order(status: .draft).isCancellable)
     }
 
-    @Test("Load, confirm, done — the confirm reports what the wire answered")
-    func modelLoadConfirmDone() async {
-        let model = OrderDetailView.Model()
-        let asked = ClaimCancellation(status: .searching, version: 7, terms: .free)
-        await model.load(using: { asked })
-        #expect(model.cancellation == .ready(asked))
-
-        var cancelled: ClaimCancellation?
-        await model.confirm { cancelled = $0 }
-        #expect(cancelled == asked, "the cancel call gets the version and terms asked live")
-        #expect(model.cancellation == .cancelled)
-    }
-
-    @Test("Unavailable terms never reach the cancel call")
-    func modelRefusesUnavailable() async {
-        let model = OrderDetailView.Model()
-        await model.load(using: {
-            ClaimCancellation(status: .searching, version: 3, terms: .unavailable)
-        })
-        var reached = false
-        await model.confirm { _ in reached = true }
-        #expect(!reached, "a closed door stays closed — the button guards, the model insists")
-    }
-
     @Test("A paid answer with no amount cannot be consented to — anywhere")
     func pricelessPaidIsNotConfirmable() {
         #expect(!ClaimCancellation.Terms.paid(price: nil, currency: nil).isConfirmable)
@@ -183,14 +159,38 @@ struct OrderCancellationTests {
         }
     }
 
+    @Test("Load, confirm, done — the confirm reports what the wire answered")
+    func modelLoadConfirmDone() async {
+        let model = OrderDetailView.Model()
+        let asked = ClaimCancellation(status: .searching, version: 7, terms: .free)
+        await model.load(using: { asked }).value
+        #expect(model.cancellation == .ready(asked))
+
+        var cancelled: ClaimCancellation?
+        await model.confirm { cancelled = $0 }?.value
+        #expect(cancelled == asked, "the cancel call gets the version and terms asked live")
+        #expect(model.cancellation == .cancelled)
+    }
+
+    @Test("Unavailable terms never reach the cancel call")
+    func modelRefusesUnavailable() async {
+        let model = OrderDetailView.Model()
+        await model.load(using: {
+            ClaimCancellation(status: .searching, version: 3, terms: .unavailable)
+        }).value
+        var reached = false
+        model.confirm { _ in reached = true }
+        #expect(!reached, "a closed door stays closed — the button guards, the model insists")
+    }
+
     @Test("A paid term without its amount is refused by the model's second guard")
     func modelRefusesPricelessPaid() async {
         let model = OrderDetailView.Model()
         await model.load(using: {
             ClaimCancellation(status: .searching, version: 3, terms: .paid(price: nil, currency: nil))
-        })
+        }).value
         var reached = false
-        await model.confirm { _ in reached = true }
+        model.confirm { _ in reached = true }
         #expect(!reached, "a charge nobody has seen is not a price anyone can agree to")
     }
 
@@ -200,7 +200,63 @@ struct OrderCancellationTests {
             var errorDescription: String? { "the wire's own words" }
         }
         let model = OrderDetailView.Model()
-        await model.load(using: { throw Refused() })
+        await model.load(using: { throw Refused() }).value
         #expect(model.cancellation == .failed("the wire's own words"))
+    }
+
+    @Test("Accepted-but-unproven is its own state — the retry re-reads, never re-sends")
+    func unconfirmedRechecksInsteadOfResending() async {
+        let model = OrderDetailView.Model()
+        await model.load(using: {
+            ClaimCancellation(status: .searching, version: 7, terms: .free)
+        }).value
+        var resent = false
+        await model.confirm { _ in
+            resent = true
+            throw CancellationUnconfirmed(status: nil)
+        }?.value
+        #expect(resent)
+        guard case .unconfirmed = model.cancellation else {
+            Issue.record("accepted-but-unproven must not render as a refused cancel: \(model.cancellation)")
+            return
+        }
+        await model.recheck {}?.value
+        #expect(model.cancellation == .cancelled,
+                "observing the cancelled claim resolves the screen — no second mutation")
+    }
+
+    @Test("A still-standing claim keeps the unconfirmed state honest")
+    func unconfirmedStaysWhenTheClaimStands() async {
+        let model = OrderDetailView.Model()
+        await model.load(using: {
+            ClaimCancellation(status: .searching, version: 7, terms: .free)
+        }).value
+        await model.confirm { _ in throw CancellationUnconfirmed(status: nil) }?.value
+        await model.recheck { throw CancellationUnconfirmed(status: "searching") }?.value
+        guard case .unconfirmed = model.cancellation else {
+            Issue.record("a claim still standing must stay unconfirmed: \(model.cancellation)")
+            return
+        }
+    }
+
+    @Test("Cancelled-but-unsaved retries the write, not the wire")
+    func unrecordedRetriesTheWrite() async {
+        let model = OrderDetailView.Model()
+        await model.load(using: {
+            ClaimCancellation(status: .searching, version: 7, terms: .free)
+        }).value
+        var wireTouched = false
+        await model.confirm { _ in
+            wireTouched = true
+            throw CancellationUnrecorded(StoreController.StoreUnavailable())
+        }?.value
+        guard case .unrecorded = model.cancellation else {
+            Issue.record("the disk's failure must not read as the wire's: \(model.cancellation)")
+            return
+        }
+        wireTouched = false
+        await model.retryRecording {}?.value
+        #expect(model.cancellation == .cancelled)
+        #expect(!wireTouched, "retrying the write must not re-ask the provider")
     }
 }
