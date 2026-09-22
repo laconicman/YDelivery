@@ -1,5 +1,7 @@
 import Foundation
 import Observation
+import OSLog
+import OSLogLoggingMiddleware
 import YandexDeliveryExpressAPI
 
 /// The app's session: owns the OAuth token and the API client built from it.
@@ -72,7 +74,15 @@ final class ClientController {
         do {
             client = try Client(
                 credentials: Credentials(authToken: token),
-                middlewares: [WireLogMiddleware(store: wireLog)]
+                // Two sinks on the same exchanges: console lines at .debug for an
+                // attached debugger, and the bounded file Settings can share.
+                middlewares: [
+                    OSLogLoggingMiddleware(
+                        logger: Logger(subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "wire"),
+                        bodyLoggingConfiguration: .upTo(maxBytes: 32 * 1024)
+                    ),
+                    WireLogMiddleware(store: wireLog),
+                ]
             )
         } catch {
             client = nil
