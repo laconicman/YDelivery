@@ -74,11 +74,19 @@ struct NewDeliveryOffersTests {
         await model.loadOffers { _ in throw OffersUnavailable() }
         #expect(model.offers == .signedOut)
 
-        await model.loadOffers { _ in throw Unexpected() }
-        #expect(model.offers == .failed)
+        await model.loadOffers { _ in throw ProviderRefusal() }
+        guard case .failed(let reason) = model.offers else {
+            Issue.record("expected .failed, got \(model.offers)")
+            return
+        }
+        #expect(reason == "no offers today",
+                "the strip keeps the provider's own words — a bare refusal is undiagnosable")
     }
 
     private struct Unexpected: Error {}
+    private struct ProviderRefusal: LocalizedError {
+        var errorDescription: String? { "no offers today" }
+    }
 }
 extension NewDeliveryOffersTests {
     @Test("Geo alone prices — the parcel refines the quote when it exists")

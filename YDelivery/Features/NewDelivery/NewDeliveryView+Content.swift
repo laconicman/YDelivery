@@ -488,11 +488,16 @@ extension NewDeliveryView.Content {
                         }
                     }
                 }
-            case .failed:
+            case .failed(let reason):
                 HStack(spacing: 8) {
                     Image(systemSymbol: .exclamationmarkTriangle)
                         .foregroundStyle(.secondary)
-                    Text("Couldn't get prices")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Couldn't get prices")
+                        Text(reason)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                     Button("Retry", action: retry)
                 }
                 .font(.subheadline)
@@ -850,7 +855,7 @@ private extension MKCoordinateRegion {
             retry: {}
         )
         NewDeliveryView.Content.TariffStrip(
-            offers: .failed, selectedID: nil, select: { _ in }, retry: {}
+            offers: .failed("Parse error: missing required field 'items'"), selectedID: nil, select: { _ in }, retry: {}
         )
         NewDeliveryView.Content.TariffStrip(
             offers: .signedOut, selectedID: nil, select: { _ in }, retry: {}

@@ -68,7 +68,9 @@ extension NewDeliveryView {
             case idle
             case loading
             case ready([Offer])
-            case failed
+            /// The provider's own words, when it gave any — a bare refusal helped
+            /// nobody diagnose the empty-parcel rejection (author, 2026-09-22).
+            case failed(String)
             /// No session: prices need a token; drafting never did.
             case signedOut
         }
@@ -460,7 +462,9 @@ extension NewDeliveryView {
                 selectedOfferID = nil
             } catch {
                 guard !Task.isCancelled else { return }
-                offers = .failed
+                offers = .failed(
+                    (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                )
             }
         }
 
