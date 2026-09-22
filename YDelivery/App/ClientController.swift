@@ -23,15 +23,30 @@ final class ClientController {
     /// The wire-evidence capture every session's client carries (Settings shares it).
     let wireLog: WireLogStore
 
+    /// Settings' share affordance binds here — a live mirror of the log's
+    /// shareability, gated on a live session: signed out means nothing is
+    /// shareable even while a wiped file's removal is still in flight
+    /// (review, PR #33).
+    private(set) var diagnosticsURL: URL?
+
     /// The identity-boundary log wipe — owned, not floating, so rule 6's
     /// "structured and owned" holds even for best-effort housekeeping (review, PR #33).
     private var housekeeping: Task<Void, Never>?
+
+    /// Mirrors the store's shareability stream into ``diagnosticsURL``.
+    private var logObservation: Task<Void, Never>?
 
     /// Restores the previous session, if a token was stored.
     init(tokenStore: TokenStore = TokenStore(), wireLog: WireLogStore = WireLogStore()) {
         self.tokenStore = tokenStore
         self.wireLog = wireLog
+        logObservation = Task { [weak self] in
+            for await url in wireLog.exportURLChanges {
+                self?.diagnosticsURL = self?.isSignedIn == true ? url : nil
+            }
+        }
         if let token = tokenStore.read() { establishSession(token: token) }
+        diagnosticsURL = isSignedIn ? wireLog.exportURL : nil
     }
 
     var isSignedIn: Bool { client != nil }
@@ -48,7 +63,7 @@ final class ClientController {
 
     /// Persists the token, then builds the client from it. Failure of any step lands in
     /// ``signInError`` and leaves the controller signed out.
-    func signIn(token: String) {
+    func signIn(token: String) async {
         signInError = nil
         let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else {
@@ -58,11 +73,12 @@ final class ClientController {
         }
         do {
             try tokenStore.write(token)
-            // A new credential means a new identity — the log starts empty so a
-            // share can never carry the previous session's addresses to someone
-            // else's account. Session *restore* must not clear: surviving relaunch
-            // is the file's whole point (review, PR #33).
-            housekeeping = Task { await wireLog.clear() }
+            // A new credential means a new identity — the wipe completes before
+            // the client exists, so the new session's first exchange can neither
+            // land beside the previous identity's data nor be erased by its
+            // removal. Session *restore* must not clear: surviving relaunch is
+            // the file's whole point (review, PR #33).
+            await wireLog.clear()
             establishSession(token: token)
         } catch {
             client = nil
@@ -76,8 +92,11 @@ final class ClientController {
     func signOut() {
         client = nil
         signInError = nil
-        // Signing out ends this identity's claim on the log — the next user on this
-        // device must not inherit its deliveries (review, PR #33).
+        // The share affordance goes dark now — the file itself is erased a hop
+        // later, and the `isSignedIn` gate on ``diagnosticsURL`` keeps a late
+        // in-flight write of this identity from ever looking shareable
+        // (review, PR #33).
+        diagnosticsURL = nil
         housekeeping = Task { await wireLog.clear() }
         do { try tokenStore.delete() } catch { signInError = error }
     }

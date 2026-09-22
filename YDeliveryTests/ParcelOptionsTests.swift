@@ -55,7 +55,7 @@ struct ParcelOptionsTests {
             options: DeliveryOptions()
         ))
 
-        let items = try #require(request.items)
+        let items = request.items
         #expect(items[0].pickupPoint == 2)
         #expect(items[0].dropoffPoint == 3)
         #expect(items[1].pickupPoint == 1, "nil reads as the route's start")
@@ -100,7 +100,7 @@ struct ParcelOptionsTests {
         #expect(request.items[0].dropoffPointID == nil,
                 "the boundary type makes the ambiguous state unrepresentable")
         let wire = ClientController.offersRequest(for: request)
-        #expect(try #require(wire.items)[0].dropoffPoint == 2, "and nil means the ends, unambiguously")
+        #expect(wire.items[0].dropoffPoint == 2, "and nil means the ends, unambiguously")
     }
 
     @Test("Scheduling on writes a time; scheduling off takes it away")
@@ -158,7 +158,7 @@ struct ParcelOptionsTests {
         )
         #expect(ClientController.offersRequest(for: base).requirements == nil,
                 "door-to-door true and zero loaders are the provider's own defaults")
-        let items = try #require(ClientController.offersRequest(for: base).items)
+        let items = ClientController.offersRequest(for: base).items
         #expect(items.count == 1 && items[0].quantity == 1
                 && items[0].pickupPoint == 1 && items[0].dropoffPoint == 2,
                 "the wire demands ≥1 item row (live, 2026-09-22) — an empty parcel prices as one thing, end to end")

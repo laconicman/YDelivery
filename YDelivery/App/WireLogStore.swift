@@ -43,6 +43,11 @@ actor WireLogStore {
     /// The file this store appends to. Constant, so views can share it without awaiting.
     nonisolated let fileURL: URL
 
+    /// Re-publishes `exportURL` after every mutation — the share affordance mirrors
+    /// this stream instead of snapshotting the file on appear (review, PR #33).
+    nonisolated let exportURLChanges: AsyncStream<URL?>
+    private let exportContinuation: AsyncStream<URL?>.Continuation
+
     /// Beyond this, the oldest half is dropped at a line boundary — newest evidence wins.
     private let byteLimit: Int
 
@@ -59,6 +64,9 @@ actor WireLogStore {
             ?? FileManager.default.temporaryDirectory
         self.fileURL = directory.appendingPathComponent("wire-log.jsonl")
         self.byteLimit = byteLimit
+        (exportURLChanges, exportContinuation) = AsyncStream.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
     }
 
     /// The file once it holds anything — `nil` keeps a share affordance honest about
@@ -102,6 +110,7 @@ actor WireLogStore {
             try FileManager.default.setAttributes(
                 [.protectionKey: FileProtectionType.complete], ofItemAtPath: fileURL.path
             )
+            exportContinuation.yield(exportURL)
         } catch {
             // A diagnostics store that can't write is a shrug, not a failure — the
             // request it was watching already returned.
@@ -110,6 +119,7 @@ actor WireLogStore {
 
     func clear() {
         try? FileManager.default.removeItem(at: fileURL)
+        exportContinuation.yield(exportURL)
     }
 
     /// Keeps the newest `byteLimit / 2` bytes, cut at a newline so the oldest kept line

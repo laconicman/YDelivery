@@ -18,12 +18,12 @@ struct ClientControllerTests {
     }
 
     @Test("Signing in builds a client and persists the token")
-    func signInPersists() throws {
+    func signInPersists() async throws {
         let store = makeStore()
         defer { try? store.delete() }
         let controller = ClientController(tokenStore: store)
 
-        controller.signIn(token: "  y0_token-with-padding \n")
+        await controller.signIn(token: "  y0_token-with-padding \n")
 
         #expect(controller.isSignedIn)
         #expect(controller.signInError == nil)
@@ -42,10 +42,10 @@ struct ClientControllerTests {
     }
 
     @Test("An all-whitespace token is refused as a rendered error, not a session")
-    func refusesEmptyToken() {
+    func refusesEmptyToken() async {
         let controller = ClientController(tokenStore: makeStore())
 
-        controller.signIn(token: "   \n")
+        await controller.signIn(token: "   \n")
 
         #expect(!controller.isSignedIn)
         #expect(controller.signInError is ClientController.EmptyTokenError)
@@ -53,16 +53,56 @@ struct ClientControllerTests {
     }
 
     @Test("Signing out forgets the client and the stored token")
-    func signOutForgets() throws {
+    func signOutForgets() async throws {
         let store = makeStore()
         defer { try? store.delete() }
         let controller = ClientController(tokenStore: store)
-        controller.signIn(token: "y0_short-lived")
+        await controller.signIn(token: "y0_short-lived")
 
         controller.signOut()
 
         #expect(!controller.isSignedIn)
         #expect(controller.signInError == nil)
         #expect(store.read() == nil)
+    }
+
+    @Test("A fresh sign-in wipes the previous identity's log before the client exists")
+    func signInWipesLogFirst() async throws {
+        let store = makeStore()
+        defer { try? store.delete() }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let log = WireLogStore(directory: directory)
+        await log.append(.init(at: .now, operation: "op", method: "GET", path: "/x",
+                               status: 200, responseBody: #"{"of":"another-identity"}"#))
+        let controller = ClientController(tokenStore: store, wireLog: log)
+
+        await controller.signIn(token: "y0_new-identity")
+
+        #expect(controller.isSignedIn)
+        #expect(log.exportURL == nil, "the wipe precedes the session — no interleaving")
+    }
+
+    @Test("The share affordance follows the log and dies with the session")
+    func diagnosticsFollowsIdentity() async throws {
+        let store = makeStore()
+        defer { try? store.delete() }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let log = WireLogStore(directory: directory)
+        let controller = ClientController(tokenStore: store, wireLog: log)
+        await controller.signIn(token: "y0_x")
+
+        await log.append(.init(at: .now, operation: "op", method: "GET", path: "/x",
+                               status: 200))
+        for _ in 0..<100 where controller.diagnosticsURL == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(controller.diagnosticsURL == log.fileURL,
+                "an appended exchange becomes shareable without leaving Settings")
+
+        controller.signOut()
+        #expect(controller.diagnosticsURL == nil,
+                "the affordance goes dark synchronously — the wiped file can't be shared")
     }
 }
