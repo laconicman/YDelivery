@@ -463,5 +463,15 @@ struct ParcelOptionsTests {
         #expect(TariffClass.courier.limits.contains(Dimensions.centimeters([80, 50, 50])))
     }
 
+    @Test("A name of spaces is still no name — rows and sentences say «an item»")
+    func whitespaceNamesStayNamed() {
+        var blank = ParcelItem()
+        blank.name = "   "
+        #expect(blank.displayName == String(localized: "Item"))
+        var padded = ParcelItem()
+        padded.name = "  Ноутбук "
+        #expect(padded.displayName == "Ноутбук", "the padding never enters the sentence")
+    }
+
     private struct Unexpected: Error {}
 }
