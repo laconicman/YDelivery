@@ -18,9 +18,13 @@ final class ClientController {
 
     private let tokenStore: TokenStore
 
+    /// The wire-evidence capture every session's client carries (Settings shares it).
+    let wireLog: WireLogStore
+
     /// Restores the previous session, if a token was stored.
-    init(tokenStore: TokenStore = TokenStore()) {
+    init(tokenStore: TokenStore = TokenStore(), wireLog: WireLogStore = WireLogStore()) {
         self.tokenStore = tokenStore
+        self.wireLog = wireLog
         if let token = tokenStore.read() { establishSession(token: token) }
     }
 
@@ -66,7 +70,10 @@ final class ClientController {
 
     private func establishSession(token: String) {
         do {
-            client = try Client(credentials: Credentials(authToken: token))
+            client = try Client(
+                credentials: Credentials(authToken: token),
+                middlewares: [WireLogMiddleware(store: wireLog)]
+            )
         } catch {
             client = nil
             signInError = error
