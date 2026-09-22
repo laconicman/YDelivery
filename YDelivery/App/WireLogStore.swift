@@ -48,6 +48,11 @@ actor WireLogStore {
     nonisolated let exportURLChanges: AsyncStream<URL?>
     private let exportContinuation: AsyncStream<URL?>.Continuation
 
+    /// False once the file holds bytes we could neither roll back nor remove —
+    /// sharing must never advertise corrupt evidence. `clear` restores trust
+    /// only when the file is actually gone (review, PR #33).
+    private var vouchable = true
+
     /// Beyond this, the oldest half is dropped at a line boundary — newest evidence wins.
     private let byteLimit: Int
 
@@ -79,7 +84,7 @@ actor WireLogStore {
     }
 
     func append(_ entry: Entry) {
-        guard var line = try? encoder.encode(entry) else { return }
+        guard vouchable, var line = try? encoder.encode(entry) else { return }
         // An entry bigger than the whole bound would defeat it: swap in a stub —
         // the line says the exchange happened, the bound stays true (review, PR #33).
         if line.count + 1 > byteLimit {
@@ -104,10 +109,20 @@ actor WireLogStore {
                     try handle.write(contentsOf: line)
                     try handle.close()
                 } catch {
-                    // A truncated tail is a corrupt record — restore the cut so
-                    // every kept line stays whole (review, PR #33).
-                    try? handle.truncate(atOffset: tail)
-                    try? handle.close()
+                    // A truncated tail is a corrupt record — restore the cut. If
+                    // even the rollback fails, the file holds bytes we can't
+                    // vouch for: drop it, and if it won't drop, stop writing and
+                    // stop advertising rather than share corruption (PR #33).
+                    do {
+                        try handle.truncate(atOffset: tail)
+                        try handle.close()
+                    } catch {
+                        try? handle.close()
+                        try? FileManager.default.removeItem(at: fileURL)
+                        if FileManager.default.fileExists(atPath: fileURL.path) {
+                            vouchable = false
+                        }
+                    }
                     throw error
                 }
             } else {
@@ -130,14 +145,15 @@ actor WireLogStore {
             // request it was watching already returned.
         }
         // Whatever happened above, `exportURL` reads the filesystem live — a
-        // cleaned-up failure publishes `nil`, a kept line publishes the file
-        // (review, PR #33).
-        exportContinuation.yield(exportURL)
+        // cleaned-up failure publishes `nil`, a kept line publishes the file.
+        // An unvouchable file stays dark even if it couldn't be removed.
+        exportContinuation.yield(vouchable ? exportURL : nil)
     }
 
     func clear() {
         try? FileManager.default.removeItem(at: fileURL)
-        exportContinuation.yield(exportURL)
+        if !FileManager.default.fileExists(atPath: fileURL.path) { vouchable = true }
+        exportContinuation.yield(vouchable ? exportURL : nil)
     }
 
     /// Keeps the newest `byteLimit / 2` bytes, cut at a newline so the oldest kept line
