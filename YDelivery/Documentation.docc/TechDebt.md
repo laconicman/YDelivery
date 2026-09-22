@@ -109,7 +109,9 @@ on `openapi.yaml`, 2026-09-18). The no-building warning added beside it catches 
   not structured — the wire field exists and goes unfilled.
 - **Discharge:** one more `AddressParts` field mapped to `building` at the claim
   boundary; check whether `porch`/`sfloor`/`sflat` mappings already cover what the
-  field would duplicate.
+  field would duplicate. In the same pass, `CLPlacemark.subThoroughfare` carried
+  into `PickedPlace` would replace `lacksBuilding`'s last-token heuristic with a
+  known fact (review, PR #30).
 
 ## YD-7 — Post-draft statuses read as unknown — **open**
 
