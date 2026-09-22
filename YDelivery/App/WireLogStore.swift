@@ -99,24 +99,39 @@ actor WireLogStore {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 try enforceLimit(appending: line.count)
                 let handle = try FileHandle(forWritingTo: fileURL)
-                try handle.seekToEnd()
-                try handle.write(contentsOf: line)
-                try handle.close()
+                let tail = try handle.seekToEnd()
+                do {
+                    try handle.write(contentsOf: line)
+                    try handle.close()
+                } catch {
+                    // A truncated tail is a corrupt record — restore the cut so
+                    // every kept line stays whole (review, PR #33).
+                    try? handle.truncate(atOffset: tail)
+                    try? handle.close()
+                    throw error
+                }
             } else {
-                try line.write(to: fileURL)
+                do {
+                    try line.write(to: fileURL, options: .atomic)
+                    // The file holds route PII — locked means locked, and a file
+                    // we cannot lock must not stay on disk at all. Protection is
+                    // set once here; attributes persist across later appends
+                    // (review, PR #33).
+                    try FileManager.default.setAttributes(
+                        [.protectionKey: FileProtectionType.complete], ofItemAtPath: fileURL.path
+                    )
+                } catch {
+                    try? FileManager.default.removeItem(at: fileURL)
+                    throw error
+                }
             }
-            // The file holds route PII — locked means locked (review, PR #33).
-            // Writes only ever run while the app is up, i.e. unlocked.
-            try FileManager.default.setAttributes(
-                [.protectionKey: FileProtectionType.complete], ofItemAtPath: fileURL.path
-            )
         } catch {
             // A diagnostics store that can't write is a shrug, not a failure — the
             // request it was watching already returned.
         }
-        // Publish outside the do: a write that succeeded but failed to set
-        // protection still left evidence behind, and the share affordance must
-        // learn about it (review, PR #33).
+        // Whatever happened above, `exportURL` reads the filesystem live — a
+        // cleaned-up failure publishes `nil`, a kept line publishes the file
+        // (review, PR #33).
         exportContinuation.yield(exportURL)
     }
 
@@ -135,6 +150,6 @@ actor WireLogStore {
         else { return }
         let suffix = data.suffix(byteLimit / 2)
         guard let newline = suffix.firstIndex(of: UInt8(ascii: "\n")) else { return }
-        try Data(suffix.suffix(from: newline + 1)).write(to: fileURL)
+        try Data(suffix.suffix(from: newline + 1)).write(to: fileURL, options: .atomic)
     }
 }
