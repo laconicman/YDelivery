@@ -39,11 +39,20 @@ extension ClientController {
         case .paid: .paid
         case .unavailable: throw ClaimUncancellable()
         }
-        let response = try await client.cancelClaim(.init(
-            query: .init(claimId: id),
-            headers: .init(acceptLanguage: .ru),
-            body: .json(.init(version: Int64(version), cancelState: state))
-        ))
+        // A throw here is the mutation's answer lost — unknown outcome, possibly
+        // applied. That routes to `.unconfirmed` (re-read the claim), never
+        // `.failed` (whose retry resends the cancel — a second one could bill
+        // twice if the first landed) (review, PR #32).
+        let response: Operations.CancelClaim.Output
+        do {
+            response = try await client.cancelClaim(.init(
+                query: .init(claimId: id),
+                headers: .init(acceptLanguage: .ru),
+                body: .json(.init(version: Int64(version), cancelState: state))
+            ))
+        } catch {
+            throw CancellationUnconfirmed(unanswered: error)
+        }
         // A 200 is the request's word, not the claim's — the doc's own example returns
         // `"status": "new"` for a cancelled claim. The same lesson the ordering flow
         // already learned: the answer is not assumed, the claim's fresh state is read

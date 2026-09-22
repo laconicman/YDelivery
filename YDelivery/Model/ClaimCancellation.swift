@@ -98,7 +98,25 @@ nonisolated struct CancellationPriceUnknown: LocalizedError, Hashable {
 nonisolated struct CancellationUnconfirmed: LocalizedError, Hashable {
     /// The standing the claim reported — `nil` when the confirming read itself failed.
     var status: String?
+    /// The mutation call threw before any answer arrived — the provider may have
+    /// applied it anyway. Kept distinct so the wording never claims acceptance
+    /// when only the outcome is unknown (review, PR #32).
+    var requestError: String?
+
+    init(status: String?) {
+        self.status = status
+        self.requestError = nil
+    }
+
+    init(unanswered error: any Error) {
+        self.status = nil
+        self.requestError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
     var errorDescription: String? {
+        if let requestError {
+            return String(localized: "No answer came back for the cancel request (\(requestError)) — the provider may have applied it. Check the order rather than sending it again.")
+        }
         if let status {
             return String(localized: "The provider answered, but the claim was not cancelled (\(status)).")
         }

@@ -239,6 +239,15 @@ struct OrderCancellationTests {
         }
     }
 
+    @Test("An unanswered mutation says so — the wording never claims acceptance")
+    func unansweredNeverClaimsAcceptance() {
+        struct Lost: LocalizedError { var errorDescription: String? { "connection lost" } }
+        let sentence = CancellationUnconfirmed(unanswered: Lost()).errorDescription ?? ""
+        #expect(sentence.contains("No answer came back"), "a lost answer is not an acceptance")
+        #expect(sentence.contains("connection lost"), "the transport's own words ride along")
+        #expect(!sentence.contains("was accepted"), "unknown outcome must not read as applied")
+    }
+
     @Test("Cancelled-but-unsaved retries the write, not the wire")
     func unrecordedRetriesTheWrite() async {
         let model = OrderDetailView.Model()
