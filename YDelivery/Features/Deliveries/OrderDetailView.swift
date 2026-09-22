@@ -38,9 +38,15 @@ struct OrderDetailView: View {
     }
 
     /// Both reads live behind the claim id — absent it, there is nothing to ask.
+    /// A claim that already stands cancelled is reconciled into history on the way
+    /// back — by this screen earlier, by support, anywhere — so leaving mid-confirm
+    /// cannot strand an accepted cancellation between the wire and local memory
+    /// (review, PR #32).
     private func loadCancellation() async throws -> ClaimCancellation {
         guard let id = order.claimID else { throw OffersUnavailable() }
-        return try await session.claimCancellation(id: id)
+        let asked = try await session.claimCancellation(id: id)
+        if asked.status.isCancelled { try await recordCancelled() }
+        return asked
     }
 
     /// Cancels, then writes the cancelled order into history — the store upserts
@@ -84,6 +90,12 @@ extension OrderDetailView {
         /// The in-flight work — owned so it can be cancelled when the screen goes
         /// away, per rule 6 (review, PR #32). Each verb supersedes the last.
         private var task: Task<Void, Never>?
+        /// Whether the in-flight task carries an accepted side effect. Loads may
+        /// be abandoned with the screen; work past the provider's answer — the
+        /// cancel, the confirming re-read, the history write — may not: dropping
+        /// it strands a paid cancellation between the wire's truth and history's
+        /// memory (review, PR #32).
+        private var taskIsReconciliation = false
 
         enum Cancellation: Hashable {
             /// Asking the provider what cancelling costs.
@@ -106,13 +118,22 @@ extension OrderDetailView {
         }
 
         @discardableResult
-        func load(using fetch: @escaping () async throws -> ClaimCancellation) -> Task<Void, Never> {
+        func load(using fetch: @escaping () async throws -> ClaimCancellation) -> Task<Void, Never>? {
+            // Never supersede work past the provider's answer — it owns the state
+            // until it lands its side effect.
+            guard !taskIsReconciliation else { return nil }
             task?.cancel()
             let next = Task {
                 cancellation = .loading
                 do {
                     let asked = try await fetch()
-                    if !Task.isCancelled { cancellation = .ready(asked) }
+                    if !Task.isCancelled {
+                        // A claim already cancelled — by this screen earlier, by
+                        // support, anywhere — is resolved, not a terms question.
+                        cancellation = asked.status.isCancelled ? .cancelled : .ready(asked)
+                    }
+                } catch let error as CancellationUnrecorded {
+                    if !Task.isCancelled { cancellation = .unrecorded(Self.sentence(for: error)) }
                 } catch {
                     if !Task.isCancelled { cancellation = .failed(Self.sentence(for: error)) }
                 }
@@ -132,7 +153,9 @@ extension OrderDetailView {
                   current.terms.isConfirmable
             else { return nil }
             task?.cancel()
+            taskIsReconciliation = true
             let next = Task {
+                defer { taskIsReconciliation = false }
                 cancellation = .cancelling
                 do {
                     try await cancel(current)
@@ -155,7 +178,9 @@ extension OrderDetailView {
         func recheck(using recheck: @escaping () async throws -> Void) -> Task<Void, Never>? {
             guard case .unconfirmed = cancellation else { return nil }
             task?.cancel()
+            taskIsReconciliation = true
             let next = Task {
+                defer { taskIsReconciliation = false }
                 do {
                     try await recheck()
                     if !Task.isCancelled { cancellation = .cancelled }
@@ -175,7 +200,9 @@ extension OrderDetailView {
         func retryRecording(using record: @escaping () async throws -> Void) -> Task<Void, Never>? {
             guard case .unrecorded = cancellation else { return nil }
             task?.cancel()
+            taskIsReconciliation = true
             let next = Task {
+                defer { taskIsReconciliation = false }
                 do {
                     try await record()
                     if !Task.isCancelled { cancellation = .cancelled }
@@ -187,10 +214,12 @@ extension OrderDetailView {
             return next
         }
 
-        /// The screen went away — owned work ends with it (rule 6). A cancellation
-        /// already on the wire is not undone by this; the claim's own status is the
-        /// truth, and the next history refresh reconciles it.
+        /// The screen went away — pre-mutation work ends with it (rule 6). Work
+        /// past the provider's answer runs to the end instead: abandoning an
+        /// accepted cancellation's re-read or history write strands a paid
+        /// cancellation between the wire's truth and history's memory (PR #32).
         func stop() {
+            guard !taskIsReconciliation else { return }
             task?.cancel()
             task = nil
         }
