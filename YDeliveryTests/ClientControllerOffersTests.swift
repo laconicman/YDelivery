@@ -1,4 +1,5 @@
 import Foundation
+import OpenAPIRuntime
 import Testing
 import YandexDeliveryExpressAPI
 @testable import YDelivery
@@ -121,6 +122,41 @@ struct ClientControllerOffersTests {
             taxiClass: .courier
         )))
         #expect(offer.deliveryInterval == nil)
+    }
+
+    @Test("A documented refusal keeps the provider's message — the accessor would bury it")
+    func refusalKeepsTheProvidersWords() {
+        let refusal = Operations.CalculateOffers.Output.badRequest(
+            .init(body: .json(.init(code: "400", message: "missing required field 'items'")))
+        )
+        #expect(throws: ProviderRefusal.self) {
+            _ = try ClientController.offers(from: refusal)
+        }
+        do {
+            _ = try ClientController.offers(from: refusal)
+            Issue.record("a refusal must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.errorDescription == "missing required field 'items'",
+                    "the strip's sentence is the wire's message, not an accessor error")
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
+    }
+
+    @Test("An undocumented status keeps its code when no message arrived")
+    func undocumentedKeepsTheCode() {
+        let output = Operations.CalculateOffers.Output.undocumented(
+            statusCode: 418,
+            .init()
+        )
+        do {
+            _ = try ClientController.offers(from: output)
+            Issue.record("an undocumented status must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.status == 418)
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
     }
 
     @Test("Signed out throws the invitation, not an error")
