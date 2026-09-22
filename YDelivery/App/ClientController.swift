@@ -23,6 +23,10 @@ final class ClientController {
     /// The wire-evidence capture every session's client carries (Settings shares it).
     let wireLog: WireLogStore
 
+    /// The identity-boundary log wipe — owned, not floating, so rule 6's
+    /// "structured and owned" holds even for best-effort housekeeping (review, PR #33).
+    private var housekeeping: Task<Void, Never>?
+
     /// Restores the previous session, if a token was stored.
     init(tokenStore: TokenStore = TokenStore(), wireLog: WireLogStore = WireLogStore()) {
         self.tokenStore = tokenStore
@@ -58,7 +62,7 @@ final class ClientController {
             // share can never carry the previous session's addresses to someone
             // else's account. Session *restore* must not clear: surviving relaunch
             // is the file's whole point (review, PR #33).
-            Task { await wireLog.clear() }
+            housekeeping = Task { await wireLog.clear() }
             establishSession(token: token)
         } catch {
             client = nil
@@ -74,7 +78,7 @@ final class ClientController {
         signInError = nil
         // Signing out ends this identity's claim on the log — the next user on this
         // device must not inherit its deliveries (review, PR #33).
-        Task { await wireLog.clear() }
+        housekeeping = Task { await wireLog.clear() }
         do { try tokenStore.delete() } catch { signInError = error }
     }
 
