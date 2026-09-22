@@ -57,6 +57,17 @@ nonisolated extension Contact {
         )
     }
 
+    /// The contact as the order should carry it: the phone in E.164 when it parses,
+    /// verbatim when it does not — never silently dropped, the blockers say the rest.
+    /// A member of the type itself: `storable` depends on it, and a model type
+    /// borrowing its normalization from a feature file would invert the layers
+    /// (review, PR #30).
+    func withDialablePhone() -> Contact {
+        var contact = self
+        contact.phone = PhoneFormat.dialable(phone) ?? phone
+        return contact
+    }
+
     /// The collapsed row's one line: «Иван Петров · +7 912 345-67-89, ext. 12». Display
     /// formatting lives here, not in a view body (R5). `nonisolated` explicitly: an
     /// extension does not inherit it from the type, and the project's default isolation
