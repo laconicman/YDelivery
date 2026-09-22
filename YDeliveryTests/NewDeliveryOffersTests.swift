@@ -13,7 +13,8 @@ struct NewDeliveryOffersTests {
         let model = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
         model.setPlace(office, for: model.points[0].id)
         model.setPlace(home, for: model.points[1].id)
-        // Pricing needs a parcel since 2026-09-14 — one item feeds every priced test.
+        // One item feeds every priced test — geo alone prices too (the wire gets a
+        // placeholder), but a real parcel keeps these fixtures close to the claim.
         var pricedItem = ParcelItem()
         pricedItem.name = "Коробка"
         pricedItem.cost = 1000
@@ -87,8 +88,8 @@ extension NewDeliveryOffersTests {
 
         model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "Офис"), for: model.points[0].id)
         model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Дом"), for: model.points[1].id)
-        // Route complete, parcel empty: the request exists and carries no items —
-        // the wire omits the list rather than refusing it (author, 2026-09-18).
+        // Route complete, parcel empty: the request exists; the wire mapping stands
+        // a placeholder item in for it — the server demands ≥1 (live, 2026-09-22).
         let bare = model.pricingInputs
         #expect(bare?.items.isEmpty == true)
 

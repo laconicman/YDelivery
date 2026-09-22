@@ -51,21 +51,34 @@ extension ClientController {
                     coordinates: [waypoint.longitude, waypoint.latitude]
                 )
             },
-            items: request.items.isEmpty ? nil : request.items.map { item in
-                .init(
-                    quantity: item.quantity,
-                    pickupPoint: pointID(item.pickupPointID, 1),
-                    dropoffPoint: pointID(item.dropoffPointID, request.waypoints.count),
-                    size: item.size.map {
-                        .init(
-                            length: $0.lengthCm / 100,
-                            width: $0.widthCm / 100,
-                            height: $0.heightCm / 100
-                        )
-                    },
-                    weight: item.weightKg
-                )
-            },
+            // The wire demands at least one item row even though the document calls
+            // `items` optional — live evidence 2026-09-22: omitting it earns
+            // «missing required field 'items'», sending [] earns «incorrect size,
+            // must be 1 <= 0». So an empty parcel prices as a placeholder — one
+            // thing going end to end, nothing declared about it — which is exactly
+            // the preliminary quote the sender is asking the route for. The spec's
+            // optional marker is drift, filed on the package side.
+            items: request.items.isEmpty
+                ? [.init(
+                    quantity: 1,
+                    pickupPoint: 1,
+                    dropoffPoint: Int64(request.waypoints.count)
+                )]
+                : request.items.map { item in
+                    .init(
+                        quantity: item.quantity,
+                        pickupPoint: pointID(item.pickupPointID, 1),
+                        dropoffPoint: pointID(item.dropoffPointID, request.waypoints.count),
+                        size: item.size.map {
+                            .init(
+                                length: $0.lengthCm / 100,
+                                width: $0.widthCm / 100,
+                                height: $0.heightCm / 100
+                            )
+                        },
+                        weight: item.weightKg
+                    )
+                },
             requirements: Self.requirements(for: request.options)
         )
     }
