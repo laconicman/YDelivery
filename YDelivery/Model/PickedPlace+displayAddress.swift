@@ -31,35 +31,51 @@ nonisolated extension PickedPlace {
         !address.isEmpty && !namesAHouseNumber
     }
 
-    /// The `fullname` convention the geocoder composes: the house is a component
-    /// whose last word is number-shaped — `52`, `15А`, `49с1`, `3/1`, «строение 2».
-    /// A pure digit run longer than five is a postal code, not a door; trailing
-    /// digits exist only behind a letter, else «123456» passes as «digits plus
-    /// padding». And the number must not be a way-in detail — «подъезд 3» describes
-    /// the entrance, not the building (review, PR #30, twice over). The
-    /// imprecision that remains is priced into the warning's wording — advisory,
-    /// never a gate.
+    /// The `fullname` convention the geocoder composes, modeled rather than
+    /// pattern-matched: every number-shaped word (`52`, `15А`, `49с1`, `3/1`) takes
+    /// its role from the label nearest before it — «дом»/«строение»/«корпус» make
+    /// it the building, «подъезд»/«этаж»/«квартира» make it the way in, and a bare
+    /// number counts only as a component's last word, so «улица 8 Марта»'s 8 is
+    /// nobody's house while «вход со двора дом 10» still names one (review, PR #30,
+    /// three times over). A pure run longer than five digits is a postal code.
+    /// The imprecision that remains is priced into the warning's wording —
+    /// advisory, never a gate.
     private var namesAHouseNumber: Bool {
         address.split(separator: ",").contains { component in
-            let words = component.split(separator: " ")
-            guard let last = words.last,
-                  !words.dropLast().contains(where: { Self.detailLabels.contains(Self.normalized($0)) })
-            else { return false }
-            return last.wholeMatch(
-                of: /\d{1,5}([\/]\d{1,3})?([A-Za-zА-Яа-я]\d{0,3})?/
-            ) != nil
+            let words = component.split(separator: " ").map(Self.normalized)
+            return words.indices.contains { index in
+                guard Self.isHouseToken(words[index]) else { return false }
+                guard let governing = words[..<index].last(where: Self.isLabel) else {
+                    return index == words.count - 1
+                }
+                return Self.buildingLabels.contains(governing)
+            }
         }
     }
 
     /// Labels that make a number describe the way in, not the building — «этаж 3»,
     /// «квартира 5», «офис 214» can ride a building-less address just as well as a
-    /// numbered one. Building labels («дом», «строение», «корпус») stay countable:
-    /// they qualify a house, not a door.
+    /// numbered one.
     private static let detailLabels: Set<String> = [
         "подъезд", "парадная", "этаж", "эт", "квартира", "кв", "офис", "домофон",
         "лифт", "секция", "помещение", "пом", "комната", "комн", "кабинет", "каб",
         "вход", "въезд", "налево", "направо",
     ]
+
+    /// Labels that turn a number into the building itself — they qualify a house,
+    /// not a door, and they overrule an earlier detail word (review, PR #30).
+    private static let buildingLabels: Set<String> = [
+        "дом", "д", "строение", "стр", "корпус", "корп", "к", "владение", "вл",
+        "литера", "лит", "здание", "зд",
+    ]
+
+    private static func isLabel(_ word: String) -> Bool {
+        detailLabels.contains(word) || buildingLabels.contains(word)
+    }
+
+    private static func isHouseToken(_ word: String) -> Bool {
+        word.wholeMatch(of: /\d{1,5}([\/]\d{1,3})?([A-Za-zА-Яа-я]\d{0,3})?/) != nil
+    }
 
     private static func normalized(_ word: Substring) -> String {
         word.lowercased().trimmingCharacters(in: .punctuationCharacters)

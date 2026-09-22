@@ -46,6 +46,15 @@ struct PickedPlaceTests {
         #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, строение 2").lacksBuilding)
     }
 
+    @Test("A building label overrules an earlier detail — the nearest label governs")
+    func buildingLabelGoverns() {
+        // Review, PR #30: «вход со двора дом 10» is one component naming its house.
+        #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, вход со двора дом 10").lacksBuilding)
+        #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, дом 10 кв 5").lacksBuilding)
+        // …and directions without any labeled house still warn.
+        #expect(PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Красная площадь, вход со двора, налево").lacksBuilding)
+    }
+
     @Test("A bare pin is honest by itself — the coordinates carry no warning")
     func barePinIsHonest() {
         #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "").lacksBuilding)
