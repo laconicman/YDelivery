@@ -9,6 +9,9 @@ extension OrderDetailView {
     struct Content: View {
         let order: Order
         let cancellation: Model.Cancellation
+        /// Post-answer work is in flight — the retry stays visible but refuses a
+        /// second tap, so the button says so rather than swallowing it (PR #32).
+        let reconciling: Bool
         let retry: () -> Void
         let confirm: () -> Void
 
@@ -70,12 +73,14 @@ extension OrderDetailView {
                                 // Paid, but the amount never arrived — consenting
                                 // to an unseen charge is not offered (PR #32).
                                 Button("Try again", action: retry)
+                                    .disabled(reconciling)
                             }
                         case .failed(let message), .unconfirmed(let message),
                              .unrecorded(let message):
                             Text(message)
                                 .font(.footnote)
                             Button("Try again", action: retry)
+                                .disabled(reconciling)
                         case .cancelling:
                             HStack(spacing: Layout.Spacing.unit) {
                                 ProgressView()
@@ -130,6 +135,7 @@ nonisolated extension Order {
         OrderDetailView.Content(
             order: .previewSearching,
             cancellation: .ready(.init(status: .searching, version: 4, terms: .free)),
+            reconciling: false,
             retry: {},
             confirm: {}
         )
@@ -144,6 +150,7 @@ nonisolated extension Order {
                 status: .other("performer_found"), version: 4,
                 terms: .paid(price: 807.6, currency: "RUB")
             )),
+            reconciling: false,
             retry: {},
             confirm: {}
         )
@@ -158,6 +165,7 @@ nonisolated extension Order {
                 status: .other("performer_found"), version: 4,
                 terms: .paid(price: nil, currency: nil)
             )),
+            reconciling: false,
             retry: {},
             confirm: {}
         )
@@ -169,6 +177,7 @@ nonisolated extension Order {
         OrderDetailView.Content(
             order: .previewSearching,
             cancellation: .ready(.init(status: .other("pickuped"), version: 9, terms: .unavailable)),
+            reconciling: false,
             retry: {},
             confirm: {}
         )
@@ -182,6 +191,7 @@ nonisolated extension Order {
             cancellation: .unconfirmed(
                 CancellationUnconfirmed(status: nil).errorDescription ?? ""
             ),
+            reconciling: false,
             retry: {},
             confirm: {}
         )
@@ -193,6 +203,7 @@ nonisolated extension Order {
         OrderDetailView.Content(
             order: .previewDone,
             cancellation: .loading,
+            reconciling: false,
             retry: {},
             confirm: {}
         )

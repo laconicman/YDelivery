@@ -167,7 +167,7 @@ struct OrderCancellationTests {
         #expect(model.cancellation == .ready(asked))
 
         var cancelled: ClaimCancellation?
-        await model.confirm { cancelled = $0 }?.value
+        _ = await model.confirm { cancelled = $0 }?.value
         #expect(cancelled == asked, "the cancel call gets the version and terms asked live")
         #expect(model.cancellation == .cancelled)
     }
@@ -211,7 +211,7 @@ struct OrderCancellationTests {
             ClaimCancellation(status: .searching, version: 7, terms: .free)
         })?.value
         var resent = false
-        await model.confirm { _ in
+        _ = await model.confirm { _ in
             resent = true
             throw CancellationUnconfirmed(status: nil)
         }?.value
@@ -220,7 +220,7 @@ struct OrderCancellationTests {
             Issue.record("accepted-but-unproven must not render as a refused cancel: \(model.cancellation)")
             return
         }
-        await model.recheck {}?.value
+        _ = await model.recheck {}?.value
         #expect(model.cancellation == .cancelled,
                 "observing the cancelled claim resolves the screen — no second mutation")
     }
@@ -231,8 +231,8 @@ struct OrderCancellationTests {
         await model.load(using: {
             ClaimCancellation(status: .searching, version: 7, terms: .free)
         })?.value
-        await model.confirm { _ in throw CancellationUnconfirmed(status: nil) }?.value
-        await model.recheck { throw CancellationUnconfirmed(status: "searching") }?.value
+        _ = await model.confirm { _ in throw CancellationUnconfirmed(status: nil) }?.value
+        _ = await model.recheck { throw CancellationUnconfirmed(status: "searching") }?.value
         guard case .unconfirmed = model.cancellation else {
             Issue.record("a claim still standing must stay unconfirmed: \(model.cancellation)")
             return
@@ -246,7 +246,7 @@ struct OrderCancellationTests {
             ClaimCancellation(status: .searching, version: 7, terms: .free)
         })?.value
         var wireTouched = false
-        await model.confirm { _ in
+        _ = await model.confirm { _ in
             wireTouched = true
             throw CancellationUnrecorded(StoreController.StoreUnavailable())
         }?.value
@@ -255,7 +255,7 @@ struct OrderCancellationTests {
             return
         }
         wireTouched = false
-        await model.retryRecording {}?.value
+        _ = await model.retryRecording {}?.value
         #expect(model.cancellation == .cancelled)
         #expect(!wireTouched, "retrying the write must not re-ask the provider")
     }
@@ -276,7 +276,7 @@ struct OrderCancellationTests {
 
         model.stop()
         release?.resume()
-        await task?.value
+        _ = await task?.value
 
         #expect(model.cancellation == .cancelled,
                 "the screen leaving must not abort what stands between the wire and history (PR #32)")
@@ -302,7 +302,7 @@ struct OrderCancellationTests {
         #expect(model.cancellation == .cancelling)
 
         release?.resume()
-        await task?.value
+        _ = await task?.value
     }
 
     @Test("A claim already cancelled resolves the screen — whatever closed it")
@@ -328,5 +328,61 @@ struct OrderCancellationTests {
             return
         }
         #expect(message.contains("the file wouldn't take it"))
+    }
+
+    @Test("A load that found the claim cancelled lands the write even after the screen leaves")
+    func terminalLoadSurvivesStop() async {
+        let model = OrderDetailView.Model()
+        var release: CheckedContinuation<Void, Never>?
+        var writeLanded = false
+        let task = model.load(
+            using: {
+                // The claim moved on while the screen was away — support cancelled it.
+                ClaimCancellation(status: .other("cancelled"), version: 9, terms: .unavailable)
+            },
+            onTerminal: {
+                await withCheckedContinuation { release = $0 }
+                writeLanded = true
+            }
+        )
+        for _ in 0..<100 where release == nil { await Task.yield() }
+
+        model.stop()
+        release?.resume()
+        _ = await task?.value
+
+        #expect(writeLanded,
+                "the terminal write is reconciliation work — leaving can't strand it (PR #32)")
+        #expect(model.cancellation == .cancelled)
+    }
+
+    @Test("A retry already in flight refuses the next tap")
+    func inFlightRetryRefusesTheSecond() async {
+        let model = OrderDetailView.Model()
+        await model.load(using: {
+            ClaimCancellation(status: .searching, version: 7, terms: .free)
+        })?.value
+        _ = await model.confirm { _ in throw CancellationUnconfirmed(status: "searching") }?.value
+
+        var release: CheckedContinuation<Void, Never>?
+        let first = model.recheck {
+            await withCheckedContinuation { release = $0 }
+            throw CancellationUnconfirmed(status: "searching")
+        }
+        for _ in 0..<100 where release == nil { await Task.yield() }
+
+        #expect(model.recheck {} == nil,
+                "one recheck at a time — the in-flight one owns the wire read (PR #32)")
+        #expect(model.isReconciling)
+
+        release?.resume()
+        _ = _ = await first?.value
+
+        // The failed read lands back in .unconfirmed — a fresh retry is free to go.
+        guard case .unconfirmed = model.cancellation else {
+            Issue.record("the refused tap must not disturb the outcome: \(model.cancellation)")
+            return
+        }
+        #expect(model.recheck {} != nil)
     }
 }
