@@ -44,9 +44,19 @@ extension PointPickerView {
         /// the picker's home; the map is one row away, never a mode (board `2a`).
         var isRefining = false
 
-        /// The parts of the address the pin cannot know — edited on the refine stage,
-        /// carried out with the confirmed place.
+        /// Whether the describe stage — parts and the person, one screen, the flow's
+        /// end — is showing, stacked on the map. One sheet, two states: Find, then
+        /// Describe (Round 5, decision #40; author, 2026-09-14: setting a point must
+        /// be one flow, not two disjoint sheets).
+        var isDescribing = false
+
+        /// The parts of the address the pin cannot know — edited on the describe
+        /// stage, carried out with the confirmed place.
         var addressParts = AddressParts()
+
+        /// The person at this point's door, edited on the describe stage and carried
+        /// out with the place — one flow answers both questions.
+        var contact = Contact()
 
         /// The paste affordance's card, when active (board `2a`, frames 4–5).
         private(set) var pasteState: PasteState?
@@ -110,6 +120,7 @@ extension PointPickerView {
 
         init(
             initialPlace: PickedPlace? = nil,
+            initialContact: Contact? = nil,
             resolveAddress: @escaping AddressResolver = Model.geocoderResolver,
             searchPlace: @escaping PlaceSearcher = Model.localSearcher,
             expandLink: @escaping LinkExpander = Model.urlSessionExpander,
@@ -120,9 +131,19 @@ extension PointPickerView {
             self.searchPlace = searchPlace
             self.expandLink = expandLink
             self.locateOnce = locateOnce
-            // Editing an already-chosen place starts on the map, at the place.
+            // Editing an already-chosen point opens on Describe, with the map one
+            // Back away — re-entry targets the facts; changing the address is the
+            // rare, destructive move (Round 5, decision #44).
             isRefining = initialPlace != nil
+            isDescribing = initialPlace != nil
             addressParts = initialPlace?.parts ?? AddressParts()
+            contact = initialContact ?? Contact()
+        }
+
+        /// The map's Continue: the address is settled, the point's remaining facts —
+        /// door details and the person — are one push away.
+        func continueToDescribe() {
+            isDescribing = true
         }
 
         /// Everything that describes *this* pin and must not outlive it: the door details
@@ -159,6 +180,12 @@ extension PointPickerView {
         private func adoptNewPoint(isApproximate: Bool = false) {
             addressParts = AddressParts()
             locationIsApproximate = isApproximate
+            // A genuinely new point also retracts a stacked Describe: backing out to
+            // the map and tapping a different pin used to leave the flag dangling,
+            // and Describe re-presented itself over the new pin the moment the map
+            // returned (DeepWiki reviewer pass, 2026-09-14). The typed contact stays —
+            // it belongs to the row being edited, not to the coordinate.
+            isDescribing = false
         }
 
         /// The confirmed result: the pin plus whatever parts were filled on the refine
@@ -167,6 +194,14 @@ extension PointPickerView {
             guard var place = pin else { return nil }
             place.parts = addressParts.isEmpty ? nil : addressParts
             return place
+        }
+
+        /// The person as the point should carry them: the phone in E.164 when it
+        /// parses (the claim mapper copies it verbatim onto the wire), then only what
+        /// ``Contact/storable`` says deserves keeping — `nil` for nobody. Both exits of
+        /// Describe, Save and the bookmark, read this one value.
+        var confirmedContact: Contact? {
+            contact.withDialablePhone().storable
         }
 
         /// Where an empty map starts when the sender's position is unavailable — the

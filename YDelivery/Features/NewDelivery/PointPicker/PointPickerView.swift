@@ -11,14 +11,12 @@ import YDeliveryKit
 /// already-chosen place (which opens straight on the map, at the place).
 struct PointPickerView: View {
     let prompt: LocalizedStringKey
-    /// The chosen place, and what the selection has to say about the person at its door.
-    let confirm: (PickedPlace, ContactChoice) -> Void
+    /// The chosen point, whole: the place and the person at its door — `nil` person
+    /// means nobody, stated. One flow answers both questions (Round 5, decision #40).
+    let confirm: (PickedPlace, Contact?) -> Void
     /// A pasted route link fills both ends in one action (decision #9); `nil` hides
     /// that offer.
     let fillEnds: ((PickedPlace, PickedPlace) -> Void)?
-    /// Who already stands at this point's door, so bookmarking it keeps them.
-    let initialContact: Contact?
-
     @State private var model: Model
     @State private var pendingSave: PendingSave?
     /// Where an empty map starts when location is unavailable — set in Settings, plain
@@ -28,28 +26,17 @@ struct PointPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    /// What a selection says about the person at the door. Refining a pin says nothing —
-    /// whoever the row already had is still standing there. Choosing a remembered point
-    /// speaks for the whole point: it carries its person, or it carries nobody, and
-    /// either way that replaces what was there. Collapsing "nothing to say" into "nobody"
-    /// left the courier calling the previous address's person (review, PR #18).
-    enum ContactChoice: Hashable {
-        case unchanged
-        case replace(Contact?)
-    }
-
     init(
         prompt: LocalizedStringKey,
         initialPlace: PickedPlace? = nil,
         initialContact: Contact? = nil,
-        confirm: @escaping (PickedPlace, ContactChoice) -> Void,
+        confirm: @escaping (PickedPlace, Contact?) -> Void,
         fillEnds: ((PickedPlace, PickedPlace) -> Void)? = nil
     ) {
         self.prompt = prompt
         self.confirm = confirm
         self.fillEnds = fillEnds
-        self.initialContact = initialContact
-        _model = State(initialValue: Model(initialPlace: initialPlace))
+        _model = State(initialValue: Model(initialPlace: initialPlace, initialContact: initialContact))
     }
 
     /// The point being named for the chips — `sheet(item:)` wants identity. It carries
@@ -79,16 +66,16 @@ struct PointPickerView: View {
                 locationDenied: model.locationDenied,
                 pickChip: { id in
                     // Chip → done: the whole point, contact included, no further steps
-                    // (board 2a — the habitual sender's path).
+                    // (board 2a — the habitual sender's path stays one tap).
                     guard let place = store.savedPlaces.first(where: { $0.id == id }) else { return }
-                    confirm(PickedPlace(place.point), .replace(Contact(at: place.point)))
+                    confirm(PickedPlace(place.point), Contact(at: place.point))
                     dismiss()
                 },
                 pickRecent: { id in
                     guard let point = store.recentPoints.first(
                         where: { StoreController.destinationKey($0) == id }
                     ) else { return }
-                    confirm(PickedPlace(point), .replace(Contact(at: point)))
+                    confirm(PickedPlace(point), Contact(at: point))
                     dismiss()
                 },
                 select: { model.select($0) },
@@ -122,40 +109,54 @@ struct PointPickerView: View {
                 RefineContent(
                     pin: model.pin,
                     pinAddress: $model.pinAddress,
-                    parts: $model.addressParts,
                     isResolving: model.isResolving,
                     isApproximate: model.locationIsApproximate,
                     errorText: model.lookupErrorText,
-                    saveUnavailableReason: store.canSavePlaces
-                        ? nil
-                        : StoreController.StoreUnavailable().localizedDescription,
                     fallbackRegion: model.startRegion,
                     onTap: { model.dropPin(latitude: $0, longitude: $1) },
                     onVisibleRegionChange: { model.visibleRegion = $0 },
-                    savePlace: {
-                        if let place = model.confirmedPlace {
-                            pendingSave = PendingSave(place: place, contact: initialContact)
-                        }
-                    },
-                    done: {
-                        guard let place = model.confirmedPlace else { return }
-                        // Refining says nothing about people; the row keeps whoever it had.
-                        confirm(place, .unchanged)
-                        dismiss()
-                    }
+                    continueToDescribe: { model.continueToDescribe() }
                 )
                 .navigationTitle("Refine the point")
                 .navigationBarTitleDisplayMode(.inline)
+                // The flow's end, stacked on the map: door details and the person on
+                // one screen, Back returning to the address (Round 5, decision #40;
+                // author, 2026-09-14 — one navigation stack, not two sheets).
+                .navigationDestination(isPresented: $model.isDescribing) {
+                    DescribeContent(
+                        addressLine: model.confirmedPlace?.displayAddress ?? model.pinAddress,
+                        changeAddress: { model.isDescribing = false },
+                        parts: $model.addressParts,
+                        contact: $model.contact,
+                        saveUnavailableReason: store.canSavePlaces
+                            ? nil
+                            : StoreController.StoreUnavailable().localizedDescription,
+                        bookmark: {
+                            if let place = model.confirmedPlace {
+                                pendingSave = PendingSave(place: place, contact: model.confirmedContact)
+                            }
+                        },
+                        save: {
+                            guard let place = model.confirmedPlace else { return }
+                            confirm(place, model.confirmedContact)
+                            dismiss()
+                        }
+                    )
+                    .navigationTitle("The point")
+                    .navigationBarTitleDisplayMode(.inline)
+                }
             }
             .task { await model.streamSuggestions() }
             .task { await store.refresh() }
             .task(id: startCity) { await model.resolveStartCity(startCity) }
-            // Every running task answers this sheet's question and no other's:
-            // dismissal retires the location fix, the lookup, and a paste expansion
-            // alike — an answer with nobody to receive it is only spent network
-            // (review, PR #18 post-merge; widened on the second round).
-            .onDisappear { model.retireOngoingWork() }
         }
+        // Every running task answers this sheet's question and no other's: dismissal
+        // retires the location fix, the lookup, and a paste expansion alike. On the
+        // *stack*, not on the search stage — attached there, every push to the map
+        // fired it and cancelled the very lookup the map was waiting to display
+        // (caught while framing the DeepWiki reviewer pass, 2026-09-14; the flaw
+        // shipped with the PR #28 widening).
+        .onDisappear { model.retireOngoingWork() }
         .sheet(item: $pendingSave) { pending in
             SavePlaceSheet(address: pending.place.displayAddress) { name, kind in
                 try await store.save(

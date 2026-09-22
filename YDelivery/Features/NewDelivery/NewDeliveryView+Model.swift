@@ -63,7 +63,8 @@ extension NewDeliveryView {
         /// The tariff strip's states (board `1b`): waiting is a drawn state, failure
         /// keeps the strip's place, and signed-out is an invitation — never an error.
         enum Offers: Hashable {
-            /// No complete route — the strip is absent, not empty.
+            /// Nothing to price yet — the route is incomplete or the parcel is empty
+            /// (``pricingInputs``); the strip is absent, not empty.
             case idle
             case loading
             case ready([Offer])
@@ -76,8 +77,10 @@ extension NewDeliveryView {
         private(set) var estimate: Estimate = .idle
         private(set) var offers: Offers = .idle
 
-        /// What the courier carries (board `3d`). Empty is a valid draft — the provider
-        /// then prices against the class's maximum dimensions.
+        /// What the courier carries (board `3d`). Empty is a valid *draft* but not a
+        /// priceable one: ``pricingInputs`` waits for the first item, and the idle
+        /// footer names the parcel as the missing half (author, 2026-09-14). Placing
+        /// the order requires one as well (``orderBlockers``).
         private(set) var items: [ParcelItem] = []
         var options = DeliveryOptions()
 
@@ -355,7 +358,10 @@ extension NewDeliveryView {
         /// trigger: the root's `.task(id:)` watches this, so an edit to any of the three
         /// cancels the stale run.
         var pricingInputs: OfferRequest? {
-            guard isRouteComplete else { return nil }
+            // No parcel, no request: pricing an empty order surfaced the provider's
+            // refusal as «couldn't get prices» — a failure state for a precondition
+            // (author, 2026-09-14). The idle footer names what is missing instead.
+            guard isRouteComplete, !items.isEmpty else { return nil }
             let waypoints = points.compactMap { point in
                 point.place.map {
                     OfferRequest.RequestWaypoint(

@@ -10,7 +10,9 @@ extension NewDeliveryView {
     /// Seeding `@State` from the initializer is deliberate: a sheet is recreated per
     /// presentation, so "first value wins" is the wanted editing semantics.
     struct ItemEditor: View {
-        /// A stop an item can board or leave at, reduced to a menu line.
+        /// A stop an item can board or leave at — the full address, never reduced
+        /// to a menu line an address cannot fit (author, 2026-09-14; Round 5,
+        /// decision #51 rejected inline trailing-value pickers for exactly this).
         struct Stop: Identifiable, Hashable {
             let id: UUID
             let label: String
@@ -85,18 +87,53 @@ extension NewDeliveryView {
 
                     if stops.count > 2 {
                         Section("The item's own route") {
-                            stopPicker(
-                                "Pick up at",
-                                selection: $item.pickupPointID,
-                                fallback: stops.first,
-                                choices: stopsBeforeHandover
-                            )
-                            stopPicker(
-                                "Hand over at",
-                                selection: $item.dropoffPointID,
-                                fallback: stops.last,
-                                choices: stopsAfterPickup
-                            )
+                            // Two rows, each pushing a chooser of full-width stop
+                            // rows — addresses wrap, never truncate (Round 5,
+                            // decisions #51–#52; the inline menu pickers could not
+                            // fit an address and showed two labels fighting for one
+                            // trailing slot).
+                            journeyRow(
+                                "Picked up at",
+                                stop: stops[effectivePickupIndex],
+                                isRouteDefault: item.pickupPointID == nil
+                            ) {
+                                StopChooser(
+                                    title: "Where it boards",
+                                    stops: stops,
+                                    selectedIndex: effectivePickupIndex,
+                                    unavailable: { index in
+                                        index >= effectiveHandoverIndex
+                                            ? String(localized: "At or after the hand-over — a box can't board there.")
+                                            : nil
+                                    },
+                                    choose: { index in
+                                        // A default endpoint is a position: the route's
+                                        // start stores as nil, so reordering keeps it
+                                        // at the start (review, PR #21).
+                                        item.pickupPointID = index == 0 ? nil : stops[index].id
+                                    }
+                                )
+                            }
+                            journeyRow(
+                                "Handed over at",
+                                stop: stops[effectiveHandoverIndex],
+                                isRouteDefault: item.dropoffPointID == nil
+                            ) {
+                                StopChooser(
+                                    title: "Where it leaves",
+                                    stops: stops,
+                                    selectedIndex: effectiveHandoverIndex,
+                                    unavailable: { index in
+                                        index <= effectivePickupIndex
+                                            ? String(localized: "At or before the pickup — it hasn't boarded yet.")
+                                            : nil
+                                    },
+                                    choose: { index in
+                                        item.dropoffPointID =
+                                            index == stops.count - 1 ? nil : stops[index].id
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -178,33 +215,82 @@ extension NewDeliveryView {
                 ?? max(stops.count - 1, 0)
         }
 
-        private var stopsAfterPickup: [Stop] {
-            Array(stops.dropFirst(effectivePickupIndex + 1))
-        }
-
-        private var stopsBeforeHandover: [Stop] {
-            Array(stops.prefix(effectiveHandoverIndex))
-        }
-
-        private func stopPicker(
+        /// One end of the journey as its own row: the caption above, the full
+        /// address below it with room to wrap — a chevron away from the chooser.
+        private func journeyRow(
             _ title: LocalizedStringKey,
-            selection: Binding<UUID?>,
-            fallback: Stop?,
-            choices: [Stop]
+            stop: Stop,
+            isRouteDefault: Bool,
+            @ViewBuilder chooser: @escaping () -> StopChooser
         ) -> some View {
-            Picker(title, selection: selection) {
-                ForEach(choices) { stop in
-                    Text(stop.label).tag(UUID?.some(stop.id))
+            NavigationLink {
+                chooser()
+            } label: {
+                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                    HStack(spacing: Layout.Spacing.chip) {
+                        Text(title)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        if isRouteDefault {
+                            Text("the route's \(stop.id == stops.first?.id ? String(localized: "start") : String(localized: "end"))")
+                                .font(.footnote)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    Text(stop.label) // user data — wraps, never truncates
+                        .multilineTextAlignment(.leading)
                 }
             }
-            // `nil` reads as the route's ends — surfaced as the fallback's label.
-            .overlay(alignment: .trailing) {
-                if selection.wrappedValue == nil, let fallback {
-                    Text(fallback.label)
-                        .foregroundStyle(.secondary)
-                        .allowsHitTesting(false)
+        }
+    }
+}
+
+extension NewDeliveryView.ItemEditor {
+    /// The chooser: every stop of the route as a full-width row — the sender picks
+    /// from the same vocabulary the route card shows, and a stop the journey cannot
+    /// use is disabled *with its reason*, never hidden (Round 5, decision #52;
+    /// DesignSystem → field rule 2).
+    struct StopChooser: View {
+        let title: LocalizedStringKey
+        let stops: [NewDeliveryView.ItemEditor.Stop]
+        let selectedIndex: Int
+        let unavailable: (Int) -> String?
+        let choose: (Int) -> Void
+
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            List {
+                ForEach(Array(stops.enumerated()), id: \.element.id) { index, stop in
+                    let reason = unavailable(index)
+                    Button {
+                        choose(index)
+                        dismiss()
+                    } label: {
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                                Text(stop.label) // wraps in full
+                                    .multilineTextAlignment(.leading)
+                                if let reason {
+                                    Text(reason)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            if index == selectedIndex {
+                                Image(systemName: "checkmark")
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(reason != nil)
                 }
             }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
@@ -262,6 +348,24 @@ extension NewDeliveryView.ItemEditor {
             ],
             selectedTariff: .courier,
             save: { _ in }
+        )
+    }
+}
+
+#Preview("Stop chooser — the impossible stop, disabled under its reason") {
+    NavigationStack {
+        NewDeliveryView.ItemEditor.StopChooser(
+            title: "Where it boards",
+            stops: [
+                .init(id: UUID(), label: "Невский проспект, 100"),
+                .init(id: UUID(), label: "Москва, Каширское шоссе, 52, корпус 3, подъезд 2 — со двора"),
+                .init(id: UUID(), label: "Арбат, 10"),
+            ],
+            selectedIndex: 0,
+            unavailable: { index in
+                index >= 2 ? String(localized: "At or after the hand-over — a box can't board there.") : nil
+            },
+            choose: { _ in }
         )
     }
 }
