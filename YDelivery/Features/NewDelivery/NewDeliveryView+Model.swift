@@ -68,7 +68,9 @@ extension NewDeliveryView {
             case idle
             case loading
             case ready([Offer])
-            case failed
+            /// The provider's own words, when it gave any — a bare refusal helped
+            /// nobody diagnose the empty-parcel rejection (author, 2026-09-22).
+            case failed(String)
             /// No session: prices need a token; drafting never did.
             case signedOut
         }
@@ -78,10 +80,10 @@ extension NewDeliveryView {
         private(set) var offers: Offers = .idle
 
         /// What the courier carries (board `3d`). Empty is a valid draft, and a
-        /// priceable one: the wire *omits* an empty item list rather than refusing
-        /// it — `items` is optional on `offers/calculate`, only a present-but-empty
-        /// array violates `minItems: 1` (DeepWiki consult on the spec, 2026-09-18;
-        /// author chose prices-on-geo). Placing the order still requires one
+        /// priceable one: the wire refuses a missing *or* empty `items` (live,
+        /// 2026-09-22), so the mapping sends a placeholder — one thing, end to end —
+        /// and the quote that comes back is the route's preliminary price. Parcel
+        /// details refine it when they exist; ordering still requires them
         /// (``orderBlockers``).
         private(set) var items: [ParcelItem] = []
         var options = DeliveryOptions()
@@ -402,10 +404,9 @@ extension NewDeliveryView {
         /// trigger: the root's `.task(id:)` watches this, so an edit to any of the three
         /// cancels the stale run.
         var pricingInputs: OfferRequest? {
-            // Geo alone prices: the wire omits an empty item list (it used to send
-            // `[]` and read the provider's `minItems` refusal as «couldn't get
-            // prices» — a failure state for what was never a failure). The parcel
-            // refines the quote when it exists; ordering still requires it.
+            // Geo alone prices: the parcel only refines the quote — ordering still
+            // requires it. The wire insists on ≥1 item row (live, 2026-09-22), so
+            // the mapping stands a placeholder in when this is empty.
             guard isRouteComplete else { return nil }
             let waypoints = points.compactMap { point in
                 point.place.map {
@@ -461,7 +462,9 @@ extension NewDeliveryView {
                 selectedOfferID = nil
             } catch {
                 guard !Task.isCancelled else { return }
-                offers = .failed
+                offers = .failed(
+                    (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                )
             }
         }
 

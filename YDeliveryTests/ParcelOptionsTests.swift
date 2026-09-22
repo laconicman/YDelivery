@@ -150,7 +150,7 @@ struct ParcelOptionsTests {
     }
 
     @Test("Only departures from the defaults go on the wire; all-default sends nothing")
-    func requirementsStayHonest() {
+    func requirementsStayHonest() throws {
         let base = OfferRequest(
             waypoints: [waypoint(UUID(), address: "А"), waypoint(UUID(), address: "Б")],
             items: [],
@@ -158,7 +158,10 @@ struct ParcelOptionsTests {
         )
         #expect(ClientController.offersRequest(for: base).requirements == nil,
                 "door-to-door true and zero loaders are the provider's own defaults")
-        #expect(ClientController.offersRequest(for: base).items == nil)
+        let items = try #require(ClientController.offersRequest(for: base).items)
+        #expect(items.count == 1 && items[0].quantity == 1
+                && items[0].pickupPoint == 1 && items[0].dropoffPoint == 2,
+                "the wire demands ≥1 item row (live, 2026-09-22) — an empty parcel prices as one thing, end to end")
 
         var loaded = base
         loaded.options.thermobag = true

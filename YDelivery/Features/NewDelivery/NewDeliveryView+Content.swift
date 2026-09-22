@@ -149,9 +149,9 @@ extension NewDeliveryView {
                     actions
                 } footer: {
                     if offers == .idle {
-                        // Prices follow the route alone — the wire omits an empty
-                        // parcel rather than refusing it, so the only precondition
-                        // left is a complete route (author, 2026-09-18).
+                        // Prices follow the route alone — an empty parcel rides the
+                        // wire as a placeholder item, so the only precondition left
+                        // is a complete route (live evidence, 2026-09-22).
                         Text("Prices appear when the route is complete.")
                     }
                 }
@@ -488,11 +488,16 @@ extension NewDeliveryView.Content {
                         }
                     }
                 }
-            case .failed:
+            case .failed(let reason):
                 HStack(spacing: 8) {
                     Image(systemSymbol: .exclamationmarkTriangle)
                         .foregroundStyle(.secondary)
-                    Text("Couldn't get prices")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Couldn't get prices")
+                        Text(reason)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                     Button("Retry", action: retry)
                 }
                 .font(.subheadline)
@@ -850,7 +855,7 @@ private extension MKCoordinateRegion {
             retry: {}
         )
         NewDeliveryView.Content.TariffStrip(
-            offers: .failed, selectedID: nil, select: { _ in }, retry: {}
+            offers: .failed("Parse error: missing required field 'items'"), selectedID: nil, select: { _ in }, retry: {}
         )
         NewDeliveryView.Content.TariffStrip(
             offers: .signedOut, selectedID: nil, select: { _ in }, retry: {}

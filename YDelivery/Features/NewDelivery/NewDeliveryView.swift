@@ -27,36 +27,9 @@ struct NewDeliveryView: View {
     @State private var editingItem: ParcelItem?
     @State private var editingOptions: OptionsEditor.Focus?
     @State private var showsExplainer = false
-    /// The explainer opens itself once per compose session until the first order exists
-    /// (board `3a`); after that it lives behind the ⓘ.
-    @State private var hasAutoOpenedExplainer = false
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @Environment(\.dismiss) private var dismiss
-
-    /// The two answers the auto-open needs, so it can be re-asked when either arrives.
-    /// Store emptiness is trusted only after a successful read — not knowing is not the
-    /// same as knowing there is nothing.
-    private struct Onboarding: Equatable {
-        let pricesReady: Bool
-        let historyKnown: Bool
-        let hasOrderedBefore: Bool
-
-        var isBeginnerSeeingPrices: Bool {
-            pricesReady && historyKnown && !hasOrderedBefore
-        }
-    }
-
-    private var onboarding: Onboarding {
-        // An empty answer is priced but has nothing to teach: opening the explainer over
-        // a strip with no classes in it would explain nothing (review, PR #20).
-        let pricesReady = if case .ready(let offers) = draft.offers { !offers.isEmpty } else { false }
-        return Onboarding(
-            pricesReady: pricesReady,
-            historyKnown: store.hasLoaded,
-            hasOrderedBefore: store.hasPlacedAnOrder
-        )
-    }
 
     /// What one priced run answers to: the inputs it prices, and which attempt at them.
     /// Both live tasks are keyed this way, so an edit cancels the stale run and a Retry
@@ -161,16 +134,6 @@ struct NewDeliveryView: View {
                 }
             }
             .task { await store.refresh() }
-            // The first prices a beginner ever sees arrive with the explainer open
-            // (board 3a). Both inputs matter and either can land last, so the observer
-            // watches the pair: keying on the prices alone meant a quote that beat the
-            // store's first read failed the test once and was never asked again, and a
-            // genuine beginner missed the explainer entirely (review, PR #20).
-            .onChange(of: onboarding, initial: true) { _, onboarding in
-                guard onboarding.isBeginnerSeeingPrices, !hasAutoOpenedExplainer else { return }
-                hasAutoOpenedExplainer = true
-                showsExplainer = true
-            }
             .sheet(isPresented: $showsExplainer) {
                 TariffExplainer(cards: explainerCards)
             }

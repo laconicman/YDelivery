@@ -131,4 +131,20 @@ nonisolated struct OffersUnavailable: LocalizedError, Hashable {
     }
 }
 
+/// A documented refusal with the provider's own `{code, message}` body inside.
+/// The generated `.ok` accessor throws away that body — «missing required field
+/// 'items'» became a nameless accessor error (review, PR #31) — so callers switch
+/// on the response and hand the decoded message here instead.
+nonisolated struct ProviderRefusal: LocalizedError, Hashable {
+    let message: String?
+    /// The status code, for the case no decodable body arrived.
+    var status: Int?
+
+    var errorDescription: String? {
+        if let message, !message.isEmpty { return message }
+        if let status { return String(localized: "The provider answered \(status).") }
+        return String(localized: "The provider refused the request.")
+    }
+}
+
 
