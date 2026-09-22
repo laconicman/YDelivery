@@ -6,17 +6,18 @@ import YandexDeliveryExpressAPI
 // the provider's own `{code, message}` rather than an accessor error (PR #31's lesson,
 // applied at birth rather than retrofitted).
 extension ClientController {
-    /// Where the claim stands plus what cancelling costs — two reads in parallel,
-    /// because the version the cancel call must name moves with the courier.
+    /// Where the claim stands plus what cancelling costs — read sequentially, terms
+    /// first: the version is the cancel call's write token, so it is sampled *after*
+    /// the terms it will be sent against. A courier transition mid-pair then fails on
+    /// the server's own rules rather than pairing stale terms with a fresh version
+    /// (review, PR #32).
     func claimCancellation(id: String) async throws -> ClaimCancellation {
         guard let client else { throw OffersUnavailable() }
-        async let claimFetch = claimState(id: id)
-        async let infoFetch = client.getClaimCancelInfo(.init(
+        let terms = try Self.cancelTerms(from: await client.getClaimCancelInfo(.init(
             query: .init(claimId: id),
             headers: .init(acceptLanguage: .ru)
-        ))
-        let claim = try await claimFetch
-        let terms = try await Self.cancelTerms(from: infoFetch)
+        )))
+        let claim = try await claimState(id: id)
         return ClaimCancellation(status: claim.status, version: claim.version, terms: terms)
     }
 
