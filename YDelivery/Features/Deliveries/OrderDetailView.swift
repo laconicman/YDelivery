@@ -68,11 +68,16 @@ struct OrderDetailView: View {
     private func recheckCancellation() async throws -> Model.Cancellation {
         guard let id = order.claimID else { throw OffersUnavailable() }
         let standing = try await session.claimState(id: id)
-        guard standing.status.isCancelled else {
-            return .ready(try await loadCancellation())
+        if standing.status.isCancelled {
+            try await recordCancelled()
+            return .cancelled
         }
-        try await recordCancelled()
-        return .cancelled
+        let refreshed = try await loadCancellation()
+        guard !refreshed.status.isCancelled else {
+            try await recordCancelled()
+            return .cancelled
+        }
+        return .ready(refreshed)
     }
 
     /// The cancelled order into local history. A write failure here is the wire's
