@@ -29,6 +29,9 @@ extension ClientController {
         version: Int,
         terms: ClaimCancellation.Terms
     ) async throws -> PlacedClaim {
+        // The terms are validated before the client — consent to a charge nobody
+        // saw is refused on its own, whatever the connection state (review, PR #32).
+        if case .paid(let price, _) = terms, price == nil { throw CancellationPriceUnknown() }
         guard let client else { throw OffersUnavailable() }
         let state: Components.Schemas.CancelState = switch terms {
         case .free: .free

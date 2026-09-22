@@ -29,6 +29,18 @@ nonisolated struct ClaimCancellation: Hashable, Sendable {
 }
 
 nonisolated extension ClaimCancellation.Terms {
+    /// Whether the sender can consent to these terms at all — `free` always,
+    /// `paid` only once it names its amount: a charge nobody has seen is not a
+    /// price anyone can agree to (review, PR #32). The button and the model's
+    /// second guard both key off this.
+    var isConfirmable: Bool {
+        switch self {
+        case .free: true
+        case .paid(let price, _): price != nil
+        case .unavailable: false
+        }
+    }
+
     /// The sentence the cancel button carries — the price on it is the consent,
     /// so a paid cancellation names its number or admits it doesn't have one.
     var buttonTitle: String {
@@ -51,7 +63,7 @@ nonisolated extension ClaimCancellation.Terms {
             return String(localized: "Cancelling is free — the courier has not reached the pickup point.")
         case .paid(let price, let currency):
             guard let price else {
-                return String(localized: "The courier is already on the way — cancelling is paid.")
+                return String(localized: "The courier is already on the way — cancelling is paid, but the provider never named the amount. Ask again, or close the order through Yandex support.")
             }
             let amount = price.formatted(.currency(code: currency ?? "RUB"))
             return String(localized: "The courier is already on the way — cancelling costs \(amount).")
@@ -66,6 +78,15 @@ nonisolated extension ClaimCancellation.Terms {
 nonisolated struct ClaimUncancellable: LocalizedError, Hashable {
     var errorDescription: String? {
         String(localized: "This order can no longer be cancelled.")
+    }
+}
+
+/// A `paid` term without its amount is refused at the boundary too — nobody can
+/// consent to a price they never saw. The screen's `isConfirmable` gate is the
+/// first guard; this is the second (review, PR #32).
+nonisolated struct CancellationPriceUnknown: LocalizedError, Hashable {
+    var errorDescription: String? {
+        String(localized: "The provider never named the cancellation price — ask again, or close the order through Yandex support.")
     }
 }
 

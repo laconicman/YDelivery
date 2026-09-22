@@ -163,6 +163,37 @@ struct OrderCancellationTests {
         #expect(!reached, "a closed door stays closed — the button guards, the model insists")
     }
 
+    @Test("A paid answer with no amount cannot be consented to — anywhere")
+    func pricelessPaidIsNotConfirmable() {
+        #expect(!ClaimCancellation.Terms.paid(price: nil, currency: nil).isConfirmable)
+        #expect(!ClaimCancellation.Terms.unavailable.isConfirmable)
+        #expect(ClaimCancellation.Terms.free.isConfirmable)
+        #expect(ClaimCancellation.Terms.paid(price: 807.6, currency: "RUB").isConfirmable)
+    }
+
+    @Test("The boundary refuses to send a paid cancellation that never named its price")
+    func pricelessPaidNeverReachesTheWire() async {
+        // No client configured — the argument check must refuse before the wire
+        // is even reached (review, PR #32).
+        let controller = ClientController(tokenStore: TokenStore(service: "test.YDelivery"))
+        await #expect(throws: CancellationPriceUnknown.self) {
+            _ = try await controller.cancelClaim(
+                id: "c1", version: 1, terms: .paid(price: nil, currency: nil)
+            )
+        }
+    }
+
+    @Test("A paid term without its amount is refused by the model's second guard")
+    func modelRefusesPricelessPaid() async {
+        let model = OrderDetailView.Model()
+        await model.load(using: {
+            ClaimCancellation(status: .searching, version: 3, terms: .paid(price: nil, currency: nil))
+        })
+        var reached = false
+        await model.confirm { _ in reached = true }
+        #expect(!reached, "a charge nobody has seen is not a price anyone can agree to")
+    }
+
     @Test("A failed ask renders its sentence, not a bare state")
     func modelFailedKeepsTheSentence() async {
         struct Refused: LocalizedError {

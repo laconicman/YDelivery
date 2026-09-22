@@ -78,8 +78,10 @@ extension OrderDetailView {
         /// The confirm button's whole job — refuses to fire unless terms are in hand
         /// and the wire hasn't already closed the door.
         func confirm(using cancel: (ClaimCancellation) async throws -> Void) async {
+            /// Fires only on consentable terms — a `paid` answer that never named
+            /// its amount is not a price anyone can agree to (review, PR #32).
             guard case .ready(let current) = cancellation,
-                  current.terms != .unavailable
+                  current.terms.isConfirmable
             else { return }
             cancellation = .cancelling
             do {

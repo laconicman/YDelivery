@@ -62,10 +62,14 @@ extension OrderDetailView {
                             Text(current.terms.explanation)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
-                            if current.terms != .unavailable {
+                            if current.terms.isConfirmable {
                                 Button(current.terms.buttonTitle, role: .destructive) {
                                     showsConfirmation = true
                                 }
+                            } else if current.terms != .unavailable {
+                                // Paid, but the amount never arrived — consenting
+                                // to an unseen charge is not offered (PR #32).
+                                Button("Try again", action: reload)
                             }
                         case .failed(let message):
                             Text(message)
@@ -91,7 +95,7 @@ extension OrderDetailView {
                 isPresented: $showsConfirmation,
                 titleVisibility: .visible
             ) {
-                if case .ready(let current) = cancellation {
+                if case .ready(let current) = cancellation, current.terms.isConfirmable {
                     Button(current.terms.buttonTitle, role: .destructive, action: confirm)
                     Button("Keep the order", role: .cancel) {}
                 }
@@ -138,6 +142,20 @@ nonisolated extension Order {
             cancellation: .ready(.init(
                 status: .other("performer_found"), version: 4,
                 terms: .paid(price: 807.6, currency: "RUB")
+            )),
+            reload: {},
+            confirm: {}
+        )
+    }
+}
+
+#Preview("Cancellable — paid, price never arrived") {
+    NavigationStack {
+        OrderDetailView.Content(
+            order: .previewSearching,
+            cancellation: .ready(.init(
+                status: .other("performer_found"), version: 4,
+                terms: .paid(price: nil, currency: nil)
             )),
             reload: {},
             confirm: {}
