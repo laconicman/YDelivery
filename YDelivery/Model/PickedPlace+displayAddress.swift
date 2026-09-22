@@ -33,17 +33,36 @@ nonisolated extension PickedPlace {
 
     /// The `fullname` convention the geocoder composes: the house is a component
     /// whose last word is number-shaped — `52`, `15А`, `49с1`, `3/1`, «строение 2».
-    /// A pure digit run longer than five is a postal code, not a door. The
+    /// A pure digit run longer than five is a postal code, not a door; trailing
+    /// digits exist only behind a letter, else «123456» passes as «digits plus
+    /// padding». And the number must not be a way-in detail — «подъезд 3» describes
+    /// the entrance, not the building (review, PR #30, twice over). The
     /// imprecision that remains is priced into the warning's wording — advisory,
     /// never a gate.
     private var namesAHouseNumber: Bool {
-        // Trailing digits exist only behind a letter (49с1) — else a long pure run
-        // like a postal code would pass as «digits plus padding».
         address.split(separator: ",").contains { component in
-            component.split(separator: " ").last?.wholeMatch(
+            let words = component.split(separator: " ")
+            guard let last = words.last,
+                  !words.dropLast().contains(where: { Self.detailLabels.contains(Self.normalized($0)) })
+            else { return false }
+            return last.wholeMatch(
                 of: /\d{1,5}([\/]\d{1,3})?([A-Za-zА-Яа-я]\d{0,3})?/
             ) != nil
         }
+    }
+
+    /// Labels that make a number describe the way in, not the building — «этаж 3»,
+    /// «квартира 5», «офис 214» can ride a building-less address just as well as a
+    /// numbered one. Building labels («дом», «строение», «корпус») stay countable:
+    /// they qualify a house, not a door.
+    private static let detailLabels: Set<String> = [
+        "подъезд", "парадная", "этаж", "эт", "квартира", "кв", "офис", "домофон",
+        "лифт", "секция", "помещение", "пом", "комната", "комн", "кабинет", "каб",
+        "вход", "въезд", "налево", "направо",
+    ]
+
+    private static func normalized(_ word: Substring) -> String {
+        word.lowercased().trimmingCharacters(in: .punctuationCharacters)
     }
 
     private func formatted(_ degrees: Double) -> String {

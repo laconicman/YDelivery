@@ -36,6 +36,16 @@ struct PickedPlaceTests {
         #expect(PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Красная площадь, вход со двора").lacksBuilding)
     }
 
+    @Test("A way-in detail is not a house — «подъезд 3» doesn't silence the warning")
+    func detailNumbersStillWarn() {
+        // Review, PR #30: numeric directions must not pass for the building.
+        #expect(PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Красная площадь, подъезд 3, налево").lacksBuilding)
+        #expect(PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, улица 8 Марта, кв. 5").lacksBuilding)
+        // …and a real house beside its details still counts.
+        #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, 10, квартира 5").lacksBuilding)
+        #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, строение 2").lacksBuilding)
+    }
+
     @Test("A bare pin is honest by itself — the coordinates carry no warning")
     func barePinIsHonest() {
         #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "").lacksBuilding)
