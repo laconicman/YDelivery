@@ -145,6 +145,24 @@ provider's sentence lost at exactly the calls where money moves.
 - **Discharge:** the same static `…(from:)` mapper both fixed call sites already use —
   `claim(from:)` and `cancelAccepted(from:)` are the template.
 
+## YD-12 — The wire log holds route PII; sharing it is the consent act — **open**
+
+`WireLogStore` writes every request and response body verbatim — addresses, recipient
+names, phone numbers, door codes — to `wire-log.jsonl` in Application Support, so an
+engaged user can produce real wire evidence (the package's TD-22 is the first customer).
+The file never leaves the device on its own; the Settings ShareLink is the only way out,
+and its footer says what the log contains. It is `.complete`-protected against
+locked-device reads, wiped on sign-out and on a fresh sign-in (a new credential is a new
+identity), and bounded — but none of that narrows what a *deliberate* share carries.
+
+- **Cost:** anyone the user shares the file with sees everything in it, and the file
+  persists across launches — that persistence is the point (a force-quit must not lose
+  the evidence), so there is no "session only" softening to hide behind.
+- **Discharge:** a real privacy pass when the feature earns one — field-level redaction
+  on share (names and door codes masked, addresses and statuses kept), or a capture
+  window toggle so the log is opt-in rather than always-on. Neither is worth building
+  before the first shared log proves the mechanism earns its keep.
+
 ## See Also
 
 - <doc:Design>

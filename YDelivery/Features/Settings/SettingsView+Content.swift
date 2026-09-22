@@ -7,6 +7,8 @@ extension SettingsView {
         let errorText: String?
         @Binding var draftToken: String
         @Binding var startCity: String
+        /// The captured wire log's share URL — `nil` while nothing has been recorded.
+        let diagnosticsURL: URL?
         let signIn: () -> Void
         let signOut: () -> Void
 
@@ -42,6 +44,19 @@ extension SettingsView {
                 } footer: {
                     Text("Where an empty map starts when your location is unavailable.")
                 }
+
+                Section {
+                    if let diagnosticsURL {
+                        ShareLink("Share diagnostics log", item: diagnosticsURL)
+                    } else {
+                        Text("Nothing captured yet")
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Diagnostics")
+                } footer: {
+                    Text("Requests and responses the app exchanged are kept on this device — route addresses, names, phone numbers. Share the log to help pin down what the API actually answered.")
+                }
             }
         }
     }
@@ -55,6 +70,7 @@ extension SettingsView {
         errorText: nil,
         draftToken: $token,
         startCity: $city,
+        diagnosticsURL: nil,
         signIn: {},
         signOut: {}
     )
@@ -68,6 +84,7 @@ extension SettingsView {
         errorText: nil,
         draftToken: $token,
         startCity: $city,
+        diagnosticsURL: nil,
         signIn: {},
         signOut: {}
     )
@@ -81,6 +98,7 @@ extension SettingsView {
         errorText: "The token could not be saved to the Keychain.",
         draftToken: $token,
         startCity: $city,
+        diagnosticsURL: nil,
         signIn: {},
         signOut: {}
     )

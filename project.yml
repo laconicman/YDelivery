@@ -50,7 +50,13 @@ packages:
   # (workspace CLAUDE.md); cross-editing uses Xcode's local-override instead.
   YandexDeliveryExpress:
     url: https://github.com/laconicman/YandexDeliveryExpress
-    minorVersion: 0.2.0
+    # 0.2.1: Client.init(…, middlewares:) — the slot the wire log plugs into.
+    minorVersion: 0.2.1
+  # The API package's logging middleware, declared so the app can compose its own
+  # instance into the chain: .debug console visibility beside the shareable file.
+  OSLogLoggingMiddleware:
+    url: https://github.com/laconicman/OSLogLoggingMiddleware
+    minorVersion: 1.1.0
   # The shared foundation below app + future widget/activity (Design → the shared-package
   # decision; DesignSystem holds its component contracts): the semantic color set,
   # StatusChip, the app models, and the order/place stores. Its own repo since 0.1.0,
@@ -81,6 +87,8 @@ targets:
     dependencies:
       - package: YandexDeliveryExpress
         product: YandexDeliveryExpressAPI
+      - package: OSLogLoggingMiddleware
+        product: OSLogLoggingMiddleware
       - package: YDeliveryKit
         product: YDeliveryKit
       - package: PhoneNumberKit

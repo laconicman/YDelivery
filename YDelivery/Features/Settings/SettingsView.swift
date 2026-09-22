@@ -16,11 +16,14 @@ struct SettingsView: View {
                 errorText: session.signInErrorText,
                 draftToken: $draftToken,
                 startCity: $startCity,
+                diagnosticsURL: session.diagnosticsURL,
                 signIn: {
-                    session.signIn(token: draftToken)
-                    // Only a successful sign-in consumes the draft: a failure keeps the
-                    // typed token in the field so retrying is not a full retype.
-                    if session.isSignedIn { draftToken = "" }
+                    Task {
+                        await session.signIn(token: draftToken)
+                        // Only a successful sign-in consumes the draft: a failure keeps the
+                        // typed token in the field so retrying is not a full retype.
+                        if session.isSignedIn { draftToken = "" }
+                    }
                 },
                 signOut: { session.signOut() }
             )
