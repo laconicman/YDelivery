@@ -137,6 +137,24 @@ struct WireLogTests {
         #expect(line.contains(#""error""#))
     }
 
+    @Test("A torn final line is never shareable — unvouched bytes survive no relaunch")
+    func tornTailIsNotShareable() async throws {
+        let (store, url) = try store()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        // A whole line behind a torn tail — the file's state no process vouched for.
+        try Data(#"{"operation":"op","status":200}"#.utf8 + [UInt8(ascii: "\n")]
+            + Data(#"{"operation":"torn","stat"# .utf8)).write(to: url)
+
+        #expect(store.exportURL == nil, "a torn tail is unvouched bytes, not evidence")
+
+        // A subsequent good append repairs the tail — the log is shareable again.
+        await store.append(.init(at: .now, operation: "op", method: "GET",
+                                 path: "/x", status: 200))
+        #expect(store.exportURL == url)
+    }
+
     @Test("An entry bigger than the whole bound lands as a stub, still bounded")
     func oversizedEntryBecomesStub() async throws {
         let directory = FileManager.default.temporaryDirectory
