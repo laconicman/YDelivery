@@ -352,6 +352,24 @@ extension NewDeliveryView.ItemEditor {
     }
 }
 
+#Preview("Stop chooser — the impossible stop, disabled under its reason") {
+    NavigationStack {
+        NewDeliveryView.ItemEditor.StopChooser(
+            title: "Where it boards",
+            stops: [
+                .init(id: UUID(), label: "Невский проспект, 100"),
+                .init(id: UUID(), label: "Москва, Каширское шоссе, 52, корпус 3, подъезд 2 — со двора"),
+                .init(id: UUID(), label: "Арбат, 10"),
+            ],
+            selectedIndex: 0,
+            unavailable: { index in
+                index >= 2 ? String(localized: "At or after the hand-over — a box can't board there.") : nil
+            },
+            choose: { _ in }
+        )
+    }
+}
+
 #Preview("Size fields — empty and stated") {
     @Previewable @State var empty = ParcelItem.Size(lengthCm: 0, widthCm: 0, heightCm: 0)
     @Previewable @State var stated = ParcelItem.Size(lengthCm: 40, widthCm: 30, heightCm: 25)

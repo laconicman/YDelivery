@@ -63,7 +63,8 @@ extension NewDeliveryView {
         /// The tariff strip's states (board `1b`): waiting is a drawn state, failure
         /// keeps the strip's place, and signed-out is an invitation — never an error.
         enum Offers: Hashable {
-            /// No complete route — the strip is absent, not empty.
+            /// Nothing to price yet — the route is incomplete or the parcel is empty
+            /// (``pricingInputs``); the strip is absent, not empty.
             case idle
             case loading
             case ready([Offer])
@@ -76,8 +77,10 @@ extension NewDeliveryView {
         private(set) var estimate: Estimate = .idle
         private(set) var offers: Offers = .idle
 
-        /// What the courier carries (board `3d`). Empty is a valid draft — the provider
-        /// then prices against the class's maximum dimensions.
+        /// What the courier carries (board `3d`). Empty is a valid *draft* but not a
+        /// priceable one: ``pricingInputs`` waits for the first item, and the idle
+        /// footer names the parcel as the missing half (author, 2026-09-14). Placing
+        /// the order requires one as well (``orderBlockers``).
         private(set) var items: [ParcelItem] = []
         var options = DeliveryOptions()
 
