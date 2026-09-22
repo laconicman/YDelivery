@@ -189,6 +189,43 @@ The name is `YDelivery`, not Yandex-anything; no Yandex logos, colors, or iconog
 The README carries the disclaimer. This is both trademark hygiene and honesty about what
 the app is.
 
+## Wire diagnostics: a file for evidence, OSLog for the console (2026-09-22)
+
+Field evidence — "the API answered something the spec didn't predict" — is the input the
+package's TD-22-class questions need, so the app captures every exchange itself. Two sinks
+ride the package's `middlewares:` composition slot (the seam added in `0.2.1` for exactly
+this): `OSLogLoggingMiddleware` at `.debug` for an attached debugger's console, and the
+app's own `WireLogMiddleware` → `WireLogStore`, a bounded JSONL file (512 KB, oldest half
+dropped at line boundaries) in Application Support that Settings exposes through a
+ShareLink. The middleware chain runs after auth, so it sees `Authorization` — recorded in
+the package register as TD-23 — and the discipline is that the sink records bodies and
+statuses, never headers.
+
+Why a file rather than extracting OSLog afterwards: `OSLogStore(.currentProcessIdentifier)`
+is scoped to the process ID, so a relaunch — force-quit, jetsam, or simply reopening days
+later — strands the evidence; `.debug` messages never reach disk at all; marking bodies
+`.public` would expose route PII to `log collect` and sysdiagnose; and OSLog clips large
+interpolated payloads, so a truncated JSON body looks complete but isn't. The file is
+app-owned, `.complete`-protected at creation, survives relaunch (the whole point), and
+leaves the device only through the explicit share act — YD-12 registers that PII trade.
+Firefox iOS's `copyLogsToDocuments` is the same pattern at scale.
+
+The log's own integrity is part of the decision, settled through PR #33's review: writes
+are atomic-or-rolled-back (a failed append truncates to the pre-write offset; a failed
+creation deletes the file), `.complete` protection failure removes the file rather than
+leaving PII unlocked, and `exportURL` itself validates — a file whose final line isn't a
+whole JSON object is never shareable, so torn bytes inherited from a previous launch stay
+dark and the next append cuts them. Identity boundaries are sequenced: sign-in awaits the
+wipe *before* the client exists, sign-out drops the share affordance synchronously and the
+`isSignedIn` gate keeps a late in-flight write of the dead identity from ever looking
+shareable.
+
+**Rejected:** `OSLogStore` extraction (PID-scoped, level-dependent persistence, `.public`
+PII exposure, truncation); transport-level capture (sits below the middleware chain but
+sees the same `Authorization` — the exposure the reviewer flagged — while adding a second
+seam the middleware slot already provides); OSLog-only (no relaunch survival, the engaged-
+user scenario's core case).
+
 ## See Also
 
 - <doc:Vision>
