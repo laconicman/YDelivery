@@ -72,6 +72,17 @@ actor WireLogStore {
 
     func append(_ entry: Entry) {
         guard var line = try? encoder.encode(entry) else { return }
+        // An entry bigger than the whole bound would defeat it: swap in a stub —
+        // the line says the exchange happened, the bound stays true (review, PR #33).
+        if line.count + 1 > byteLimit {
+            let stub = Entry(
+                at: entry.at, operation: entry.operation, method: entry.method,
+                path: entry.path, error: "entry exceeded the log bound"
+            )
+            guard let encoded = try? encoder.encode(stub), encoded.count + 1 <= byteLimit
+            else { return }
+            line = encoded
+        }
         line.append(UInt8(ascii: "\n"))
         do {
             try FileManager.default.createDirectory(
@@ -86,6 +97,11 @@ actor WireLogStore {
             } else {
                 try line.write(to: fileURL)
             }
+            // The file holds route PII — locked means locked (review, PR #33).
+            // Writes only ever run while the app is up, i.e. unlocked.
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.complete], ofItemAtPath: fileURL.path
+            )
         } catch {
             // A diagnostics store that can't write is a shrug, not a failure — the
             // request it was watching already returned.

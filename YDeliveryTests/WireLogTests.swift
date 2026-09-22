@@ -112,4 +112,47 @@ struct WireLogTests {
         #expect(line.contains(#""error""#))
         #expect(line.contains(#""status""#) == false)
     }
+
+    @Test("A body that dies mid-stream still leaves the status it arrived with")
+    func failedBodyKeepsStatus() async throws {
+        let (store, url) = try store()
+        let middleware = WireLogMiddleware(store: store)
+        let request = HTTPRequest(method: .get, scheme: "https", authority: "x", path: "/x")
+
+        struct CutShort: Error {}
+        let stream = AsyncThrowingStream<HTTPBody.ByteChunk, Error> { continuation in
+            continuation.yield([UInt8(ascii: "{")])
+            continuation.finish(throwing: CutShort())
+        }
+        let body = HTTPBody(stream, length: .known(100))
+
+        await #expect(throws: CutShort.self) {
+            try await middleware.intercept(
+                request, body: nil, baseURL: URL(string: "https://x")!, operationID: "op"
+            ) { _, _, _ in (HTTPResponse(status: .badGateway), body) }
+        }
+
+        let line = try #require(try lines(url).first)
+        #expect(line.contains(#""status":502"#), "headers arrived — the status is evidence too")
+        #expect(line.contains(#""error""#))
+    }
+
+    @Test("An entry bigger than the whole bound lands as a stub, still bounded")
+    func oversizedEntryBecomesStub() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = WireLogStore(directory: directory, byteLimit: 200)
+
+        await store.append(.init(
+            at: .now, operation: "op", method: "POST", path: "/x",
+            responseBody: String(repeating: "x", count: 500)
+        ))
+
+        let size = try FileManager.default
+            .attributesOfItem(atPath: store.fileURL.path)[.size] as? Int
+        #expect(size ?? .max <= 200, "a first entry must not open the file oversized")
+        let line = try #require(try lines(store.fileURL).first)
+        #expect(line.hasPrefix("{"), "the stub is still a whole JSON line")
+        #expect(line.contains("exceeded the log bound"))
+    }
 }

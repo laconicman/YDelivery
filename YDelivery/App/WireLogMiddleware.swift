@@ -37,8 +37,11 @@ struct WireLogMiddleware: ClientMiddleware {
         entry.requestBody = requestNote
         do {
             let (response, responseBody) = try await next(request, bodyForNext, baseURL)
-            let (responseNote, bodyForCaller) = try await capture(responseBody)
+            // The status is known the moment headers arrive — record it before the
+            // body is collected, so a body that fails mid-stream still leaves its
+            // status in the entry (review, PR #33).
             entry.status = response.status.code
+            let (responseNote, bodyForCaller) = try await capture(responseBody)
             entry.responseBody = responseNote
             await store.append(entry)
             return (response, bodyForCaller)

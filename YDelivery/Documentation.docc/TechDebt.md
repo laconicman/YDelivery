@@ -151,7 +151,9 @@ provider's sentence lost at exactly the calls where money moves.
 names, phone numbers, door codes — to `wire-log.jsonl` in Application Support, so an
 engaged user can produce real wire evidence (the package's TD-22 is the first customer).
 The file never leaves the device on its own; the Settings ShareLink is the only way out,
-and its footer says what the log contains.
+and its footer says what the log contains. It is `.complete`-protected against
+locked-device reads, wiped on sign-out and on a fresh sign-in (a new credential is a new
+identity), and bounded — but none of that narrows what a *deliberate* share carries.
 
 - **Cost:** anyone the user shares the file with sees everything in it, and the file
   persists across launches — that persistence is the point (a force-quit must not lose

@@ -54,6 +54,11 @@ final class ClientController {
         }
         do {
             try tokenStore.write(token)
+            // A new credential means a new identity — the log starts empty so a
+            // share can never carry the previous session's addresses to someone
+            // else's account. Session *restore* must not clear: surviving relaunch
+            // is the file's whole point (review, PR #33).
+            Task { await wireLog.clear() }
             establishSession(token: token)
         } catch {
             client = nil
@@ -67,6 +72,9 @@ final class ClientController {
     func signOut() {
         client = nil
         signInError = nil
+        // Signing out ends this identity's claim on the log — the next user on this
+        // device must not inherit its deliveries (review, PR #33).
+        Task { await wireLog.clear() }
         do { try tokenStore.delete() } catch { signInError = error }
     }
 
