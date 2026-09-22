@@ -220,7 +220,7 @@ struct OrderCancellationTests {
             Issue.record("accepted-but-unproven must not render as a refused cancel: \(model.cancellation)")
             return
         }
-        _ = await model.recheck {}?.value
+        _ = await model.recheck { .cancelled }?.value
         #expect(model.cancellation == .cancelled,
                 "observing the cancelled claim resolves the screen — no second mutation")
     }
@@ -235,6 +235,27 @@ struct OrderCancellationTests {
         _ = await model.recheck { throw CancellationUnconfirmed(status: "searching") }?.value
         guard case .unconfirmed = model.cancellation else {
             Issue.record("a claim still standing must stay unconfirmed: \(model.cancellation)")
+            return
+        }
+    }
+
+    @Test("A still-standing re-read goes back to fresh terms, not an automatic resend")
+    func stillStandingReturnsToTerms() async {
+        let model = OrderDetailView.Model()
+        await model.load(using: {
+            ClaimCancellation(status: .searching, version: 7, terms: .free)
+        })?.value
+        _ = await model.confirm { _ in throw CancellationUnconfirmed(status: nil) }?.value
+
+        // The re-read found the claim open — the mutation never applied. The view
+        // answers with re-fetched terms (a fresh version), and confirm comes back
+        // as an explicit act, never an automatic resend (review, PR #32).
+        _ = await model.recheck {
+            .ready(ClaimCancellation(status: .searching, version: 9, terms: .free))
+        }?.value
+
+        guard case .ready(let asked) = model.cancellation, asked.version == 9 else {
+            Issue.record("a still-standing claim should offer fresh terms: \(model.cancellation)")
             return
         }
     }
@@ -380,7 +401,7 @@ struct OrderCancellationTests {
         }
         for _ in 0..<100 where release == nil { await Task.yield() }
 
-        #expect(model.recheck {} == nil,
+        #expect(model.recheck { .cancelled } == nil,
                 "one recheck at a time — the in-flight one owns the wire read (PR #32)")
         #expect(model.isReconciling)
 
@@ -392,6 +413,6 @@ struct OrderCancellationTests {
             Issue.record("the refused tap must not disturb the outcome: \(model.cancellation)")
             return
         }
-        #expect(model.recheck {} != nil)
+        #expect(model.recheck { .cancelled } != nil)
     }
 }

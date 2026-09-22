@@ -60,12 +60,19 @@ struct OrderDetailView: View {
         try await recordCancelled()
     }
 
-    /// The accepted-but-unproven retry: re-read the claim — its own status is the
-    /// only word on whether the cancellation took. Never re-sends the mutation.
-    private func recheckCancellation() async throws {
-        guard let id = order.claimID else { return }
-        _ = try await session.cancelledClaimState(id: id)
+    /// The unknown-outcome retry: re-read the claim — its own status is the only
+    /// word on whether the cancellation took, and it never re-sends the mutation.
+    /// Cancelled lands the history write; still standing means the mutation never
+    /// applied, so the screen goes back to fresh terms and an explicit confirm —
+    /// never an automatic resend (review, PR #32).
+    private func recheckCancellation() async throws -> Model.Cancellation {
+        guard let id = order.claimID else { throw OffersUnavailable() }
+        let standing = try await session.claimState(id: id)
+        guard standing.status.isCancelled else {
+            return .ready(try await loadCancellation())
+        }
         try await recordCancelled()
+        return .cancelled
     }
 
     /// The cancelled order into local history. A write failure here is the wire's
@@ -219,14 +226,17 @@ extension OrderDetailView {
         /// The unconfirmed retry — re-read the claim's own status; the accepted
         /// mutation is never sent twice. A second tap while one is in flight is
         /// refused, not queued — retrying already-running work can only race it.
+        /// The read's answer decides the next state: cancelled, fresh terms when
+        /// the claim still stands, or unconfirmed again when the read failed.
         @discardableResult
-        func recheck(using recheck: @escaping () async throws -> Void) -> Task<Cancellation, Never>? {
+        func recheck(
+            using recheck: @escaping () async throws -> Cancellation
+        ) -> Task<Cancellation, Never>? {
             guard reconciliation == nil, case .unconfirmed = cancellation else { return nil }
             inquiry?.cancel()
             return reconcile(using: {
                 do {
-                    try await recheck()
-                    return .cancelled
+                    return try await recheck()
                 } catch let error as CancellationUnrecorded {
                     return .unrecorded(Self.sentence(for: error))
                 } catch {
