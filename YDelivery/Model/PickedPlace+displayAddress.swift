@@ -42,12 +42,13 @@ nonisolated extension PickedPlace {
     /// advisory, never a gate.
     private var namesAHouseNumber: Bool {
         address.split(separator: ",").contains { component in
-            let words = component.split(separator: " ").map(Self.normalized)
+            let words = component.split(separator: " ")
             return words.indices.contains { index in
                 guard Self.isHouseToken(words[index]) else { return false }
-                guard let governing = words[..<index].last(where: Self.isLabel) else {
-                    return index == words.count - 1
-                }
+                guard let governing = words[..<index]
+                    .map(Self.labelForm)
+                    .last(where: Self.isLabel)
+                else { return index == words.count - 1 }
                 return Self.buildingLabels.contains(governing)
             }
         }
@@ -57,28 +58,41 @@ nonisolated extension PickedPlace {
     /// «квартира 5», «офис 214» can ride a building-less address just as well as a
     /// numbered one.
     private static let detailLabels: Set<String> = [
-        "подъезд", "парадная", "этаж", "эт", "квартира", "кв", "офис", "домофон",
-        "лифт", "секция", "помещение", "пом", "комната", "комн", "кабинет", "каб",
+        "подъезд", "парадная", "этаж", "эт", "эт.", "квартира", "кв", "кв.",
+        "офис", "домофон", "лифт", "секция", "помещение", "пом", "пом.",
+        "комната", "комн", "комн.", "кабинет", "каб", "каб.",
         "вход", "въезд", "налево", "направо",
     ]
 
     /// Labels that turn a number into the building itself — they qualify a house,
     /// not a door, and they overrule an earlier detail word (review, PR #30).
+    /// Single-letter forms exist only dotted: «к.» is корпус while bare «к» is the
+    /// preposition *to*, and stripping the dot is how «вход к шлагбауму 2» once
+    /// named a barrier a building (review, same round).
     private static let buildingLabels: Set<String> = [
-        "дом", "д", "строение", "стр", "корпус", "корп", "к", "владение", "вл",
-        "литера", "лит", "здание", "зд",
+        "дом", "д.", "строение", "стр.", "стр", "корпус", "корп.", "корп", "к.",
+        "владение", "вл.", "вл", "литера", "лит.", "лит", "здание", "зд.", "зд",
     ]
 
     private static func isLabel(_ word: String) -> Bool {
         detailLabels.contains(word) || buildingLabels.contains(word)
     }
 
-    private static func isHouseToken(_ word: String) -> Bool {
-        word.wholeMatch(of: /\d{1,5}([\/]\d{1,3})?([A-Za-zА-Яа-я]\d{0,3})?/) != nil
+    /// A number-shaped word: digits, an optional fraction, an optional letter with
+    /// its own trailing digits — `52`, `15А`, `49с1`, `3/1`. Edge punctuation is
+    /// irrelevant to a number, so it is stripped whole («10.» at a line's end).
+    private static func isHouseToken(_ word: Substring) -> Bool {
+        word.lowercased()
+            .trimmingCharacters(in: .punctuationCharacters)
+            .wholeMatch(of: /\d{1,5}([\/]\d{1,3})?([A-Za-zА-Яа-я]\d{0,3})?/) != nil
     }
 
-    private static func normalized(_ word: Substring) -> String {
-        word.lowercased().trimmingCharacters(in: .punctuationCharacters)
+    /// Edge punctuation stripped *except* the dot — the dot is what makes «к.» an
+    /// abbreviation rather than a preposition, so label matching keeps it.
+    private static func labelForm(_ word: Substring) -> String {
+        word.lowercased().trimmingCharacters(
+            in: CharacterSet.punctuationCharacters.subtracting(.init(charactersIn: "."))
+        )
     }
 
     private func formatted(_ degrees: Double) -> String {

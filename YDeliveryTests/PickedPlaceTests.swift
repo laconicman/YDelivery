@@ -55,6 +55,13 @@ struct PickedPlaceTests {
         #expect(PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Красная площадь, вход со двора, налево").lacksBuilding)
     }
 
+    @Test("Bare «к» is the preposition, not корпус — the dot carries the difference")
+    func prepositionIsNoBuildingLabel() {
+        // Review, PR #30: «вход к шлагбауму 2» numbers the barrier, not a house.
+        #expect(PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Красная площадь, вход к шлагбауму 2").lacksBuilding)
+        #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "Москва, Арбат, д. 10, к. 2").lacksBuilding)
+    }
+
     @Test("A bare pin is honest by itself — the coordinates carry no warning")
     func barePinIsHonest() {
         #expect(!PickedPlace(latitude: 55.75, longitude: 37.62, address: "").lacksBuilding)
