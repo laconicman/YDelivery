@@ -26,7 +26,31 @@ extension ClientController {
             query: .init(claimId: id),
             headers: .init(acceptLanguage: .ru)
         ))
-        return PlacedClaim(try response.ok.body.json)
+        return try Self.claim(from: response)
+    }
+
+    /// The claim-info answer read the honest way — documented refusals carry the
+    /// provider's `{code, message}`, which the `.ok` accessor would bury (PR #31's
+    /// lesson on `offers(for:)`, applied where the cancel flow now also reads).
+    nonisolated static func claim(
+        from response: Operations.GetClaimInfo.Output
+    ) throws -> PlacedClaim {
+        switch response {
+        case .ok(let ok):
+            return PlacedClaim(try ok.body.json)
+        case .badRequest(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .unauthorized(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .notFound(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .tooManyRequests(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .internalServerError(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .undocumented(let statusCode, _):
+            throw ProviderRefusal(message: nil, status: statusCode)
+        }
     }
 
     /// Confirms the estimated claim — the moment money moves.
@@ -210,6 +234,13 @@ nonisolated extension PlacedClaim {
 }
 
 nonisolated extension PlacedClaim.Progress {
+    /// Every wire status that means "closed by cancellation" shares the `cancelled`
+    /// prefix — and all of them land in `.other`, the zoo's honest bucket.
+    var isCancelled: Bool {
+        if case .other(let raw) = self { return raw.hasPrefix("cancelled") }
+        return false
+    }
+
     /// The wire's status zoo, collapsed to what the ordering flow decides on. Anything
     /// past `accepted` means the search (or more) is running — the draft's job is done.
     init(_ status: Components.Schemas.ClaimStatus) {

@@ -33,7 +33,9 @@ extension DeliveriesView {
             Group {
                 if !rows.isEmpty {
                     List(rows) { row in
-                        OrderRow(row: row)
+                        NavigationLink(value: row.id) {
+                            OrderRow(row: row)
+                        }
                     }
                 } else if let historyUnavailable {
                     // Checked before the empty states: *could not look* is not *nothing
@@ -109,7 +111,8 @@ extension DeliveriesView.Content {
 }
 
 #Preview("Orders") {
-    DeliveriesView.Content(
+    NavigationStack {
+        DeliveriesView.Content(
         isSignedIn: true,
         rows: [
             .init(
@@ -130,7 +133,8 @@ extension DeliveriesView.Content {
             ),
         ],
         compose: {}
-    )
+        )
+    }
 }
 
 #Preview("Signed in, empty") {

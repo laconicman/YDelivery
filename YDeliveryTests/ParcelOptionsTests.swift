@@ -25,11 +25,11 @@ struct ParcelOptionsTests {
             options: DeliveryOptions()
         ))
 
-        let size = try #require(request.items?.first?.size)
+        let size = try #require(request.items.first?.size)
         #expect(size.length == 0.25)
         #expect(size.width == 0.18)
         #expect(size.height == 0.15)
-        #expect(request.items?.first?.weight == 2, "kilograms pass through untouched")
+        #expect(request.items.first?.weight == 2, "kilograms pass through untouched")
     }
 
     @Test("An item names its stops by the route's one-based visit order")

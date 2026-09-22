@@ -145,6 +145,21 @@ struct StoreControllerTests {
                 "placed then cancelled still means they saw the strip and chose a class")
     }
 
+    @Test("The fallback merge replaces a stale copy — an update is not a second row")
+    func upsertFallbackKeepsOneRow() {
+        let stale = Order(created: .now, status: .searching, route: [], claimID: "claim-1")
+        var updated = stale
+        updated.status = .cancelled
+        let other = Order(created: .now, status: .done, route: [], claimID: "claim-2")
+
+        let merged = StoreController.upserting(updated, into: [stale, other])
+
+        #expect(merged.count == 2,
+                "recording a cancelled order over its searching self must not duplicate it (PR #32)")
+        #expect(merged.first?.status == .cancelled)
+        #expect(merged.filter { $0.id == stale.id }.count == 1)
+    }
+
     @Test("Recording the same order twice keeps one row")
     func recordingIsIdempotent() throws {
         let store = OrderStore(directory: directory)

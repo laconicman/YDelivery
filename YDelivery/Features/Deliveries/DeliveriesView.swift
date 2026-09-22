@@ -18,13 +18,17 @@ struct DeliveriesView: View {
                 compose: compose
             )
                 .navigationTitle("Deliveries")
+                .navigationDestination(for: UUID.self) { id in
+                    if let order = store.orders.first(where: { $0.id == id }) {
+                        OrderDetailView(order: order)
+                    }
+                }
                 .task { await store.refresh() }
         }
     }
 
-    /// Orders reduced to rows — bridging on the root's side of the seam. Price restores
-    /// through the wire's own decimal string; the courier-facing ends read A → B even
-    /// when the run had middles.
+    /// Orders reduced to rows — bridging on the root's side of the seam. The
+    /// courier-facing ends read A → B even when the run had middles.
     private var rows: [Content.Row] {
         store.orders.map { order in
             Content.Row(
@@ -33,11 +37,7 @@ struct DeliveriesView: View {
                 from: order.route.first?.address ?? "",
                 to: order.route.last?.address ?? "",
                 dateText: order.created.formatted(date: .abbreviated, time: .shortened),
-                priceText: order.price.flatMap { price in
-                    Decimal(string: price, locale: Locale(identifier: "en_US_POSIX")).map {
-                        $0.formatted(.currency(code: order.currency ?? "RUB").precision(.fractionLength(0...2)))
-                    }
-                }
+                priceText: order.priceText
             )
         }
     }

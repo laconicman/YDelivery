@@ -201,9 +201,17 @@ final class StoreController {
             orders = try await Self.readOrders(orderStore)
             ordersError = nil
         } catch {
-            orders = [order] + orders
+            orders = Self.upserting(order, into: orders)
             ordersError = error
         }
+    }
+
+    /// The fallback merge when the confirming read fails: the written order leads,
+    /// minus any stale copy of itself — recording an *update* (a just-cancelled
+    /// order) must not leave its previous status riding along as a second row
+    /// (review, PR #32).
+    nonisolated static func upserting(_ order: Order, into orders: [Order]) -> [Order] {
+        [order] + orders.filter { $0.id != order.id }
     }
 
     struct StoreUnavailable: LocalizedError {

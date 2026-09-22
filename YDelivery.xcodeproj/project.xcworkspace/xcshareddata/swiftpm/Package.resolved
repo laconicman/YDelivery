@@ -1,5 +1,5 @@
 {
-  "originHash" : "457f92c26d620e35fac544afcab2770bbd807bd1bb4530beabc64d2aff22d77b",
+  "originHash" : "d9dbbb79624aedd75dc99d588f7d90a11497e7603fdf143ae1fb9a26f622912e",
   "pins" : [
     {
       "identity" : "openapikit",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/OSLogLoggingMiddleware",
       "state" : {
-        "revision" : "52150c4b254f71765f197c42b9064fd7518c3a17",
-        "version" : "1.0.1"
+        "revision" : "c66068020740e4c872157da696c0f4f999df7e74",
+        "version" : "1.1.0"
       }
     },
     {
@@ -132,8 +132,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/YandexDeliveryExpress",
       "state" : {
-        "revision" : "dfb0fdba67ac4165ffa96f73453978e7461550d4",
-        "version" : "0.2.0"
+        "revision" : "807ac122d3273b73a5128a57d229340b346a4753",
+        "version" : "0.2.1"
       }
     },
     {
