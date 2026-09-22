@@ -37,6 +37,9 @@ final class DraftScreenshotTests: XCTestCase {
         let itemRow = app.buttons.containing(anyNoutbuk).firstMatch
         for _ in 0..<5 where !itemRow.waitForExistence(timeout: 1) { app.swipeUp() }
         XCTAssertTrue(itemRow.waitForExistence(timeout: 3))
+        // The row states its own journey in the stops' words (YD-6) — capture it
+        // before the editor opens over it.
+        snap("1b-draft-item-row-journey")
 
         // The item editor: journey rows must show whole addresses. The journey row
         // is a NavigationLink — one button, children's labels combined.

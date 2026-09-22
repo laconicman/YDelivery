@@ -232,10 +232,10 @@ extension NewDeliveryView {
                 // the route's start, `nil` handover its end — so a pair with one default
                 // can be just as impossible as one with neither (review, PR #21). The
                 // handover is the half that gives way, since the pickup is where the
-                // parcel physically is.
-                let pickup = items[index].pickupPointID.flatMap { order[$0] } ?? 0
-                let handover = items[index].dropoffPointID.flatMap { order[$0] }
-                    ?? max(points.count - 1, 0)
+                // parcel physically is. The defaults are `pickupIndex`/`handoverIndex`'s
+                // — one home, so the rows and the repair can never disagree.
+                let pickup = pickupIndex(of: items[index])
+                let handover = handoverIndex(of: items[index])
                 if handover <= pickup {
                     items[index].dropoffPointID = nil
                     // Clearing the handover restores the route's end; if the pickup is
@@ -352,6 +352,48 @@ extension NewDeliveryView {
             !items.isEmpty
                 && items.allSatisfy { tariff.fits($0) }
                 && !tariff.fitsParcel(items)
+        }
+
+        // MARK: What happens at each stop
+
+        /// The index a journey end resolves to: a named stop, or the route's end —
+        /// `nil` pickup is the start, `nil` handover the last stop. The same
+        /// default ``repairItemJourneys`` and the editor's chooser already speak.
+        private func pickupIndex(of item: ParcelItem) -> Int {
+            item.pickupPointID.flatMap { id in points.firstIndex { $0.id == id } } ?? 0
+        }
+
+        private func handoverIndex(of item: ParcelItem) -> Int {
+            item.dropoffPointID.flatMap { id in points.firstIndex { $0.id == id } }
+                ?? max(points.count - 1, 0)
+        }
+
+        /// What the parcel does at one stop, as the counted sentence the point row
+        /// and the map callout both render (Round 5, #45–46; author, 2026-09-18 —
+        /// both directions stay visible until the layout chooses between them).
+        /// `nil` when nothing happens there.
+        func parcelActions(at index: Int) -> String? {
+            let boarding = items.filter { pickupIndex(of: $0) == index }.map(\.displayName)
+            let leaving = items.filter { handoverIndex(of: $0) == index }.map(\.displayName)
+            var actions: [String] = []
+            if !boarding.isEmpty {
+                actions.append(String(localized: "picks up \(boarding.formatted(.list(type: .and)))"))
+            }
+            if !leaving.isEmpty {
+                actions.append(String(localized: "hands over \(leaving.formatted(.list(type: .and)))"))
+            }
+            return actions.isEmpty ? nil : actions.joined(separator: " · ")
+        }
+
+        /// The item's own route in the stops' own words — «A → B». Shown only when
+        /// the route has middles, where a journey can differ from the route's
+        /// (YD-6).
+        func journeyLine(for item: ParcelItem) -> String? {
+            guard points.count > 2 else { return nil }
+            guard let from = points[pickupIndex(of: item)].place?.displayAddress,
+                  let to = points[handoverIndex(of: item)].place?.displayAddress
+            else { return nil }
+            return "\(from) → \(to)"
         }
 
         // MARK: Offers

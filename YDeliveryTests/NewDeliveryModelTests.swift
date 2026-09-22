@@ -208,6 +208,45 @@ struct NewDeliveryModelTests {
         #expect(model.points[1].id == added)
         #expect(model.points[1].place == shop)
     }
+
+    @Test("A stop states what the parcel does at its door — both directions visible")
+    func parcelActions() {
+        let model = filledDraft()
+        _ = model.addStop()
+        model.setPlace(shop, for: model.points[2].id)
+        var item = ParcelItem()
+        item.name = "Ноутбук"
+        model.setItem(item)
+
+        // The default journey rides the route's ends: the start collects, the last
+        // stop hands over, the middle stands aside.
+        #expect(model.parcelActions(at: 0) == String(localized: "picks up Ноутбук"))
+        #expect(model.parcelActions(at: 1) == nil)
+        #expect(model.parcelActions(at: 2) == String(localized: "hands over Ноутбук"))
+
+        // A named boarding stop claims the action from the route's start.
+        item.pickupPointID = model.points[1].id
+        model.setItem(item)
+        #expect(model.parcelActions(at: 0) == nil)
+        #expect(model.parcelActions(at: 1) == String(localized: "picks up Ноутбук"))
+    }
+
+    @Test("An item's row carries its journey only when the route has middles")
+    func journeyLineNeedsMiddles() {
+        let model = filledDraft()
+        var item = ParcelItem()
+        item.name = "Ноутбук"
+        model.setItem(item)
+        #expect(model.journeyLine(for: item) == nil, "A→B is the whole route — nothing to say")
+
+        _ = model.addStop()
+        model.setPlace(shop, for: model.points[2].id)
+        #expect(model.journeyLine(for: item) == "Офис → Магазин")
+
+        item.dropoffPointID = model.points[1].id
+        model.setItem(item)
+        #expect(model.journeyLine(for: item) == "Офис → Дом")
+    }
 }
 
 @Suite("Route badges")

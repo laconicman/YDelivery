@@ -268,6 +268,7 @@ private extension NewDeliveryView {
                 contactSummary: point.contact?.summary,
                 contactInvitation: point.role.contactInvitation,
                 availableRoles: draft.availableRoles(for: point.id),
+                parcelActions: draft.parcelActions(at: index),
                 isDeletable: index > 0 && points.count > 2,
                 isMovable: index > 0 && point.role != .return
             )
@@ -295,13 +296,14 @@ private extension NewDeliveryView {
         draft.items.map { item in
             Content.ItemRow(
                 id: item.id,
-                name: item.name.isEmpty ? String(localized: "Item") : item.name,
+                name: item.displayName,
                 summary: item.summary,
                 misfit: draft.selectedOffer.flatMap { offer in
                     offer.tariff.fits(item)
                         ? nil
                         : String(localized: "Doesn't fit \(offer.tariff.words)")
-                }
+                },
+                journey: draft.journeyLine(for: item)
             )
         }
     }

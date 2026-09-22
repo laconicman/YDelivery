@@ -71,16 +71,19 @@ claim that may be spending money; the vendor remembers.
   store-stack decision (<doc:Roadmap> → the research). Until then the window is one
   foregrounded flow wide.
 
-## YD-6 — Item rows do not show their journey — **open**
+## YD-6 — Item rows do not show their journey — **discharged**
 
 `repairItemJourneys()` keeps per-item stops valid across delete, reorder, `setRole` and
-`setItem` — but the row renders name and summary only, so a repaired (released) stop
-reference changes silently.
+`setItem` — but the row rendered name and summary only, so a repaired (released) stop
+reference changed silently.
 
-- **Cost:** on multi-stop routes a sender can believe an item still boards where it no
-  longer does; the truth is one editor-open away, which is one too far.
-- **Discharge:** the journey line on the item row (board `3d`'s «Маршрут вещи»
-  vocabulary), shown whenever the route has middles.
+- **The cost it carried:** on multi-stop routes a sender could believe an item still
+  boarded where it no longer did; the truth was one editor-open away, which was one
+  too far.
+- **Discharged by:** `journeyLine(for:)` on the draft model — the item row carries
+  «A → B» in the stops' own words whenever the route has middles, and point rows
+  state what the parcel does at their door (`parcelActions(at:)`, Round 5, #45–46).
+  Both directions render while the author chooses between them (2026-09-18).
 
 ## YD-7 — Post-draft statuses read as unknown — **open**
 

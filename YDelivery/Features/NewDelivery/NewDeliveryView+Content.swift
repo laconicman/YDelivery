@@ -18,6 +18,9 @@ extension NewDeliveryView {
             let contactInvitation: LocalizedStringKey
             /// Roles this row may switch to — empty for the pinned pickup row.
             let availableRoles: [NewDeliveryView.Model.Role]
+            /// What the parcel does at this door — the counted sentence Round 5
+            /// (#45–46) gives both the row and the map callout.
+            var parcelActions: String? = nil
             let isDeletable: Bool
             let isMovable: Bool
         }
@@ -38,6 +41,9 @@ extension NewDeliveryView {
             /// Filled when the item is known not to fit the selected class — the row
             /// carries the warning words, never color alone.
             let misfit: String?
+            /// The item's own route in the stops' words — «A → B» — whenever the
+            /// route has middles (YD-6).
+            var journey: String? = nil
         }
 
         let rows: [Row]
@@ -188,6 +194,11 @@ extension NewDeliveryView {
                                     Text(item.summary)
                                         .font(.footnote)
                                         .foregroundStyle(Color.secondary)
+                                    if let journey = item.journey {
+                                        Text(journey) // stops' own words — wraps
+                                            .font(.footnote)
+                                            .foregroundStyle(Color.secondary)
+                                    }
                                     if let misfit = item.misfit {
                                         Label(misfit, systemSymbol: .exclamationmarkTriangle)
                                             .font(.footnote)
@@ -601,6 +612,12 @@ extension NewDeliveryView.Content {
                         }
                     }
                     .buttonStyle(.borderless)
+
+                    if let parcelActions = row.parcelActions {
+                        Label(parcelActions, systemSymbol: .shippingbox)
+                            .font(.footnote)
+                            .foregroundStyle(Color.secondary)
+                    }
                 }
             }
             .contextMenu {
@@ -681,6 +698,7 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who hands over — name and phone",
                 availableRoles: [],
+                parcelActions: "picks up Комплект учебников",
                 isDeletable: false,
                 isMovable: false
             ),
@@ -692,6 +710,7 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
                 availableRoles: [],
+                parcelActions: "hands over Комплект учебников",
                 isDeletable: false,
                 isMovable: true
             ),
@@ -738,6 +757,7 @@ private extension MKCoordinateRegion {
                 contactSummary: "Иван Петров · +7 912 345-67-89",
                 contactInvitation: "Who hands over — name and phone",
                 availableRoles: [],
+                parcelActions: "picks up Комплект учебников",
                 isDeletable: false,
                 isMovable: false
             ),
@@ -749,6 +769,7 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
                 availableRoles: [],
+                parcelActions: "hands over Комплект учебников",
                 isDeletable: false,
                 isMovable: true
             ),
@@ -765,7 +786,13 @@ private extension MKCoordinateRegion {
         ]),
         selectedOfferID: "offer-2",
         itemRows: [
-            .init(id: UUID(), name: "Комплект учебников", summary: "5 pcs · 2 kg · 25 × 18 × 15 cm · 2 500 ₽", misfit: nil),
+            .init(
+                id: UUID(),
+                name: "Комплект учебников",
+                summary: "5 pcs · 2 kg · 25 × 18 × 15 cm · 2 500 ₽",
+                misfit: nil,
+                journey: "Москва, ул Москворечье, 6 → Москва, Каширское шоссе, 52"
+            ),
         ],
         optionsSummary: "pro courier · to the door",
         whenSummary: "as soon as possible",
@@ -867,7 +894,7 @@ private extension MKCoordinateRegion {
     .background(Color(.systemGroupedBackground))
 }
 
-#Preview("Point row: unfilled, no contact") {
+#Preview("Point rows: empty and with the parcel's verbs") {
     List {
         NewDeliveryView.Content.PointRow(
             row: .init(
@@ -878,6 +905,23 @@ private extension MKCoordinateRegion {
                 contactSummary: nil,
                 contactInvitation: "Who receives — name and phone",
                 availableRoles: [.return],
+                isDeletable: true,
+                isMovable: true
+            ),
+            pick: {},
+            editContact: {},
+            setRole: { _ in }
+        )
+        NewDeliveryView.Content.PointRow(
+            row: .init(
+                id: UUID(),
+                badge: .end,
+                address: "Москва, Каширское шоссе, 52",
+                placeholder: "Where to deliver?",
+                contactSummary: "Анна Сидорова · +7 998 765-43-21",
+                contactInvitation: "Who receives — name and phone",
+                availableRoles: [],
+                parcelActions: "hands over Комплект учебников and Документы",
                 isDeletable: true,
                 isMovable: true
             ),
