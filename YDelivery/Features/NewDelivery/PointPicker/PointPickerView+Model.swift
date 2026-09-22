@@ -196,6 +196,14 @@ extension PointPickerView {
             return place
         }
 
+        /// The person as the point should carry them: the phone in E.164 when it
+        /// parses (the claim mapper copies it verbatim onto the wire), then only what
+        /// ``Contact/storable`` says deserves keeping — `nil` for nobody. Both exits of
+        /// Describe, Save and the bookmark, read this one value.
+        var confirmedContact: Contact? {
+            contact.withDialablePhone().storable
+        }
+
         /// Where an empty map starts when the sender's position is unavailable — the
         /// Settings start city, resolved once per picker (Roadmap → Phase 2's fallback).
         private(set) var startRegion: MKCoordinateRegion?

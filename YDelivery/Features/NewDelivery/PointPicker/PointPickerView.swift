@@ -133,12 +133,12 @@ struct PointPickerView: View {
                             : StoreController.StoreUnavailable().localizedDescription,
                         bookmark: {
                             if let place = model.confirmedPlace {
-                                pendingSave = PendingSave(place: place, contact: model.contact.storable)
+                                pendingSave = PendingSave(place: place, contact: model.confirmedContact)
                             }
                         },
                         save: {
                             guard let place = model.confirmedPlace else { return }
-                            confirm(place, model.contact.storable)
+                            confirm(place, model.confirmedContact)
                             dismiss()
                         }
                     )

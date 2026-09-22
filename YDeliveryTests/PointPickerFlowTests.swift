@@ -37,4 +37,29 @@ struct PointPickerFlowTests {
         #expect(model.isDescribing, "the facts screen leads (decision #44)")
         #expect(model.contact.givenName == "Иван", "the person rides the same flow")
     }
+
+    @Test("Describe hands out the contact with an E.164 phone — Save and the bookmark alike")
+    func confirmedContactCarriesDialablePhone() {
+        let model = PointPickerView.Model(
+            initialPlace: PickedPlace(latitude: 55.75, longitude: 37.61, address: "Офис"),
+            resolveAddress: { _, _ in throw Unexpected() },
+            searchPlace: { _, _ in throw Unexpected() }
+        )
+        model.contact = Contact(givenName: "Иван", phone: "+7 912 345-67-89", phoneExtension: "12")
+        let confirmed = model.confirmedContact
+        #expect(confirmed?.phone == "+79123456789", "the claim mapper copies the phone verbatim")
+        #expect(confirmed?.givenName == "Иван")
+        #expect(confirmed?.phoneExtension == "12")
+    }
+
+    @Test("An empty Describe means nobody — nil, not a blank card")
+    func emptyContactConfirmsAsNobody() {
+        let model = PointPickerView.Model(
+            initialPlace: PickedPlace(latitude: 55.75, longitude: 37.61, address: "Офис"),
+            resolveAddress: { _, _ in throw Unexpected() },
+            searchPlace: { _, _ in throw Unexpected() }
+        )
+        model.contact = Contact(phoneExtension: "12")
+        #expect(model.confirmedContact == nil, "an extension without a phone is noise, not a person")
+    }
 }
