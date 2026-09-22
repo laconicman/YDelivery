@@ -75,7 +75,6 @@ struct NewDeliveryView: View {
                 offers: draft.offers,
                 selectedOfferID: draft.selectedOfferID,
                 itemRows: contentItemRows,
-                routeIsComplete: draft.isRouteComplete,
                 optionsSummary: draft.options.summary,
                 whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,

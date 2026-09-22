@@ -80,24 +80,23 @@ struct NewDeliveryOffersTests {
     private struct Unexpected: Error {}
 }
 extension NewDeliveryOffersTests {
-    @Test("No parcel, no pricing — the precondition never dresses as a failure")
-    func pricingWaitsForTheParcel() async {
+    @Test("Geo alone prices — the parcel refines the quote when it exists")
+    func pricingFollowsTheRoute() async {
         let model = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
+        #expect(model.pricingInputs == nil, "an unfinished route is the only precondition")
+
         model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "Офис"), for: model.points[0].id)
         model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Дом"), for: model.points[1].id)
-        // Route complete, parcel empty: no request exists to fail (author, 2026-09-14).
-        #expect(model.isRouteComplete)
-        #expect(model.pricingInputs == nil)
-        await model.loadOffers { _ in
-            Issue.record("an empty parcel must never reach the provider")
-            return []
-        }
-        #expect(model.offers == .idle, "idle names the missing prerequisite; failed would lie")
+        // Route complete, parcel empty: the request exists and carries no items —
+        // the wire omits the list rather than refusing it (author, 2026-09-18).
+        let bare = model.pricingInputs
+        #expect(bare?.items.isEmpty == true)
 
         var item = ParcelItem()
         item.name = "Ноутбук"
         item.cost = 1000
         model.setItem(item)
-        #expect(model.pricingInputs != nil, "the parcel arrives, pricing may begin")
+        #expect(model.pricingInputs != bare, "the parcel arriving is a different, priced run")
+        #expect(model.pricingInputs?.items.count == 1)
     }
 }

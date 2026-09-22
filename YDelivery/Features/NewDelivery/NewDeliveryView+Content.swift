@@ -46,9 +46,6 @@ extension NewDeliveryView {
         let offers: NewDeliveryView.Model.Offers
         let selectedOfferID: Offer.ID?
         let itemRows: [ItemRow]
-        /// Whether both ends are placed — the idle footer names the *missing*
-        /// prerequisite, and route-versus-parcel is exactly that difference.
-        var routeIsComplete: Bool = false
         let optionsSummary: String
         let whenSummary: String
         let commentSummary: String?
@@ -143,15 +140,10 @@ extension NewDeliveryView {
                     actions
                 } footer: {
                     if offers == .idle {
-                        // Which prerequisite is missing is the difference between an
-                        // invitation and a false error: pricing an empty parcel used
-                        // to surface as «couldn't get prices», a statement about the
-                        // wrong thing (author, 2026-09-14).
-                        Text(
-                            routeIsComplete
-                                ? "Prices come after the parcel — add what's inside first."
-                                : "Prices appear when the route is complete."
-                        )
+                        // Prices follow the route alone — the wire omits an empty
+                        // parcel rather than refusing it, so the only precondition
+                        // left is a complete route (author, 2026-09-18).
+                        Text("Prices appear when the route is complete.")
                     }
                 }
 

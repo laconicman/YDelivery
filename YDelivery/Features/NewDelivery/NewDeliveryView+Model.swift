@@ -77,10 +77,12 @@ extension NewDeliveryView {
         private(set) var estimate: Estimate = .idle
         private(set) var offers: Offers = .idle
 
-        /// What the courier carries (board `3d`). Empty is a valid *draft* but not a
-        /// priceable one: ``pricingInputs`` waits for the first item, and the idle
-        /// footer names the parcel as the missing half (author, 2026-09-14). Placing
-        /// the order requires one as well (``orderBlockers``).
+        /// What the courier carries (board `3d`). Empty is a valid draft, and a
+        /// priceable one: the wire *omits* an empty item list rather than refusing
+        /// it — `items` is optional on `offers/calculate`, only a present-but-empty
+        /// array violates `minItems: 1` (DeepWiki consult on the spec, 2026-09-18;
+        /// author chose prices-on-geo). Placing the order still requires one
+        /// (``orderBlockers``).
         private(set) var items: [ParcelItem] = []
         var options = DeliveryOptions()
 
@@ -358,10 +360,11 @@ extension NewDeliveryView {
         /// trigger: the root's `.task(id:)` watches this, so an edit to any of the three
         /// cancels the stale run.
         var pricingInputs: OfferRequest? {
-            // No parcel, no request: pricing an empty order surfaced the provider's
-            // refusal as «couldn't get prices» — a failure state for a precondition
-            // (author, 2026-09-14). The idle footer names what is missing instead.
-            guard isRouteComplete, !items.isEmpty else { return nil }
+            // Geo alone prices: the wire omits an empty item list (it used to send
+            // `[]` and read the provider's `minItems` refusal as «couldn't get
+            // prices» — a failure state for what was never a failure). The parcel
+            // refines the quote when it exists; ordering still requires it.
+            guard isRouteComplete else { return nil }
             let waypoints = points.compactMap { point in
                 point.place.map {
                     OfferRequest.RequestWaypoint(
