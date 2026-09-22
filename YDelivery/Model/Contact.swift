@@ -17,12 +17,15 @@ nonisolated struct Contact: Hashable, Sendable {
         givenName.isEmpty && familyName.isEmpty && phone.isEmpty && phoneExtension.isEmpty
     }
 
-    /// What deserves storing: an extension without a phone is noise the courier cannot
-    /// dial, so it does not survive saving — and what remains may then be nothing at
-    /// all. One home for both rules, so a stored contact always renders a non-blank
-    /// summary (review, PR #17).
+    /// What deserves storing: the phone normalized to its wire form (E.164 — the
+    /// claim schema's pattern `^\+[1-9]\d{1,14}$` accepts nothing else, so a
+    /// formatted number saved verbatim would fail at claim time, review, PR #29),
+    /// and an extension without a phone is noise the courier cannot dial, so it
+    /// does not survive saving — and what remains may then be nothing at all. One
+    /// home for both rules, so a stored contact always renders a non-blank summary
+    /// (review, PR #17).
     var storable: Contact? {
-        var contact = self
+        var contact = withDialablePhone()
         if contact.phone.isEmpty {
             contact.phoneExtension = ""
         }

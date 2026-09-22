@@ -475,8 +475,14 @@ extension NewDeliveryView {
             if !isRouteComplete {
                 blockers.append(String(localized: "Every stop needs its place on the map."))
             }
-            if points.contains(where: { ($0.contact?.storable?.phone ?? "").isEmpty }) {
-                blockers.append(String(localized: "The courier calls ahead — every stop needs a person with a phone."))
+            if points.contains(where: {
+                // The wire's contact is `name` *and* `phone`, both required — a
+                // dialable number with nobody attached still 400s at claim time
+                // (DeepWiki consult on the spec, 2026-09-18).
+                let contact = $0.contact?.storable
+                return (contact?.phone ?? "").isEmpty || (contact?.fullName ?? "").isEmpty
+            }) {
+                blockers.append(String(localized: "The courier calls ahead — every stop needs a person: a name and a phone."))
             } else if points.contains(where: {
                 // The same dialability rule the editor hints with: a half-typed contact
                 // may be *saved*, but an order carries only numbers the courier can

@@ -281,7 +281,7 @@ struct StoreControllerTests {
     func savedPlaceKeepsItsContact() async throws {
         let controller = controller
         let place = PickedPlace(latitude: 59, longitude: 30, address: "Невский, 100")
-        let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+7 912 345-67-89", phoneExtension: "12")
+        let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+79123456789", phoneExtension: "12")
 
         try await controller.save(
             SavedPlace(name: "Склад", kind: .warehouse, point: RoutePoint(place, contact: ivan))

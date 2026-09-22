@@ -56,6 +56,19 @@ struct NewDeliveryOrderingTests {
         #expect(model.orderBlockers.isEmpty, "a dialable number lifts the block")
     }
 
+    @Test("A dialable number with nobody attached still blocks — the wire wants a name")
+    func phoneWithoutNameBlocks() async {
+        let model = readyDraft()
+        await priced(model)
+        // `Contact` on the wire is `name` *and* `phone`, both required (DeepWiki
+        // consult on the spec, 2026-09-18) — a nameless phone would 400 at claim.
+        model.setContact(Contact(phone: "+7 998 765-43-21"), for: model.points[1].id)
+        #expect(model.orderBlockers == [
+            String(localized: "The courier calls ahead — every stop needs a person: a name and a phone.")
+        ])
+        #expect(model.orderRequest == nil)
+    }
+
     @Test("Create → watch → accept lands placed, with the order history remembers")
     func happyPathPlaces() async {
         let model = readyDraft()

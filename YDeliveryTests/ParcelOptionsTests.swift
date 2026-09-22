@@ -431,7 +431,7 @@ struct ParcelOptionsTests {
 
     @Test("Explicit name components survive the store exactly — parsing never enters it")
     func nameComponentsSurviveTheStore() throws {
-        let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+7 912 345-67-89")
+        let ivan = Contact(givenName: "Иван", familyName: "Петров", phone: "+79123456789")
         #expect(ivan.fullName == "Иван Петров", "joined by the formatter, never by hand")
         #expect(ivan.summary.hasPrefix("Иван Петров"))
 
