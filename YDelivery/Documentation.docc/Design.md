@@ -48,13 +48,15 @@ source of truth the UI observes. Status history arrives by applying `claims/jour
 (see <doc:Vision>), so the app is usable offline and history survives the vendor's 72-hour
 claim visibility horizon. That much stands.
 
-**What reopened the stack choice:** the CloudKit ambitions — an organization sharing one
-Yandex token, employees reading/creating/editing orders by role — need shared databases
-(plausibly a shared record zone, "sharing the table"). SwiftData's CloudKit sync offers no
-`CKShare` surface; `NSPersistentCloudKitContainer` does. Phase 2 therefore opens with a
-schema-and-stack research task (<doc:Roadmap>) rather than an implementation sprint, and the
-schema gets designed with relational discipline first — the LearnWords project on this
-machine records what a rushed CloudKit schema costs.
+**What reopened the stack choice:** the CloudKit ambitions — shared orders, photos, and
+activity between agents who need not share an org or a credential — need shared databases.
+SwiftData's CloudKit sync offers no `CKShare` surface; `NSPersistentCloudKitContainer`
+does. The 2026-09-24 research (<doc:Collaboration>) weighs the four honest paths —
+NSPCK outright, the NSPCK+SwiftData coexistence stack, raw `CKSyncEngine` on the shared
+slice, and Point-Free's `sqlite-data` — and lands on a `sqlite-data` spike as the endorsed
+first try, NSPCK the fallback. Schema still comes first — the LearnWords project on this
+machine records what a rushed CloudKit schema costs — and the sharing model itself is
+settled there: private `CKShare` hierarchies rooted at an order, never a public record.
 
 **Still rejected:** "no store, poll `claims/search` on every launch" — history becomes
 hostage to the API's retention and the network.
@@ -287,3 +289,4 @@ user scenario's core case).
 - <doc:Vision>
 - <doc:Roadmap>
 - <doc:TechDebt>
+- <doc:Collaboration>
