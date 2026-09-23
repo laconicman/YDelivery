@@ -73,7 +73,7 @@ struct PointPickerView: View {
                 },
                 pickRecent: { id in
                     guard let point = store.recentPoints.first(
-                        where: { StoreController.destinationKey($0) == id }
+                        where: { $0.destinationKey == id }
                     ) else { return }
                     confirm(PickedPlace(point), Contact(at: point))
                     dismiss()
@@ -177,7 +177,7 @@ extension PointPickerView.SearchContent.Recent {
     /// never a timestamp (decision #10). Bridging lives at the root's side of the seam.
     init(_ point: RoutePoint) {
         self.init(
-            id: StoreController.destinationKey(point),
+            id: point.destinationKey,
             address: point.address,
             detail: point.contactName ?? ""
         )
@@ -186,7 +186,7 @@ extension PointPickerView.SearchContent.Recent {
 
 #Preview("Fresh") {
     PointPickerView(prompt: "Where to pick up?", confirm: { _, _ in })
-        .environment(StoreController(orderStore: nil, placeStore: nil))
+        .environment(StoreController(database: nil))
 }
 
 #Preview("Editing a chosen place — opens on the map") {
@@ -200,5 +200,5 @@ extension PointPickerView.SearchContent.Recent {
         ),
         confirm: { _, _ in }
     )
-    .environment(StoreController(orderStore: nil, placeStore: nil))
+    .environment(StoreController(database: nil))
 }

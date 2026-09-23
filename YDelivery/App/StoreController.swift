@@ -4,9 +4,8 @@ import YDeliveryKit
 
 /// The app's window onto the one substrate — orders and saved places, read three ways
 /// (recents, chips, and later repeat). Created once in `@main` and injected with
-/// `.environment(_:)`; the stores it owns are the provisional App-Group files, so this
-/// controller is also the seam the Phase-2 schema research will swap out from under the
-/// UI without the UI noticing.
+/// `.environment(_:)`; it holds the SQLite database the Phase-2 schema research
+/// produced (doc:Schema), the seam that let the UI never notice the JSON files left.
 ///
 /// Being containerless (no App Group in a preview, a broken entitlement) is a state this
 /// type exposes for rendering, never a crash.
@@ -29,20 +28,15 @@ final class StoreController {
     /// returning one (review, PR #20).
     private(set) var hasLoaded = false
 
-    private let orderStore: OrderStore?
-    private let placeStore: SavedPlaceStore?
+    private let database: AppDatabase?
 
-    init(
-        orderStore: OrderStore? = .inAppGroup(id: AppGroup.id),
-        placeStore: SavedPlaceStore? = .inAppGroup(id: AppGroup.id)
-    ) {
-        self.orderStore = orderStore
-        self.placeStore = placeStore
+    init(database: AppDatabase? = .inAppGroup(id: AppGroup.id)) {
+        self.database = database
     }
 
     /// Whether keeping a place can work at all — the save affordance renders disabled
     /// with its reason when the container is unresolvable, rather than vanishing.
-    var canSavePlaces: Bool { placeStore != nil }
+    var canSavePlaces: Bool { database != nil }
 
     /// Why there is no history to show, when there is none for a reason. A read that
     /// failed and a container that never resolved are different causes with the same
@@ -51,7 +45,7 @@ final class StoreController {
     /// it holds anything.
     var historyUnavailable: String? {
         if let ordersError { return ordersError.localizedDescription }
-        if orderStore == nil, placeStore == nil { return StoreUnavailable().localizedDescription }
+        if database == nil { return StoreUnavailable().localizedDescription }
         return nil
     }
 
@@ -62,7 +56,7 @@ final class StoreController {
     /// ``historyUnavailable`` reported health (review, PR #28).
     var pickerMemoryUnavailable: String? {
         if let error = ordersError ?? placesError { return error.localizedDescription }
-        if orderStore == nil, placeStore == nil { return StoreUnavailable().localizedDescription }
+        if database == nil { return StoreUnavailable().localizedDescription }
         return nil
     }
 
@@ -100,65 +94,37 @@ final class StoreController {
         saved: [SavedPlace] = [],
         limit: Int = 8
     ) -> [RoutePoint] {
-        var seen = Set(saved.map { destinationKey($0.point) })
+        var seen = Set(saved.map { $0.point.destinationKey })
         var recents: [RoutePoint] = []
         for point in orders.flatMap(\.route) {
             guard !point.address.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
-            guard seen.insert(destinationKey(point)).inserted else { continue }
+            guard seen.insert(point.destinationKey).inserted else { continue }
             recents.append(point)
             if recents.count == limit { break }
         }
         return recents
     }
 
-    /// What makes two remembered points *the same delivery destination*, so the two
-    /// things that deduplicate against each other agree on what "same" means.
-    ///
-    /// The address alone is not enough. Flat 12 and flat 46 of one building share a
-    /// street address and are different doors with different people behind them; keeping
-    /// only the newest would offer a recent that restores the wrong apartment and the
-    /// wrong contact (review, PR #18). The door details and the coordinates are part of
-    /// the identity for exactly that reason.
-    /// Internal rather than private: the picker's rows identify themselves by the same
-    /// key, so what deduplicates a list and what selects from it cannot disagree.
-    nonisolated static func destinationKey(_ point: RoutePoint) -> String {
-        let address = point.address.lowercased().trimmingCharacters(in: .whitespaces)
-        let parts = point.addressParts.map {
-            "\($0.entrance)|\($0.floor)|\($0.apartment)|\($0.intercom)".lowercased()
-        } ?? ""
-        // Five decimals is about a metre — enough to separate two entrances of one
-        // building, coarse enough that the same pin re-read stays one memory.
-        let coordinates = String(
-            format: "%.5f,%.5f", point.latitude, point.longitude
-        )
-        return "\(address)#\(parts)#\(coordinates)"
-    }
-
-    /// Reads both files off the main actor and publishes the result here — each file
-    /// onto its own error channel, so one side's failure is never mistaken for the
+    /// Reads both sides off the main actor and publishes the result here — each onto
+    /// its own error channel, so one side's failure is never mistaken for the
     /// other's emptiness.
     func refresh() async {
-        if let orderStore {
+        if let database {
             do {
-                // Sorted at publish, not trusted to the file: `record(_:)` writes
-                // prepend-only, so a sync pass persisting several changed orders
-                // would otherwise reverse their order in the list (Phase 3).
-                orders = try await Self.readOrders(orderStore).sorted { $0.created > $1.created }
+                orders = try await Self.readOrders(database)
                 ordersError = nil
                 hasLoaded = true
             } catch {
                 ordersError = error
             }
-        } else {
-            hasLoaded = true
-        }
-        if let placeStore {
             do {
-                savedPlaces = try await Self.readPlaces(placeStore)
+                savedPlaces = try await Self.readPlaces(database)
                 placesError = nil
             } catch {
                 placesError = error
             }
+        } else {
+            hasLoaded = true
         }
     }
 
@@ -170,10 +136,10 @@ final class StoreController {
     /// persist must never look like one that did (review, PR #18). The error is a filled
     /// `LocalizedError`, so the sheet renders it as it arrives.
     func save(_ place: SavedPlace) async throws {
-        guard let placeStore else { throw StoreUnavailable() }
-        try await Self.write(place, to: placeStore)
+        guard let database else { throw StoreUnavailable() }
+        try await Self.write(place, to: database)
         do {
-            savedPlaces = try await Self.readPlaces(placeStore)
+            savedPlaces = try await Self.readPlaces(database)
             // That re-read succeeded, so whatever the last refresh recorded about
             // *places* is stale news. Orders were not looked at: their error, if any,
             // stands — a successful bookmark must not dress an unreadable history as
@@ -191,17 +157,19 @@ final class StoreController {
 
     /// Records a placed order and republishes history. Throws — an order that was
     /// *placed* but not *remembered* is a state the sender must see, not a silent gap
-    /// in the list.
-    func record(_ order: Order) async throws {
-        guard let orderStore else { throw StoreUnavailable() }
-        try await Self.write(order, to: orderStore)
+    /// in the list. `providerObservedAt` marks a provider sighting: callers fresh off
+    /// the wire (claim accepted, cancelled, merged) pass it; local writes leave it
+    /// nil so the mirror never fabricates freshness.
+    func record(_ order: Order, providerObservedAt: Date? = nil) async throws {
+        guard let database else { throw StoreUnavailable() }
+        try await Self.write(order, providerObservedAt: providerObservedAt, to: database)
         // The write held; if the confirming read stumbles, the order still leads the
         // list rather than vanishing until the next refresh — but the write and the
         // read report different facts, and only the read may clear the error: a
         // partial fallback list dressed as healthy history omits orders silently
         // (review, PR #28).
         do {
-            orders = try await Self.readOrders(orderStore).sorted { $0.created > $1.created }
+            orders = try await Self.readOrders(database)
             ordersError = nil
         } catch {
             orders = Self.upserting(order, into: orders)
@@ -224,38 +192,31 @@ final class StoreController {
         }
     }
 
-    // The stores are synchronous, coordinated file IO — `@concurrent` hops them off the
+    // The store is synchronous, serialized SQLite IO — `@concurrent` hops it off the
     // main actor (a plain nonisolated async function would inherit the caller's actor
     // under Approachable Concurrency).
 
     @concurrent
-    private static func readPlaces(_ store: SavedPlaceStore) async throws -> [SavedPlace] {
-        try store.read()
+    private static func readPlaces(_ database: AppDatabase) async throws -> [SavedPlace] {
+        try database.readPlaces()
     }
 
     @concurrent
-    private static func write(_ place: SavedPlace, to store: SavedPlaceStore) async throws {
-        // Dedupe against the *file*, not the controller's memory: the retry that this
-        // guards against exists precisely because a read failed, so memory may not
-        // know about the copy already written (review, PR #18 post-merge). Same
-        // destination — same `destinationKey` the chips deduplicate recents by —
-        // means the write adopts the stored identity and the Kit's save upserts.
-        var place = place
-        if let existing = (try? store.read())?.first(where: {
-            destinationKey($0.point) == destinationKey(place.point)
-        }) {
-            place.id = existing.id
-        }
-        try store.save(place)
+    private static func write(_ place: SavedPlace, to database: AppDatabase) async throws {
+        try database.savePlace(place)
     }
 
     @concurrent
-    private static func readOrders(_ store: OrderStore) async throws -> [Order] {
-        try store.read()
+    private static func readOrders(_ database: AppDatabase) async throws -> [Order] {
+        try database.readOrders()
     }
 
     @concurrent
-    private static func write(_ order: Order, to store: OrderStore) async throws {
-        try store.record(order)
+    private static func write(
+        _ order: Order,
+        providerObservedAt: Date?,
+        to database: AppDatabase
+    ) async throws {
+        try database.recordOrder(order, providerObservedAt: providerObservedAt)
     }
 }
