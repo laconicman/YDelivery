@@ -128,6 +128,34 @@ extension NewDeliveryView {
             self.estimateRoute = estimateRoute
         }
 
+        /// «Повторить» / «Наоборот» — a remembered order as a fresh draft (board `3e`):
+        /// the whole route and its contacts ride back in, and the order's class is what
+        /// the strip re-offers when prices land. `reversed` runs the route backwards —
+        /// the delivery back home — with each contact still answering its own door.
+        ///
+        /// What does *not* come back: the stored order carries no roles (TechDebt
+        /// YD-15), so position derives them — first pickup, the rest deliveries, the
+        /// same honest read `RouteLine` makes. Items, options and the schedule were
+        /// never stored on `Order`; the repeat prices and packs fresh.
+        convenience init(repeating order: Order, reversed: Bool = false,
+                         estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
+            self.init(estimateRoute: estimateRoute)
+            let route = reversed ? order.route.reversed() : order.route
+            // A synced claim can arrive thinner than a draft — under two points there
+            // is nothing to repeat, so the fresh pickup→dropoff pair stays instead of
+            // a route with a hole (or no route at all) for `fillEnds` to trip on.
+            if route.count >= 2 {
+                points = route.enumerated().map { index, point in
+                    Point(
+                        role: index == 0 ? .pickup : .dropoff,
+                        place: PickedPlace(point),
+                        contact: Contact(at: point)
+                    )
+                }
+            }
+            chosenTariff = order.tariff.map(TariffClass.init(wireSpelling:))
+        }
+
         /// Every stop chosen, nothing pending — the gate for everything downstream
         /// (estimate, offers, creation). An added-but-empty stop is a hole in the
         /// route, not an extra.

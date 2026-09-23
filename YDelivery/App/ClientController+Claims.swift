@@ -272,6 +272,18 @@ nonisolated extension TariffClass {
         case .other(let raw): raw
         }
     }
+
+    /// The inverse of ``wireValue``: what the store remembered as `order.tariff`,
+    /// back as vocabulary «Повторить» can re-offer. An unknown spelling keeps its
+    /// name rather than collapsing to a guess — the same policy `.other` sets.
+    init(wireSpelling: String) {
+        self = switch wireSpelling {
+        case "courier": .courier
+        case "express": .express
+        case "cargo": .cargo
+        default: .other(wireSpelling)
+        }
+    }
 }
 
 nonisolated extension Components.Schemas.PointType {

@@ -40,6 +40,10 @@ extension PointPickerView {
         let locationDenied: Bool
 
         let pickChip: (Chip.ID) -> Void
+        /// The `3e` editor's asks, off the chip's long-press menu: rename/retype and
+        /// forget. Defaulted so previews stay terse.
+        var editChip: (Chip.ID) -> Void = { _ in }
+        var deleteChip: (Chip.ID) -> Void = { _ in }
         let pickRecent: (Recent.ID) -> Void
         let select: (Model.AddressSuggestion) -> Void
         let searchAsAddress: (String) -> Void
@@ -143,6 +147,18 @@ extension PointPickerView {
                                 .background(Color(.secondarySystemFill), in: Capsule())
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                editChip(chip.id)
+                            } label: {
+                                Label("Edit…", systemSymbol: .pencil)
+                            }
+                            Button(role: .destructive) {
+                                deleteChip(chip.id)
+                            } label: {
+                                Label("Delete", systemSymbol: .trash)
+                            }
+                        }
                     }
                 }
             }

@@ -15,11 +15,24 @@ extension PointPickerView {
         let address: String
         let save: (String, SavedPlace.Kind) async throws -> Void
 
-        @State private var name = ""
-        @State private var kind = SavedPlace.Kind.other
+        @State private var name: String
+        @State private var kind: SavedPlace.Kind
         @State private var isSaving = false
         @State private var failure: String?
         @Environment(\.dismiss) private var dismiss
+
+        private let isEditing: Bool
+
+        /// `editing` seeds the name and kind — the `3e` chip editor reuses this sheet
+        /// rather than growing a twin. Without it the sheet asks fresh, as it always has.
+        init(address: String, editing place: SavedPlace? = nil,
+             save: @escaping (String, SavedPlace.Kind) async throws -> Void) {
+            self.address = address
+            self.save = save
+            isEditing = place != nil
+            _name = State(initialValue: place?.name ?? "")
+            _kind = State(initialValue: place?.kind ?? .other)
+        }
 
         /// One definition of the name, so what validation accepts and what gets stored
         /// cannot disagree — a chip labelled “ Дом ” sorts and reads as its own place.
@@ -50,7 +63,7 @@ extension PointPickerView {
                         }
                     }
                 }
-                .navigationTitle("Save the place")
+                .navigationTitle(isEditing ? "Edit the place" : "Save the place")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

@@ -19,6 +19,10 @@ struct PointPickerView: View {
     let fillEnds: ((PickedPlace, PickedPlace) -> Void)?
     @State private var model: Model
     @State private var pendingSave: PendingSave?
+    /// The chip being renamed/retyped — the `3e` editor, same sheet as first save.
+    @State private var editingPlace: SavedPlace?
+    /// The chip a destructive forget still has to be confirmed against.
+    @State private var pendingDelete: SavedPlace?
     /// Where an empty map starts when location is unavailable — set in Settings, plain
     /// preference, not a secret.
     @AppStorage("startCity") private var startCity = ""
@@ -70,6 +74,12 @@ struct PointPickerView: View {
                     guard let place = store.savedPlaces.first(where: { $0.id == id }) else { return }
                     confirm(PickedPlace(place.point), Contact(at: place.point))
                     dismiss()
+                },
+                editChip: { id in
+                    editingPlace = store.savedPlaces.first(where: { $0.id == id })
+                },
+                deleteChip: { id in
+                    pendingDelete = store.savedPlaces.first(where: { $0.id == id })
                 },
                 pickRecent: { id in
                     guard let point = store.recentPoints.first(
@@ -168,6 +178,30 @@ struct PointPickerView: View {
                     )
                 )
             }
+        }
+        .sheet(item: $editingPlace) { place in
+            // Same point, new label or kind — the store's destination-key dedupe
+            // adopts the row's identity, and the explicit id is belt and suspenders.
+            SavePlaceSheet(address: place.point.address, editing: place) { name, kind in
+                try await store.save(
+                    SavedPlace(id: place.id, name: name, kind: kind, point: place.point)
+                )
+            }
+        }
+        .confirmationDialog(
+            "Forget this place?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { place in
+            Button("Delete «\(place.name)»", role: .destructive) {
+                pendingDelete = nil
+                Task { await store.deletePlace(place.id) }
+            }
+            Button("Keep it", role: .cancel) { pendingDelete = nil }
         }
     }
 }
