@@ -28,6 +28,7 @@ package's `WorkingWithYandex` article outranks every assumption.
 - <doc:Roadmap>
 - <doc:TechDebt>
 - <doc:Collaboration>
+- <doc:Schema>
 
 ### Specifications
 

@@ -116,10 +116,42 @@ relational discipline calls for. That it rides `CKSyncEngine` rather than hand-r
 state-serialization machinery comes with it (author's noted preference, 2026-09-24). Its constraints line up with the design rather than
 fighting it: only root records are directly shareable (we share the order hierarchy
 anyway), one-to-many descendants follow the root, many-to-many sharing is unsupported
-(not needed — membership rides the share's participant list), and `privateTables` keep
-device-only state like the sync cursor off the wire. Tombstones (`_isDeleted`) make
-deletes propagate honestly. The caution the author voiced — keeping pace with
-Point-Free's uncommon abstractions — is real and priced into the spike below.
+(not needed — membership rides the share's participant list), and `privateTables` —
+verified — sync to the owner's private database while remaining unshareable, which is
+exactly the tier "follows my devices, reaches nobody else" wants. Tombstones
+(`_isDeleted`) make deletes propagate honestly. The caution the author voiced — keeping
+pace with Point-Free's uncommon abstractions — is real and priced into the spike below.
+
+### What the upstream pass verified (2026-09-25)
+
+The open-verifications checklist below is now mostly closed, by a compile spike against
+`sqlite-data` 1.12.0 (MIT, actively maintained, iOS 16 floor — under our iOS 17):
+
+- **`Data` → `CKAsset` is automatic.** Every BLOB column becomes a `CKAsset` on the
+  wire; the package's own guidance is to keep megabyte payloads in a dedicated table
+  behind the metadata row. Parcel photos get the asset path for free.
+- **Shareability is a schema fact.** The engine reads `PRAGMA foreign_key_list`:
+  zero declared FKs makes a root shareable, exactly one lets a child join the share
+  (directly or transitively), two or more excludes the row. A UUID held in a plain
+  column — no `REFERENCES` — is *not* an FK, which is what legitimizes the schema's
+  `*Ref` convention (<doc:Schema>).
+- **The API surface exists as described.** `SyncEngine.share(record:configure:)`
+  returns `SharedRecord` (or `unshare(record:)`), `acceptShare(metadata:)` takes a
+  `CKShare.Metadata` from the scene-delegate handoff, and `CloudSharingView` compiles —
+  gated to UIKit platforms, which the app satisfies. One precondition worth knowing:
+  `share` throws `recordMetadataNotFound` until the record has synced to iCloud at
+  least once — an offline-created order cannot be shared until its first upload lands.
+- **Read-only is enforced locally.** A participant write against a read-only grant
+  throws `DatabaseError` matching `SyncEngine.writePermissionError` — the permission
+  boundary is real code, not politeness.
+- **The dependency footprint is real:** ~9 Point-Free packages ride along (GRDB,
+  StructuredQueries, the concurrency/dependency utilities). Accepted deliberately —
+  this is the "keeping pace with Point-Free" cost, priced in.
+- **Extensions do not share the live database.** GRDB's own App Group guidance is
+  "prefer not to" — a suspended process holding the SQLite lock is a watchdog kill
+  (0xDEAD10CC), Data Protection gates locked-device reads, and cross-process
+  observation doesn't fire. The widget contract is therefore an app-rendered snapshot
+  file, not shared DB access (<doc:Schema> → "The widget contract").
 
 ## Where this landed
 
@@ -137,17 +169,21 @@ Author direction, recorded 2026-09-24:
 
 ## Open verifications before committing
 
-- Whether `sqlite-data` maps large `Data` to `CKAsset` or inlines blobs (photos depend
-  on it), its iOS floor, license, and release maturity.
+Closed by the spike, recorded above: `Data`→`CKAsset`, the API surface, floor/license/
+maturity, the permission enforcement, and the App Group answer. What remains open needs
+a device, a second credential, or both:
+
 - Whether two tokens mapping to one `corp_client_id` see the same claim set — the
   free-org-visibility wire test; needs a second credential.
-- Share-acceptance ergonomics under `sqlite-data`: does its `acceptShare` flow ride the
-  system URL path cleanly, and how much of `UICloudSharingController` survives the wrap.
+- Share acceptance end-to-end on real devices: the URL handoff into
+  `acceptShare`, the App Clip entry path, participant removal, and offline-writes
+  that sync late.
 - Whether the journal's owner-side writes batch cleanly into shared-record updates
-  without a write per event.
+  without a write per event — an instrumentation question once the stack lands.
 
 ## See Also
 
+- <doc:Schema> — the relational design this research produced
 - <doc:Design> — the reopened persistence decision this research feeds
 - <doc:Roadmap> — the spike this research endorses
 - <doc:Vision> — where collaboration sits in the capability map

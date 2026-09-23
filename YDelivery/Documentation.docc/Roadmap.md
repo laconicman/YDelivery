@@ -84,13 +84,21 @@ went), provider-plurality in the schema from day one; the container stays **excl
 this app** with an account transfer assumed possible (<doc:Design> → "Surviving an
 account transfer").
 
-Stack direction, recorded 2026-09-24: **spike `sqlite-data` first** — the only candidate
-covering private sync *and* the `CKShare` surface in one stack while keeping value-type
-models and an explicit SQL schema; `NSPersistentCloudKitContainer` is the fallback, raw
-`CKSyncEngine` the control-maximizing third. SwiftData stays the standing preference the
-day it gains a sharing surface — re-check each WWDC (still private-only, verified
-2026-09-23). The spike's checklist — asset mapping, share-acceptance ergonomics, the
-corp-visibility wire test — lives in <doc:Collaboration> → "Open verifications".
+Stack direction, recorded 2026-09-24 and **spike-verified 2026-09-25**: `sqlite-data`
+1.12.0 — the only candidate covering private sync *and* the `CKShare` surface in one
+stack while keeping value-type models and an explicit SQL schema; the compile spike
+verified `@Table`, `SyncEngine(tables:privateTables:)`, `share`/`unshare`/`acceptShare`,
+and `CloudSharingView` (results in <doc:Collaboration> → "What the upstream pass
+verified"). `NSPersistentCloudKitContainer` is the fallback, raw `CKSyncEngine` the
+control-maximizing third. SwiftData stays the standing preference the day it gains a
+sharing surface — re-check each WWDC (still private-only, verified 2026-09-23).
+
+**Schema landed 2026-09-25 — <doc:Schema> is the contract the migration implements**:
+`Order` as the share root, single-FK children below it, `*Ref` value references where
+the one-FK rule forbids a second constraint, and the provider mirror / event feed /
+collaborative tables carrying the authority split in the schema itself. What remains
+gated is implementation, not design — the live-device verifications (share acceptance,
+the corp-visibility wire test) stand open in <doc:Collaboration>.
 
 ## Later — design Phase 4 and beyond
 
