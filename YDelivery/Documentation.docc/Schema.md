@@ -70,7 +70,7 @@ Order ────────────────────────�
 |---|---|---|
 | `id` | UUID PK | |
 | `createdAt` | Date | Local creation — meaningful offline history before any provider ack |
-| `providerAccountRef` | TEXT | **Value, not FK** — matches `ProviderAccount.key` on the private side. Cannot be an FK: the root must have none |
+| `providerAccountRef` | TEXT? | **Value, not FK** — matches `ProviderAccount.key` on the private side. Cannot be an FK: the root must have none. NULL = *unattributed* — a row whose provider account isn't recorded (legacy imports, see Migration) |
 | `provider` | TEXT | `"yandex"` today; provider plurality is a column, not a schema version |
 | `lastActivityAt` | Date | Owner-maintained list ordering — denormalized, stated as such |
 
@@ -153,14 +153,18 @@ wire ever offers per-point options they become `RouteStop` columns, not this row
 
 Append-only; conflicts impossible by construction. Columns: `id` UUID PK, `orderID` FK,
 `providerEventID` INTEGER? — the journal's own `operation_id`, monotonic and unique per
-order. Replaying a journal page re-inserts by `INSERT OR IGNORE` on
-`(orderID, providerEventID)`, so retries can't duplicate the timeline (a review finding
-worth absorbing now, before implementation: journal pagination makes replays routine,
-not rare). Events synthesized from search/claim-card sightings carry no provider id —
-they dedup on `(orderID, providerStatus, source)` and their `at` is the *sighting* time,
-not an event time. Plus `at`, `kind`, `providerStatus`, `detail`?, `source`
-(`journal`/`search`/`claimCard`). This is the activity timeline the 3e card reads, and
-what "members see each other's activity" means for provider truth.
+order — plus `at`, `kind`, `providerStatus`, `detail`?, `source`
+(`journal`/`search`/`claimCard`).
+
+Dedup is a declared constraint, not a convention: `UNIQUE(orderID, providerEventID)`
+sits in the DDL, and journal replays insert with `INSERT OR IGNORE` against it — a
+re-fetched page cannot duplicate the timeline (journal pagination makes replays
+routine, not rare). SQLite treats NULLs as distinct under UNIQUE, so synthesized events
+— sightings from `search`/claim cards, which carry no provider id — pass the constraint
+freely and never collide with each other; *their* dedup is app-level on
+`(orderID, providerStatus, source)`, and their `at` is the *sighting* time, not an
+event time. This is the activity timeline the 3e card reads, and what "members see
+each other's activity" means for provider truth.
 
 ### `OrderMessage` — the chat, and the only participant-writable stream
 
@@ -234,6 +238,11 @@ referenced key's type — no `REFERENCES` clause — named `*Ref` to mark it:
 - `OrderItem.pickupStopRef` / `dropoffStopRef` → `RouteStop.id` (an item's journey ends)
 - `OrderMessage.attachmentRef` → `OrderAttachment.id` (a photo message's payload)
 - `Order.providerAccountRef` → `ProviderAccount.key` (the root can't have FKs at all)
+
+The convention has a type-level signature: `*Ref` columns are declared `UUID?`/`TEXT?`,
+**never `SomeTable.ID`** — an `.ID`-typed column is what an FK declaration gets written
+for, and legibility here is load-bearing. The same rule shapes the DDL: `*Ref` columns
+carry no `REFERENCES` clause.
 
 The price is stated honestly: the database does not enforce these references. Integrity
 moves to the write boundary — the controller validates a `stopRef` against the order's
@@ -315,8 +324,16 @@ stack:
 4. Each source file is renamed `*.migrated-<timestamp>.json` **in place** after a verified
    import — kept, not deleted. A failed import leaves the file untouched and re-runs;
    inserts are `INSERT OR IGNORE` by PK so re-running a partial migration is safe.
-5. `providerAccountRef` is seeded from the account that owned the store at migration
-   time — migration runs under an identity, which is recorded.
+5. `providerAccountRef` is seeded **NULL — unattributed** — on every imported row. The
+   legacy store is deliberately shared across identities and records no owner, so
+   inventing one misattributes history: a device where Alice ordered, signed out, and
+   Bob ordered would stamp both rows Bob's, letting his sync overwrite her mirror or a
+   scoped delete take both (Devin Review, PR #36). Unattributed rows are display-only
+   history — excluded from provider-sync writes and from account-scoped deletion until
+   reconciliation, which is the match itself: the sync already joins by `claimID`, so
+   the first write that finds an unattributed row under a credential sets its ref in
+   the same transaction. An order no active credential ever surfaces stays local
+   history forever — the honest reading of "this device saw it".
 
 ## The widget contract — a snapshot, not a database
 
