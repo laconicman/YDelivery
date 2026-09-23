@@ -265,6 +265,8 @@ final class ClaimsSyncController {
     private func persistChanged(_ merged: [Order], identity: Int) async throws {
         for order in merged where store.orders.first(where: { $0.id == order.id }) != order {
             guard identity == identityGeneration else { throw SyncSuperseded() }
+            // TODO(YD-13): the record still suspends — a boundary inside it lands
+            // one row late; bounded while the store is not per-account.
             try await store.record(order)
         }
     }

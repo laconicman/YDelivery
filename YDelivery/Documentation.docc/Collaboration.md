@@ -111,7 +111,9 @@ push relay remains its own Later deliverable (<doc:Design>).
 `sqlite-data` is the discovery of this research: it is the only candidate that unifies
 private multi-device sync and `CKShare` collaboration in one stack while preserving the
 app's value-type model style and demanding the explicit, migration-managed schema the
-relational discipline calls for. Its constraints line up with the design rather than
+relational discipline calls for. That it rides `CKSyncEngine` rather than hand-rolled
+`CKOperation` graphs matters too — the modern engine's scheduling, subscription, and
+state-serialization machinery comes with it (author's noted preference, 2026-09-24). Its constraints line up with the design rather than
 fighting it: only root records are directly shareable (we share the order hierarchy
 anyway), one-to-many descendants follow the root, many-to-many sharing is unsupported
 (not needed — membership rides the share's participant list), and `privateTables` keep

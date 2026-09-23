@@ -172,6 +172,23 @@ identity), and bounded — but none of that narrows what a *deliberate* share ca
   window toggle so the log is opt-in rather than always-on. Neither is worth building
   before the first shared log proves the mechanism earns its keep.
 
+## YD-13 — A superseded sync pass can complete one in-flight write — **open**
+
+`persistChanged` re-proves `identityGeneration` before each `store.record`, but the
+record call itself suspends — an identity change landing *inside* that write lets the
+old account's row complete past the boundary (Devin Review, PR #35). The guard catches
+the *next* row; the one in flight is unreachable.
+
+- **Cost:** bounded today, deliberately — `OrderStore` is not per-account (the identity
+  wipe covers the sync state; device history persists across sign-in by design), so a
+  late row joins a file that legitimately holds same-class rows already. It becomes a
+  real cross-account write the day orders are owner-scoped.
+- **Discharge:** the owner-scoped order schema under the persistence-stack migration
+  (<doc:Collaboration>) — the same redesign that gives records their `CKShare`
+  hierarchy. A compensating un-record is the fallback only if the file store outlives
+  the spike; the store has no delete API today and growing one to fence a one-row edge
+  is the chaos the register exists to avoid.
+
 ## See Also
 
 - <doc:Design>
