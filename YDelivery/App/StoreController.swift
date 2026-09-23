@@ -140,7 +140,10 @@ final class StoreController {
     func refresh() async {
         if let orderStore {
             do {
-                orders = try await Self.readOrders(orderStore)
+                // Sorted at publish, not trusted to the file: `record(_:)` writes
+                // prepend-only, so a sync pass persisting several changed orders
+                // would otherwise reverse their order in the list (Phase 3).
+                orders = try await Self.readOrders(orderStore).sorted { $0.created > $1.created }
                 ordersError = nil
                 hasLoaded = true
             } catch {
@@ -198,7 +201,7 @@ final class StoreController {
         // partial fallback list dressed as healthy history omits orders silently
         // (review, PR #28).
         do {
-            orders = try await Self.readOrders(orderStore)
+            orders = try await Self.readOrders(orderStore).sorted { $0.created > $1.created }
             ordersError = nil
         } catch {
             orders = Self.upserting(order, into: orders)
@@ -206,12 +209,13 @@ final class StoreController {
         }
     }
 
-    /// The fallback merge when the confirming read fails: the written order leads,
+    /// The fallback merge when the confirming read fails: the written order kept,
     /// minus any stale copy of itself — recording an *update* (a just-cancelled
     /// order) must not leave its previous status riding along as a second row
-    /// (review, PR #32).
+    /// (review, PR #32). Sorted like the publish path: an update to an *older*
+    /// order must not jump the queue just because it led the write.
     nonisolated static func upserting(_ order: Order, into orders: [Order]) -> [Order] {
-        [order] + orders.filter { $0.id != order.id }
+        ([order] + orders.filter { $0.id != order.id }).sorted { $0.created > $1.created }
     }
 
     struct StoreUnavailable: LocalizedError {

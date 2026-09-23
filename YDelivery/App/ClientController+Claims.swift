@@ -35,9 +35,17 @@ extension ClientController {
     nonisolated static func claim(
         from response: Operations.GetClaimInfo.Output
     ) throws -> PlacedClaim {
+        PlacedClaim(try claimInfo(from: response))
+    }
+
+    /// The same read, keeping the whole card — the claims sync's discovery path
+    /// needs route and price, not just where the claim stands.
+    nonisolated static func claimInfo(
+        from response: Operations.GetClaimInfo.Output
+    ) throws -> Components.Schemas.ClaimResponse {
         switch response {
         case .ok(let ok):
-            return PlacedClaim(try ok.body.json)
+            return try ok.body.json
         case .badRequest(let error):
             throw ProviderRefusal(message: (try? error.body.json.message))
         case .unauthorized(let error):

@@ -41,15 +41,17 @@ field stating its bound.
 
 ## Now — design Phase 3: while closed (boards `5a`–`5d`, `4b`)
 
-- **Journal sync first, package first:** `journal` and `search` operations do not exist in
-  `YandexDeliveryExpressAPI` 0.2.0 — spec + tests land there, tagged, before the app
-  feature (the demand is on the package Roadmap since 2026-09-02, beside `tariffs`). The
-  journal carries **no coordinates** (verified 2026-08-30, <doc:Vision>): status/price
-  events plus `current_point_id`, which is exactly enough for stop-granularity progress
-  on every closed-app surface. Phase 2 left the matching key ready — every recorded order
-  carries its `claimID` — and left the consumers waiting: the full status vocabulary
-  (YD-7), reconciling an `unresolved` acceptance on launch (YD-5), and history rows that
-  can finally move.
+- **Journal sync — landed (hybrid):** `journal` and `search` shipped in
+  `YandexDeliveryExpressAPI` 0.3.0 after live-wire verification. The app consumes the
+  pair as one engine (<doc:Design> → "Claims sync"): search reconciles membership —
+  `active`/`delayed` every pass, `finished` once ever — while the journal keeps known
+  claims fresh on a 30-second poll, cursor persisted per account. The feed carries
+  **no coordinates** (verified 2026-08-30, <doc:Vision>): status/price events plus
+  `current_point_id`, exactly enough for stop-granularity progress. What it already
+  discharged: the full status vocabulary (YD-7), history rows that move, discovered
+  claims becoming cancellable rows, and the unresolved-acceptance window (YD-5 — a
+  claim the flow lost track of is found by search on the next pass; the remaining
+  sliver is persisting the pending id for an *immediate* reconcile, now easy).
 - The `3e` history card with «Повторить»/«Наоборот» replaces the minimal list —
   `RouteLine`'s first consumer (handoff §6's last unbuilt component) — and the `3e`
   saved-place editor gives the bookmark's chips a management surface.
@@ -58,7 +60,10 @@ field stating its bound.
   creation, updated by polling — the push relay stays a Later item.
 - Two widgets (waiting · working), three App Intents, notification thread rules with
   parcel-photo attachments, share-in extension.
-- Local notifications + `BGAppRefreshTask` from journal events.
+- Local notifications + `BGAppRefreshTask` from journal events; a `BGProcessingTask`
+  full replay gated on unmetered Wi-Fi + charger; CloudKit silent notifications as a
+  cross-device wake-up once the shared-zone research lands — a trigger for our own
+  reconcile, not provider push (Yandex's webhooks cannot reach CloudKit, <doc:Design>).
 - When the package ships `tariffs`: swap the strip's and explainer's static bounds for
   live per-geo `supported_requirements`.
 
@@ -66,23 +71,26 @@ field stating its bound.
 
 ### In parallel: the persistence and sharing research
 
-**Do not brace into implementing** (author, 2026-08-28). The store must carry the CloudKit
-ambitions: private sync, and an organization sharing one Yandex token whose employees see,
-create, and edit orders by role — plausibly a shared record zone. SwiftData's CloudKit sync
-has no sharing story; `NSPersistentCloudKitContainer` does (<doc:Design> — reopened). Schema
-first (relational discipline — Codd, not vibes; the LearnWords sessions record how a rushed
-CloudKit schema went), stack second, provider-plurality in the schema from day one. One
-more input since 2026-08-30: the container stays **exclusive to this app** and its design
-assumes a possible account transfer (<doc:Design> → "Surviving an account transfer").
+**Research landed 2026-09-24 — spike endorsed, implementation still gated on the spike's
+checklist** (<doc:Collaboration>). The sharing model is settled before the stack: private
+`CKShare` hierarchies rooted at an order — invite-URL, per-participant read/write, no
+public records — because collaborators need not share an org or a credential. The
+grant and the provider token are independent axes: participant writes reach only
+collaborative fields (attachments, notes), provider-mirrored fields stay owner-written
+projections, and every shared surface shows the timestamp of the state it presents.
+Share URLs open the app or an **App Clip** for pure consumers. Schema first (relational
+discipline — Codd, not vibes; the LearnWords sessions record how a rushed CloudKit schema
+went), provider-plurality in the schema from day one; the container stays **exclusive to
+this app** with an account transfer assumed possible (<doc:Design> → "Surviving an
+account transfer").
 
-Author preference, recorded 2026-08-30: **SwiftData, if it carried the needed cloud
-functionality** — which it still does not (checked that date: `ModelConfiguration`
-exposes only the private database; DTS directs sharing to `NSPersistentCloudKitContainer`).
-The research therefore weighs three honest paths: NSPCK outright; the Apple-documented
-**coexistence stack** (NSPCK owns sync + sharing on the store file, SwiftData reads the
-same store for UI ergonomics — prototype before trusting); or the shared slice on raw
-CloudKit/`CKSyncEngine` beside a simpler local store. Re-check SwiftData sharing each
-WWDC — it is the standing preference the moment it exists.
+Stack direction, recorded 2026-09-24: **spike `sqlite-data` first** — the only candidate
+covering private sync *and* the `CKShare` surface in one stack while keeping value-type
+models and an explicit SQL schema; `NSPersistentCloudKitContainer` is the fallback, raw
+`CKSyncEngine` the control-maximizing third. SwiftData stays the standing preference the
+day it gains a sharing surface — re-check each WWDC (still private-only, verified
+2026-09-23). The spike's checklist — asset mapping, share-acceptance ergonomics, the
+corp-visibility wire test — lives in <doc:Collaboration> → "Open verifications".
 
 ## Later — design Phase 4 and beyond
 
@@ -110,3 +118,4 @@ debt. Inbound tracking — record-keeping only, and only if honest about not bei
 - <doc:Vision>
 - <doc:Design>
 - <doc:TechDebt>
+- <doc:Collaboration>

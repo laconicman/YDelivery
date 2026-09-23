@@ -48,13 +48,15 @@ source of truth the UI observes. Status history arrives by applying `claims/jour
 (see <doc:Vision>), so the app is usable offline and history survives the vendor's 72-hour
 claim visibility horizon. That much stands.
 
-**What reopened the stack choice:** the CloudKit ambitions — an organization sharing one
-Yandex token, employees reading/creating/editing orders by role — need shared databases
-(plausibly a shared record zone, "sharing the table"). SwiftData's CloudKit sync offers no
-`CKShare` surface; `NSPersistentCloudKitContainer` does. Phase 2 therefore opens with a
-schema-and-stack research task (<doc:Roadmap>) rather than an implementation sprint, and the
-schema gets designed with relational discipline first — the LearnWords project on this
-machine records what a rushed CloudKit schema costs.
+**What reopened the stack choice:** the CloudKit ambitions — shared orders, photos, and
+activity between agents who need not share an org or a credential — need shared databases.
+SwiftData's CloudKit sync offers no `CKShare` surface; `NSPersistentCloudKitContainer`
+does. The 2026-09-24 research (<doc:Collaboration>) weighs the four honest paths —
+NSPCK outright, the NSPCK+SwiftData coexistence stack, raw `CKSyncEngine` on the shared
+slice, and Point-Free's `sqlite-data` — and lands on a `sqlite-data` spike as the endorsed
+first try, NSPCK the fallback. Schema still comes first — the LearnWords project on this
+machine records what a rushed CloudKit schema costs — and the sharing model itself is
+settled there: private `CKShare` hierarchies rooted at an order, never a public record.
 
 **Still rejected:** "no store, poll `claims/search` on every launch" — history becomes
 hostage to the API's retention and the network.
@@ -69,6 +71,62 @@ was checked and cannot receive webhooks — recorded so it is not re-litigated.
 
 **Rejected:** building the relay first. It gates nothing in phases 1–3 and adds an
 operational dependency before the app has users.
+
+## Claims sync: search for membership, journal for freshness (2026-09-23)
+
+The claims list is fed by both discovery operations, on purpose — neither alone is
+enough. `claims/journal` is a *change feed*: cheap delta polling for claims the
+device already knows, but it only reports claims that *changed* — it can never
+discover a claim created before the cursor existed, on another device, or by
+support, and its events carry no coordinates or routes. `claims/search` is a
+*snapshot query*: whole claim cards by state — it is what finds orders the app
+never recorded. So the division of labor is: **search reconciles membership**
+(`active` and `delayed` every pass — the claims that can still move — plus a
+one-time `finished` backfill so history predating the install arrives once), and
+**journal keeps known claims fresh** between reconciliations. The store stays the
+list's only source of truth: rows render what the device remembers, sync writes
+what the provider says.
+
+Mechanics that carry their reasons: the journal cursor persists *after* each page's
+events land — a crash mid-page replays, and replay is safe because every event sets
+an absolute state (status, price), never a diff. An `invalid_cursor` refusal means
+replay from the beginning, not an error shown to the sender. A journal claim whose
+card fetch fails joins a persisted *pending queue* — the cursor advances past its
+event, so the queue is the only memory of it until a retry or a search pass lands
+the card. The cursor, the backfill flag, and the queue live in one small App Group
+file beside the order store — wiped on the identity boundary, which is wired
+*synchronously*: `ClientController` fires a hook inside `signIn`/`signOut`
+themselves, because a 30-second poll cannot see a sign-out that ends before the
+next tick. A pass resumed across that boundary drops its writes — the identity
+generation is re-proved after every suspension and before every write, because a
+cleared file must not be repopulated by the old credential's late response.
+Each feed keeps its own failure — a journal success never clears a
+search refusal — and a search pass that runs out of pages with a live cursor
+reports `SyncIncomplete` rather than stamping `historyBackfilled` on partial
+membership (review, PR #35). The same page cap on the journal is *not* reported:
+its cursor already advanced past what it applied, so a truncated pass continues
+where it stopped on the next tick — self-healing, unlike search's reset. The poll lives in
+`ClaimsSyncController`, not a view: a map or detail pushed over the list must not
+freeze courier progress (CLAUDE.md rule 6). The wire's status zoo collapses into
+the sender's six states at the model boundary — statuses parked on the sender's
+decision (`ready_for_approval`, `performer_not_found`, `pay_waiting`, `returned`)
+read `attention`, never a raw wire word (YD-7, discharged).
+
+**Rejected alternatives:** journal-only sync (a change feed is not a membership
+database — the "loses orders" bug it was meant to fix); search-only polling
+(whole cards on every tick — the expensive version of what the journal does
+cheaply); and keeping the `return` point out of merged routes (this app *sends*
+its drop-off as `return`, so the wire's last stop is the sender's destination,
+not courier bookkeeping).
+
+**Deferred, on the record:** a *scheduled* full replay — paging `finished`
+repeatedly or replaying the journal from epoch — belongs to a maintenance task
+gated on favorable conditions (unmetered Wi-Fi, charging), which the platform can
+schedule via `BGProcessingTask` once the persistence stack settles (the
+Phase-2 research owns that seam). CloudKit silent notifications may later serve as
+a *cross-device wake-up* — one device syncs, a shared-zone change nudges the
+others — but they can only trigger our own reconcile; Yandex's webhooks cannot
+reach CloudKit, so provider→device push still waits on the relay above.
 
 ## iOS-only
 
@@ -231,3 +289,4 @@ user scenario's core case).
 - <doc:Vision>
 - <doc:Roadmap>
 - <doc:TechDebt>
+- <doc:Collaboration>

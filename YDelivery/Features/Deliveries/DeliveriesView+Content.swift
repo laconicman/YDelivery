@@ -27,16 +27,30 @@ extension DeliveriesView {
         /// nothing was sent. An unreadable store rendered as "No deliveries yet", which
         /// tells a sender with a year of orders that they have none (review, PR #22).
         var historyUnavailable: String? = nil
+        /// Why the rows may be stale — a sync failure renders beside history, never
+        /// instead of it: what the device remembers is still worth reading.
+        var syncError: String? = nil
+        /// The pull-to-refresh ask — the root forwards it to the sync engine.
+        var refresh: () async -> Void = {}
         let compose: () -> Void
 
         var body: some View {
             Group {
                 if !rows.isEmpty {
-                    List(rows) { row in
-                        NavigationLink(value: row.id) {
-                            OrderRow(row: row)
+                    List {
+                        ForEach(rows) { row in
+                            NavigationLink(value: row.id) {
+                                OrderRow(row: row)
+                            }
+                        }
+                        if let syncError {
+                            Text(syncError)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .listRowSeparator(.hidden)
                         }
                     }
+                    .refreshable { await refresh() }
                 } else if let historyUnavailable {
                     // Checked before the empty states: *could not look* is not *nothing
                     // there*, and only this branch knows the difference.
@@ -45,17 +59,28 @@ extension DeliveriesView {
                     } description: {
                         Text(historyUnavailable)
                     }
-                } else if isSignedIn {
-                    ContentUnavailableView {
-                        Label("No deliveries yet", systemSymbol: .shippingbox)
-                    } description: {
-                        Text("Orders you create will appear here, and stay here.")
-                    }
-                } else {
+                } else if !isSignedIn {
                     ContentUnavailableView {
                         Label("Sign in to start", systemSymbol: .key)
                     } description: {
                         Text("Add your Yandex Delivery OAuth token in Settings.")
+                    }
+                } else if let syncError {
+                    // The wire version of the branch above: a failed first sync on an
+                    // empty store must not wear the "No deliveries yet" face — *could
+                    // not check* is not *nothing there* (review, PR #35).
+                    ContentUnavailableView {
+                        Label("Deliveries can't be checked", systemSymbol: .exclamationmarkTriangle)
+                    } description: {
+                        Text(syncError)
+                    } actions: {
+                        Button("Try again") { Task { await refresh() } }
+                    }
+                } else {
+                    ContentUnavailableView {
+                        Label("No deliveries yet", systemSymbol: .shippingbox)
+                    } description: {
+                        Text("Orders you create will appear here, and stay here.")
                     }
                 }
             }
@@ -139,6 +164,15 @@ extension DeliveriesView.Content {
 
 #Preview("Signed in, empty") {
     DeliveriesView.Content(isSignedIn: true, rows: [], compose: {})
+}
+
+#Preview("Sync failed, empty") {
+    DeliveriesView.Content(
+        isSignedIn: true,
+        rows: [],
+        syncError: "The provider could not be reached.",
+        compose: {}
+    )
 }
 
 #Preview("Signed out") {

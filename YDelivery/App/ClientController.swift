@@ -29,6 +29,14 @@ final class ClientController {
     /// (review, PR #33).
     private(set) var diagnosticsURL: URL?
 
+    /// One synchronous call per identity transition — sign-in, sign-out, token
+    /// swap — set once by the composition root. Anything bound to an account but
+    /// sampled on a poll (the claims sync's cursor and flags) hangs its wipe here:
+    /// a 30-second tick cannot see a sign-out that ends before the next tick
+    /// (review, PR #35). Session *restore* at launch does not fire it — restoring
+    /// is not a change.
+    @ObservationIgnored var onIdentityChange: (@MainActor () -> Void)?
+
     /// The identity-boundary log wipe — owned, not floating, so rule 6's
     /// "structured and owned" holds even for best-effort housekeeping (review, PR #33).
     private var housekeeping: Task<Void, Never>?
@@ -79,6 +87,7 @@ final class ClientController {
             // removal. Session *restore* must not clear: surviving relaunch is
             // the file's whole point (review, PR #33).
             await wireLog.clear()
+            onIdentityChange?()
             establishSession(token: token)
         } catch {
             client = nil
@@ -98,6 +107,7 @@ final class ClientController {
         // (review, PR #33).
         diagnosticsURL = nil
         housekeeping = Task { await wireLog.clear() }
+        onIdentityChange?()
         do { try tokenStore.delete() } catch { signInError = error }
     }
 
