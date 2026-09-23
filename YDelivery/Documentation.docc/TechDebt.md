@@ -189,6 +189,23 @@ the *next* row; the one in flight is unreachable.
   the spike; the store has no delete API today and growing one to fence a one-row edge
   is the chaos the register exists to avoid.
 
+## YD-14 — The provider can black-hole connections under burst load — **open**
+
+Field check, 2026-09-23: after ~20 read-only requests in five minutes, every endpoint —
+`claims/journal`, `claims/search`, `claims/info`, `offers/calculate` — hung at the
+transport level (curl `-1001`, no HTTP status, no `Retry-After`), still silent 25+
+minutes on. Minutes earlier the same window had both discovery endpoints answering and
+decoding clean, so the wire contract is not in question; the provider's failure mode
+under load is a silent stall, not a refusal.
+
+- **Cost:** a sync pass can stall for the URLSession default — 60 s per request;
+  `URLSessionTransport()` sets nothing tighter — so a throttled pass lingers for
+  minutes across pages while `isSyncing` holds the gate. It recovers on the next tick,
+  but the stall is invisible.
+- **Discharge:** an explicit per-request timeout on the transport (tens of seconds,
+  not the 60 s default) alongside the page budgeting `maxPages` already gives each
+  pass; revisit when sync moves onto the persistence substrate (<doc:Schema>).
+
 ## See Also
 
 - <doc:Design>
