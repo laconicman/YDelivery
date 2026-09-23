@@ -57,6 +57,10 @@ final class ClaimsSyncController {
     /// credential resumes into a cleared file, and only the check keeps its
     /// response from repopulating the old account's state (review, PR #35).
     private var identityGeneration = 0
+    /// The generation the last tick saw. Compared, never a boolean sample: a
+    /// sign-out *and* a sign-in inside one interval still reads as changed,
+    /// and a mid-tick bump is not consumed by the tick's own bookkeeping.
+    private var lastSeenGeneration = -1
 
     /// The journal's poll cadence — cheap rows of what changed.
     private static let pollInterval: Duration = .seconds(30)
@@ -296,13 +300,19 @@ final class ClaimsSyncController {
     /// wire log's, so a new token never inherits this account's position.
     private func tick(_ count: Int) async {
         let signedIn = session.isSignedIn
+        // Sampled at the top, not the end: a boundary crossing mid-tick bumps the
+        // generation — writing the post-change value here would consume it and
+        // silence the new account's membership pass until the reconcile counter
+        // (review, PR #35).
+        let generation = identityGeneration
         if wasSignedIn, !signedIn { resetIdentityState() }
         if signedIn {
-            if !wasSignedIn || count % Self.reconcileEveryTicks == 0 {
+            if generation != lastSeenGeneration || count % Self.reconcileEveryTicks == 0 {
                 await syncSearch()
             }
             await syncJournal()
         }
+        lastSeenGeneration = generation
         wasSignedIn = signedIn
     }
 }
