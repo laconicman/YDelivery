@@ -72,7 +72,7 @@ Order ────────────────────────�
 | `createdAt` | Date | Local creation — meaningful offline history before any provider ack |
 | `providerAccountRef` | TEXT? | **Value, not FK** — matches `ProviderAccount.key` on the private side. Cannot be an FK: the root must have none. NULL = *unattributed* — a row whose provider account isn't recorded (legacy imports, see Migration) |
 | `provider` | TEXT | `"yandex"` today; provider plurality is a column, not a schema version |
-| `lastActivityAt` | Date | Owner-maintained list ordering — denormalized, stated as such |
+| `lastActivityAt` | Date | Owner-maintained *provider-activity* marker — denormalized, stated as such. List ordering is derived, not stored (below) |
 
 No `claimID` here — the provider mirror carries it (below), keeping every provider-derived
 fact in one owner-written row.
@@ -314,6 +314,15 @@ is one denormalized `lastActivityAt`. The only true last-writer-wins exposure is
 participants editing each other's message/attachment rows — the append-only convention
 says they shouldn't, and `lastModifiedBy` preserves the audit trail if they do.
 
+**List ordering is derived, never written.** `lastActivityAt` marks provider-side
+activity and stays owner-written; participants can't touch it without breaking the
+authority matrix. But shared lists must still surface a participant's message — so the
+sort key is computed at read:
+`MAX(lastActivityAt, MAX(messages.sentAt), MAX(attachments.createdAt))` (Devin Review,
+PR #36 — a participant posting while the owner is offline would otherwise leave the
+order sorted stale until the owner's next write). Ordering is a presentation
+derivation, which needs no write authority at all.
+
 ## Freshness — the timestamps every surface needs
 
 `providerObservedAt` (last provider sighting), `mirroredAt` (last owner write),
@@ -337,8 +346,13 @@ stack:
    `PendingAcceptance` has nothing to migrate yet.
 3. `places.json` → `SavedPlace` rows.
 4. Each source file is renamed `*.migrated-<timestamp>.json` **in place** after a verified
-   import — kept, not deleted. A failed import leaves the file untouched and re-runs;
-   inserts are `INSERT OR IGNORE` by PK so re-running a partial migration is safe.
+   import — kept, not deleted. Retries are safe by key derivation, not by marker order:
+   legacy route stops/items carry no ids, so a migrated child id is derived —
+   `UUIDv5(orderID ‖ childKind ‖ index)` — the same mechanism as event/order identity.
+   `INSERT OR IGNORE` by PK then makes a partial migration idempotent even if the process
+   dies in the commit→rename window: the re-import reproduces identical keys and the
+   second pass writes nothing (Devin Review, PR #36 — fresh random child ids would have
+   duplicated every stop).
 5. `providerAccountRef` is seeded **NULL — unattributed** — on every imported row. The
    legacy store is deliberately shared across identities and records no owner, so
    inventing one misattributes history: a device where Alice ordered, signed out, and
@@ -387,8 +401,9 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   habit. If a field inside it is ever *queried* or *branched on*, it earns a column.
 - `contactName` + components both stored — the wire and legacy rows speak one string;
   parsing is lossy. Redundancy for fidelity, documented at `RoutePoint` already.
-- `lastActivityAt` on the root — a maintained aggregate; cheaper than ordering lists by
-  `MAX(events.at)`, stated as denormalized.
+- `lastActivityAt` on the root — a maintained aggregate of *provider-side* activity.
+  Visible ordering derives from it plus child timestamps at read; the column exists
+  so the owner's sync can record activity without walking the event feed.
 - No `NOT NULL` dogma on provider fields — a claimID is legitimately absent until the
   provider assigns it; nulls mean "not yet", which is a state, not a defect.
 

@@ -83,7 +83,7 @@ let package = Package(
     name: "spike",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/pointfreeco/sqlite-data", from: "1.12.0")
+        .package(url: "https://github.com/pointfreeco/sqlite-data", exact: "1.12.0")
     ],
     targets: [
         .executableTarget(
