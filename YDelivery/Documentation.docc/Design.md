@@ -53,10 +53,12 @@ activity between agents who need not share an org or a credential — need share
 SwiftData's CloudKit sync offers no `CKShare` surface; `NSPersistentCloudKitContainer`
 does. The 2026-09-24 research (<doc:Collaboration>) weighs the four honest paths —
 NSPCK outright, the NSPCK+SwiftData coexistence stack, raw `CKSyncEngine` on the shared
-slice, and Point-Free's `sqlite-data` — and lands on a `sqlite-data` spike as the endorsed
-first try, NSPCK the fallback. Schema still comes first — the LearnWords project on this
-machine records what a rushed CloudKit schema costs — and the sharing model itself is
-settled there: private `CKShare` hierarchies rooted at an order, never a public record.
+slice, and Point-Free's `sqlite-data` — and lands on `sqlite-data` as the endorsed
+first try, NSPCK the fallback; a compile spike against 1.12.0 verified its whole API
+surface on 2026-09-25. The schema it will implement is designed in <doc:Schema> — the
+LearnWords project on this machine records what a rushed CloudKit schema costs — and
+the sharing model itself is settled there: private `CKShare` hierarchies rooted at an
+order, never a public record.
 
 **Still rejected:** "no store, poll `claims/search` on every launch" — history becomes
 hostage to the API's retention and the network.
