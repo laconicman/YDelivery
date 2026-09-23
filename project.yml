@@ -145,6 +145,10 @@ targets:
         # When-In-Use only, asked considerately (Roadmap → Phase 2): the picker explains
         # first, and everything works without it.
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Your position appears on the map and becomes the pickup point. Everything works without it.
+        # CloudKit sync (Schema → Sync tiers): silent pushes wake CKSyncEngine for
+        # fetch changes; CKSharingSupported opens the per-order CKShare flow.
+        INFOPLIST_KEY_UIBackgroundModes: remote-notification
+        INFOPLIST_KEY_CKSharingSupported: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
