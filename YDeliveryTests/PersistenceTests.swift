@@ -1,7 +1,6 @@
 import Dependencies
 import Foundation
 import GRDB
-import OSLog
 import SQLiteData
 import Testing
 import YDeliveryKit
@@ -21,26 +20,16 @@ struct PersistenceTests {
 
     /// `.test` context swaps the engine's CloudKit state for a mock — no container
     /// (which would trap without iCloud entitlements) — while `validateSchema()` still
-    /// runs on the real DDL: FK graph, uniqueness, and PK rules exercised for real
-    /// (the spike's harness, promoted to a regression test).
+    /// runs on the real DDL: FK graph, uniqueness, and PK rules exercised for real.
+    /// The engine comes from `AppDatabase.syncEngine` itself, so the production tier
+    /// lists are what get validated — no second copy to drift.
     @Test("SyncEngine accepts the production schema")
     func syncEngineAcceptsTheSchema() throws {
-        let database = AppDatabase(directory: directory)
-        let queue = try database.queue
+        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
         try withDependencies {
             $0.context = .test
         } operation: {
-            _ = try SyncEngine(
-                for: queue,
-                tables: OrderRow.self, OrderProviderStateRow.self, OrderOptionsRow.self,
-                    RouteStopRow.self, OrderItemRow.self, ProviderEventRow.self,
-                    OrderMessageRow.self, OrderAttachmentRow.self, AttachmentBlobRow.self,
-                privateTables: ProviderAccountRow.self, OrderPrivateStateRow.self,
-                    SavedPlaceRow.self,
-                containerIdentifier: "iCloud.test",
-                startImmediately: false,
-                logger: Logger(subsystem: "YDeliveryTests", category: "persistence")
-            )
+            _ = try database.syncEngine
         }
     }
 
@@ -49,9 +38,8 @@ struct PersistenceTests {
     /// constraint. If a future schema edit adds one, this fails loudly.
     @Test("A non-PK unique index on a synchronized table is rejected")
     func secondaryUniqueIsRejected() throws {
-        let database = AppDatabase(directory: directory)
-        let queue = try database.queue
-        try queue.write { db in
+        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
+        try database.queue.write { db in
             try db.execute(sql: """
                 CREATE UNIQUE INDEX "eventDedup" ON "providerEvents"
                   ("orderID", "providerEventID")
@@ -61,18 +49,145 @@ struct PersistenceTests {
             $0.context = .test
         } operation: {
             #expect(throws: (any Error).self) {
-                _ = try SyncEngine(
-                    for: queue,
-                    tables: OrderRow.self, OrderProviderStateRow.self, OrderOptionsRow.self,
-                        RouteStopRow.self, OrderItemRow.self, ProviderEventRow.self,
-                        OrderMessageRow.self, OrderAttachmentRow.self, AttachmentBlobRow.self,
-                    privateTables: ProviderAccountRow.self, OrderPrivateStateRow.self,
-                        SavedPlaceRow.self,
-                    containerIdentifier: "iCloud.test",
-                    startImmediately: false,
-                    logger: Logger(subsystem: "YDeliveryTests", category: "persistence")
-                )
+                _ = try database.syncEngine
             }
+        }
+    }
+
+    // MARK: Sync tiers — what the engine leaves a footprint for
+
+    /// The metadatabase ATTACHes to our queue as `sqlitedata_icloud`; writes through
+    /// that same connection fire the triggers `setUpSyncEngine` installed, leaving one
+    /// `sqlitedata_icloud_metadata` row per synchronized record. This is the tier
+    /// split made observable: shared + private rows appear, device rows never do.
+    private func syncedRecordNames(_ database: AppDatabase) throws -> [String] {
+        try database.queue.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT "recordName" FROM "sqlitedata_icloud"."sqlitedata_icloud_metadata"
+                """)
+        }
+    }
+
+    private func parentRecordNames(_ database: AppDatabase) throws -> [String?] {
+        try database.queue.read { db in
+            try Optional<String>.fetchAll(db, sql: """
+                SELECT "parentRecordName"
+                FROM "sqlitedata_icloud"."sqlitedata_icloud_metadata"
+                ORDER BY "recordName"
+                """)
+        }
+    }
+
+    @Test("An order write leaves a share-tree footprint — root and children tagged")
+    func sharedWritesLeaveMetadata() throws {
+        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
+        try withDependencies {
+            $0.context = .test
+        } operation: {
+            _ = try database.syncEngine  // triggers install at construction
+        }
+        let order = Order(
+            created: .now, status: .active,
+            route: [RoutePoint(latitude: 55, longitude: 37, address: "А")],
+            claimID: "claim-1")
+        try database.recordOrder(order)
+
+        let names = try syncedRecordNames(database)
+        #expect(names.contains { $0.hasSuffix(":orders") })
+        #expect(names.contains { $0.hasSuffix(":routeStops") })
+        #expect(names.contains { $0.hasSuffix(":orderProviderStates") })
+        let parents = try parentRecordNames(database)
+        #expect(parents.contains { $0?.hasSuffix(":orders") == true },
+                "children name the order record as parent — the share edge is real")
+    }
+
+    @Test("A saved place syncs privately — footprint exists, never shared")
+    func privateTierLeavesMetadata() throws {
+        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
+        try withDependencies {
+            $0.context = .test
+        } operation: {
+            _ = try database.syncEngine
+        }
+        try database.savePlace(SavedPlace(
+            name: "Склад", kind: .warehouse,
+            point: RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100")))
+
+        #expect(try syncedRecordNames(database).contains { $0.hasSuffix(":savedPlaces") })
+    }
+
+    @Test("Device-tier writes leave no CloudKit footprint at all")
+    func deviceTierLeavesNoMetadata() throws {
+        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
+        try withDependencies {
+            $0.context = .test
+        } operation: {
+            _ = try database.syncEngine
+        }
+        try database.writeSyncState(.init(
+            cursor: "eyJ-opaque", historyBackfilled: true,
+            pendingClaimIDs: ["claim-missed"]))
+
+        let names = try syncedRecordNames(database)
+        #expect(!names.contains { $0.hasSuffix(":syncStates") })
+        #expect(!names.contains { $0.hasSuffix(":pendingDiscoveries") },
+                "the journal cursor and retry queue are per-device by correctness")
+    }
+
+    // MARK: Engine start — entitlement gate and failure surfacing
+
+    /// The gate must pass on every host we ship or test on — on the simulator there
+    /// is no embedded profile, which reads as *proceed* (the xcent is generated from
+    /// YDelivery.entitlements, so it cannot drift inside this repo).
+    @Test("The entitlement gate passes on this host")
+    func iCloudEntitlementGatePasses() {
+        #expect(AppDatabase.iCloudEntitled)
+    }
+
+    @Test("The provisioning-profile check reads CloudKit service and container")
+    func profileCheckReadsCloudKit() {
+        let good: [String: Any] = ["Entitlements": [
+            "com.apple.developer.icloud-services": ["CloudKit", "CloudDocuments"],
+            "com.apple.developer.icloud-container-identifiers":
+                ["iCloud.com.learnable.YDelivery"],
+        ]]
+        #expect(AppDatabase.profileAllowsCloudKit(good))
+        #expect(!AppDatabase.profileAllowsCloudKit(["Entitlements": [:]]),
+                "a profile without iCloud must fail the gate")
+        #expect(!AppDatabase.profileAllowsCloudKit(["Entitlements": [
+            "com.apple.developer.icloud-services": ["CloudKit"],
+            "com.apple.developer.icloud-container-identifiers": ["iCloud.other.App"],
+        ]]), "a foreign container must fail the gate")
+    }
+
+    @Test("startSync runs the engine against the mock container")
+    func startSyncStartsTheEngine() async throws {
+        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
+        await withDependencies {
+            $0.context = .test
+        } operation: {
+            await database.startSync()
+            let engine = try? database.syncEngine
+            #expect(engine?.isRunning == true)
+            #expect(database.syncStartFailure == nil)
+        }
+    }
+
+    @Test("A schema the engine rejects surfaces as a stored failure, not a crash")
+    func failedEngineStartIsStored() async throws {
+        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
+        try await database.queue.write { db in
+            try db.execute(sql: """
+                CREATE UNIQUE INDEX "eventDedup" ON "providerEvents"
+                  ("orderID", "providerEventID")
+                """)
+        }
+        await withDependencies {
+            $0.context = .test
+        } operation: {
+            await database.startSync()
+            #expect(database.syncStartFailure != nil,
+                    "rejection is a rendered state, never a silent no-op")
         }
     }
 

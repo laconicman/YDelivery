@@ -20,6 +20,9 @@ struct YDeliveryApp: App {
         // one poll interval is invisible to sampling — the hook fires inside the
         // transition itself (review, PR #35).
         session.onIdentityChange = { [weak sync] in sync?.resetIdentityState() }
+        // CloudKit sync starts at launch, entitlement or not — `startSync` probes and
+        // degrades to a logged, stored failure rather than a CKContainer trap.
+        if let database { Task { await database.startSync() } }
         _session = State(initialValue: session)
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)

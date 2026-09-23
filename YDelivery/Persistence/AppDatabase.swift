@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import OSLog
+import SQLiteData
 import YDeliveryKit
 
 /// The SQLite substrate the schema contract (doc:Schema) runs on — one file in the App
@@ -8,9 +9,10 @@ import YDeliveryKit
 /// composition stays cheap and an open failure is a stored error to render, never a
 /// crash. Replaces the provisional per-file JSON stores behind the same seam.
 ///
-/// CloudKit is deliberately not started here: the entitlement arrives with the sharing
-/// feature. What exists today is the schema itself — `PersistenceSchemaTests` proves
-/// `SyncEngine` accepts this exact DDL — plus the local store surface the UI reads.
+/// `SyncEngine` hangs off the same queue: constructed lazily like the store itself,
+/// started once from `@main`. The shared/private/device tier split is the contract's —
+/// the lists below are its single source of truth (tests construct the engine through
+/// `syncEngine`, never by re-listing tables).
 nonisolated final class AppDatabase: Sendable {
     static let filename = "ydelivery.sqlite"
 
@@ -18,13 +20,18 @@ nonisolated final class AppDatabase: Sendable {
         subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "persistence")
 
     private let directory: URL
+    private let containerIdentifier: String
     /// The one-time open result — DDL + legacy migration run inside it. A failure is
     /// captured and rethrown by every access, so a broken store reads as *unavailable*
     /// rather than *empty* (the substrate's could-not-look rule).
     private let opened = OSAllocatedUnfairLock<Result<DatabaseQueue, Error>?>(initialState: nil)
+    private let engineOpened = OSAllocatedUnfairLock<Result<SyncEngine, Error>?>(initialState: nil)
+    private let syncFailure = OSAllocatedUnfairLock<Error?>(initialState: nil)
 
-    init(directory: URL) {
+    init(directory: URL,
+         containerIdentifier: String = "iCloud.com.learnable.YDelivery") {
         self.directory = directory
+        self.containerIdentifier = containerIdentifier
     }
 
     /// The store rooted in the app's shared container — `nil` when it cannot be
@@ -32,7 +39,7 @@ nonisolated final class AppDatabase: Sendable {
     static func inAppGroup(id: String, fileManager: FileManager = .default) -> AppDatabase? {
         fileManager
             .containerURL(forSecurityApplicationGroupIdentifier: id)
-            .map(AppDatabase.init(directory:))
+            .map { AppDatabase(directory: $0) }
     }
 
     /// The open queue — internal so `PersistenceSchemaTests` can run `SyncEngine`
@@ -51,8 +58,106 @@ nonisolated final class AppDatabase: Sendable {
     private static func open(in directory: URL) throws -> DatabaseQueue {
         let db = try DatabaseQueue(path: directory.appendingPathComponent(filename).path)
         try db.write { db in try db.execute(sql: ddl) }
-        try LegacyMigration.run(in: directory, db: db)
+        LegacyMigration.run(in: directory, db: db)
         return db
+    }
+
+    // MARK: - CloudKit sync
+
+    /// The engine over this queue — lazily constructed like the store itself, its
+    /// failure captured the same way. `tables:`/`privateTables:` are the contract's
+    /// tiers verbatim (doc:Schema → "Sync tiers"); device-tier tables are simply never
+    /// registered, so their writes leave no CloudKit footprint.
+    var syncEngine: SyncEngine {
+        get throws {
+            try engineOpened.withLock { cell in
+                if let cell { return try cell.get() }
+                let result = Result {
+                    try SyncEngine(
+                        for: queue,
+                        tables: OrderRow.self, OrderProviderStateRow.self,
+                            OrderOptionsRow.self, RouteStopRow.self, OrderItemRow.self,
+                            ProviderEventRow.self, OrderMessageRow.self,
+                            OrderAttachmentRow.self, AttachmentBlobRow.self,
+                        privateTables: ProviderAccountRow.self, OrderPrivateStateRow.self,
+                            SavedPlaceRow.self,
+                        containerIdentifier: containerIdentifier,
+                        startImmediately: false,
+                        logger: Logger(
+                            subsystem: Bundle.main.bundleIdentifier ?? "YDelivery",
+                            category: "CloudKit"))
+                }
+                cell = result
+                return try result.get()
+            }
+        }
+    }
+
+    /// Why sync never started — entitlement absent or engine failed to construct or
+    /// start. Stored, not silent: a future surface can render it (same rule as the
+    /// open-failure cell above).
+    var syncStartFailure: Error? { syncFailure.withLock { $0 } }
+
+    /// Starts CloudKit sync — idempotent; a second call is a no-op while running.
+    /// A build without the iCloud entitlement is logged and recorded, never a crash:
+    /// `CKContainer` traps on contact, so the probe runs before the type is touched.
+    func startSync() async {
+        guard Self.iCloudEntitled else {
+            let error = SyncStartError.noICloudEntitlement
+            Self.logger.error("CloudKit sync skipped — \(error.errorDescription ?? "")")
+            syncFailure.withLock { $0 = error }
+            return
+        }
+        do {
+            try await syncEngine.start()
+        } catch {
+            Self.logger.error("CloudKit sync did not start: \(error.localizedDescription)")
+            syncFailure.withLock { $0 = error }
+        }
+    }
+
+    /// Whether this build may touch CloudKit. `CKContainer` traps when the
+    /// entitlement is missing, so the probe runs before the type is contacted.
+    /// Device builds carry `embedded.mobileprovision` — its Entitlements dict is
+    /// parsed and checked. Simulator/ad-hoc builds have no profile; their runtime
+    /// entitlements come from the xcent `YDelivery.entitlements` generates, so
+    /// "no profile" reads as *proceed* and `start()` reports any residual failure.
+    static var iCloudEntitled: Bool {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let profile = provisioningProfile(at: url)
+        else { return true }
+        return profileAllowsCloudKit(profile)
+    }
+
+    /// The profile's own claim: CloudKit service enabled and our container listed.
+    static func profileAllowsCloudKit(_ profile: [String: Any]) -> Bool {
+        guard let entitlements = profile["Entitlements"] as? [String: Any],
+              let services = entitlements["com.apple.developer.icloud-services"] as? [String],
+              services.contains("CloudKit"),
+              let containers = entitlements["com.apple.developer.icloud-container-identifiers"] as? [String]
+        else { return false }
+        return containers.contains("iCloud.com.learnable.YDelivery")
+    }
+
+    /// `embedded.mobileprovision` is a CMS-signed plist — the Entitlements dict sits
+    /// between the XML markers inside.
+    private static func provisioningProfile(at url: URL) -> [String: Any]? {
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .ascii),
+              let start = text.range(of: "<?xml"),
+              let end = text.range(of: "</plist>"),
+              let plist = try? PropertyListSerialization.propertyList(
+                from: Data(text[start.lowerBound..<end.upperBound].utf8),
+                format: nil) as? [String: Any]
+        else { return nil }
+        return plist
+    }
+
+    enum SyncStartError: LocalizedError {
+        case noICloudEntitlement
+        var errorDescription: String? {
+            "iCloud entitlement absent — sync stays off rather than trapping in CKContainer"
+        }
     }
 
     /// GRDB binds `UUID` as a 16-byte BLOB; the contract's id columns are TEXT under
