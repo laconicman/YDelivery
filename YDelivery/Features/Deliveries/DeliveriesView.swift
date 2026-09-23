@@ -7,6 +7,7 @@ import YDeliveryKit
 struct DeliveriesView: View {
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
+    @Environment(ClaimsSyncController.self) private var sync
     let compose: () -> Void
 
     var body: some View {
@@ -15,6 +16,8 @@ struct DeliveriesView: View {
                 isSignedIn: session.isSignedIn,
                 rows: rows,
                 historyUnavailable: store.historyUnavailable,
+                syncError: sync.lastError?.localizedDescription,
+                refresh: { await sync.syncNow() },
                 compose: compose
             )
                 .navigationTitle("Deliveries")
@@ -23,7 +26,10 @@ struct DeliveriesView: View {
                         OrderDetailView(order: order)
                     }
                 }
-                .task { await store.refresh() }
+                .task {
+                    await store.refresh()
+                    await sync.syncNow()
+                }
         }
     }
 
@@ -44,7 +50,10 @@ struct DeliveriesView: View {
 }
 
 #Preview {
+    let session = ClientController(tokenStore: TokenStore(service: "preview.YDelivery"))
+    let store = StoreController(orderStore: nil, placeStore: nil)
     DeliveriesView(compose: {})
-        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-        .environment(StoreController(orderStore: nil, placeStore: nil))
+        .environment(session)
+        .environment(store)
+        .environment(ClaimsSyncController(session: session, store: store, syncStore: nil))
 }

@@ -70,6 +70,50 @@ was checked and cannot receive webhooks — recorded so it is not re-litigated.
 **Rejected:** building the relay first. It gates nothing in phases 1–3 and adds an
 operational dependency before the app has users.
 
+## Claims sync: search for membership, journal for freshness (2026-09-23)
+
+The claims list is fed by both discovery operations, on purpose — neither alone is
+enough. `claims/journal` is a *change feed*: cheap delta polling for claims the
+device already knows, but it only reports claims that *changed* — it can never
+discover a claim created before the cursor existed, on another device, or by
+support, and its events carry no coordinates or routes. `claims/search` is a
+*snapshot query*: whole claim cards by state — it is what finds orders the app
+never recorded. So the division of labor is: **search reconciles membership**
+(`active` and `delayed` every pass — the claims that can still move — plus a
+one-time `finished` backfill so history predating the install arrives once), and
+**journal keeps known claims fresh** between reconciliations. The store stays the
+list's only source of truth: rows render what the device remembers, sync writes
+what the provider says.
+
+Mechanics that carry their reasons: the journal cursor persists *after* each page's
+events land — a crash mid-page replays, and replay is safe because every event sets
+an absolute state (status, price), never a diff. An `invalid_cursor` refusal means
+replay from the beginning, not an error shown to the sender. The cursor and the
+backfill flag live in one small App Group file beside the order store — wiped on
+sign-out, the same identity boundary as the wire log, so a new token never
+inherits the previous account's position. The poll lives in
+`ClaimsSyncController`, not a view: a map or detail pushed over the list must not
+freeze courier progress (CLAUDE.md rule 6). The wire's status zoo collapses into
+the sender's six states at the model boundary — statuses parked on the sender's
+decision (`ready_for_approval`, `performer_not_found`, `pay_waiting`, `returned`)
+read `attention`, never a raw wire word (YD-7, discharged).
+
+**Rejected alternatives:** journal-only sync (a change feed is not a membership
+database — the "loses orders" bug it was meant to fix); search-only polling
+(whole cards on every tick — the expensive version of what the journal does
+cheaply); and keeping the `return` point out of merged routes (this app *sends*
+its drop-off as `return`, so the wire's last stop is the sender's destination,
+not courier bookkeeping).
+
+**Deferred, on the record:** a *scheduled* full replay — paging `finished`
+repeatedly or replaying the journal from epoch — belongs to a maintenance task
+gated on favorable conditions (unmetered Wi-Fi, charging), which the platform can
+schedule via `BGProcessingTask` once the persistence stack settles (the
+Phase-2 research owns that seam). CloudKit silent notifications may later serve as
+a *cross-device wake-up* — one device syncs, a shared-zone change nudges the
+others — but they can only trigger our own reconcile; Yandex's webhooks cannot
+reach CloudKit, so provider→device push still waits on the relay above.
+
 ## iOS-only
 
 One platform until the product shape settles. The package supports macOS, and nothing in

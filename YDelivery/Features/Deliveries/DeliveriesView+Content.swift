@@ -27,16 +27,30 @@ extension DeliveriesView {
         /// nothing was sent. An unreadable store rendered as "No deliveries yet", which
         /// tells a sender with a year of orders that they have none (review, PR #22).
         var historyUnavailable: String? = nil
+        /// Why the rows may be stale — a sync failure renders beside history, never
+        /// instead of it: what the device remembers is still worth reading.
+        var syncError: String? = nil
+        /// The pull-to-refresh ask — the root forwards it to the sync engine.
+        var refresh: () async -> Void = {}
         let compose: () -> Void
 
         var body: some View {
             Group {
                 if !rows.isEmpty {
-                    List(rows) { row in
-                        NavigationLink(value: row.id) {
-                            OrderRow(row: row)
+                    List {
+                        ForEach(rows) { row in
+                            NavigationLink(value: row.id) {
+                                OrderRow(row: row)
+                            }
+                        }
+                        if let syncError {
+                            Text(syncError)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .listRowSeparator(.hidden)
                         }
                     }
+                    .refreshable { await refresh() }
                 } else if let historyUnavailable {
                     // Checked before the empty states: *could not look* is not *nothing
                     // there*, and only this branch knows the difference.

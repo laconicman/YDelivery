@@ -58,18 +58,23 @@ contributor should have to untangle — and the house precedent is XcodeGen
   defaults). The pbxproj and the generated scheme left version control; `xcodegen generate`
   recreates them after cloning or editing the spec.
 
-## YD-5 — An unresolved acceptance does not survive a restart — **open**
+## YD-5 — An unresolved acceptance does not survive a restart — **narrowed, still open**
 
 `acceptClaim` can time out or fail *after* the provider took it: the flow renders
 `Ordering.unresolved` with a read-only «Check again» (`reconcileUnresolved(watch:)`), but
 that state lives in the draft model only. Force-quit mid-reconcile and the app forgets a
 claim that may be spending money; the vendor remembers.
 
-- **Cost:** the one state where the app can lie by omission about money.
-- **Discharge:** persist the pending claim id and reconcile on launch — lands naturally
-  with Phase 3's journal (match by the `claimID` every order already carries) and the
-  store-stack decision (<doc:Roadmap> → the research). Until then the window is one
-  foregrounded flow wide.
+- **Cost, narrowed 2026-09-23:** Phase 3's claims sync made the forgotten claim
+  *findable* — `claims/search` discovers it on the next membership pass and the
+  journal keeps it fresh, so the omission now lasts minutes, not forever. What is
+  still open is the *immediate* reconcile: nothing remembers the pending claim id
+  between the timeout and the next search tick, so the row can sit stale for one
+  poll cycle.
+- **Discharge:** persist the pending claim id (a small pending-acceptance record in
+  the sync state or beside the order) and reconcile it on launch — now trivially
+  implementable on top of `ClaimsSyncController`, and folded into the store-stack
+  decision (<doc:Roadmap> → the research) if the schema lands first.
 
 ## YD-6 — Item rows do not show their journey — **discharged**
 
@@ -113,16 +118,20 @@ on `openapi.yaml`, 2026-09-18). The no-building warning added beside it catches 
   into `PickedPlace` would replace `lacksBuilding`'s last-token heuristic with a
   known fact (review, PR #30).
 
-## YD-7 — Post-draft statuses read as unknown — **open**
+## YD-7 — Post-draft statuses read as unknown — **discharged**
 
 `PlacedClaim.Progress` collapses exactly the statuses the ordering flow decides on;
 `pickuped`, `delivered`, `cancelled` and the rest of the zoo land in `.other(raw)` —
 honest, but dumb copy if ever surfaced.
 
-- **Cost:** any surface polling past acceptance (an unresolved reconcile that finds a
-  far-along claim) shows a raw wire word.
-- **Discharge:** the full wire→`OrderStatus` vocabulary that Phase 3's journal needs
-  anyway; `.other` then survives only for statuses Yandex invents later.
+- **The cost it carried:** any surface polling past acceptance showed a raw wire word.
+- **Discharged by:** `OrderStatus(claimStatus:)` in `Model/ClaimSync.swift` (2026-09-23)
+  — the full wire→`OrderStatus` vocabulary the claims list needed anyway: statuses
+  parked on the sender's decision (`ready_for_approval`, `performer_not_found`,
+  `pay_waiting`, `returned`) read `attention`, the courier's working states read
+  `active`, and nothing reaches a row as a raw word. `.other` survives only inside
+  `PlacedClaim.Progress`, where it still means "the draft's job is done" — the
+  flow's vocabulary, correctly narrower than history's.
 
 ## YD-8 — DMS coordinate strings are a documented parse gap — **open**
 

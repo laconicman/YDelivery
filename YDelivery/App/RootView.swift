@@ -74,7 +74,10 @@ struct RootView: View {
 }
 
 #Preview {
+    let session = ClientController(tokenStore: TokenStore(service: "preview.YDelivery"))
+    let store = StoreController(orderStore: nil, placeStore: nil)
     RootView()
-        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-        .environment(StoreController(orderStore: nil, placeStore: nil))
+        .environment(session)
+        .environment(store)
+        .environment(ClaimsSyncController(session: session, store: store, syncStore: nil))
 }

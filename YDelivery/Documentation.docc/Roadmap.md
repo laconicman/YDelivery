@@ -41,15 +41,17 @@ field stating its bound.
 
 ## Now — design Phase 3: while closed (boards `5a`–`5d`, `4b`)
 
-- **Journal sync first, package first:** `journal` and `search` operations do not exist in
-  `YandexDeliveryExpressAPI` 0.2.0 — spec + tests land there, tagged, before the app
-  feature (the demand is on the package Roadmap since 2026-09-02, beside `tariffs`). The
-  journal carries **no coordinates** (verified 2026-08-30, <doc:Vision>): status/price
-  events plus `current_point_id`, which is exactly enough for stop-granularity progress
-  on every closed-app surface. Phase 2 left the matching key ready — every recorded order
-  carries its `claimID` — and left the consumers waiting: the full status vocabulary
-  (YD-7), reconciling an `unresolved` acceptance on launch (YD-5), and history rows that
-  can finally move.
+- **Journal sync — landed (hybrid):** `journal` and `search` shipped in
+  `YandexDeliveryExpressAPI` 0.3.0 after live-wire verification. The app consumes the
+  pair as one engine (<doc:Design> → "Claims sync"): search reconciles membership —
+  `active`/`delayed` every pass, `finished` once ever — while the journal keeps known
+  claims fresh on a 30-second poll, cursor persisted per account. The feed carries
+  **no coordinates** (verified 2026-08-30, <doc:Vision>): status/price events plus
+  `current_point_id`, exactly enough for stop-granularity progress. What it already
+  discharged: the full status vocabulary (YD-7), history rows that move, discovered
+  claims becoming cancellable rows, and the unresolved-acceptance window (YD-5 — a
+  claim the flow lost track of is found by search on the next pass; the remaining
+  sliver is persisting the pending id for an *immediate* reconcile, now easy).
 - The `3e` history card with «Повторить»/«Наоборот» replaces the minimal list —
   `RouteLine`'s first consumer (handoff §6's last unbuilt component) — and the `3e`
   saved-place editor gives the bookmark's chips a management surface.
@@ -58,7 +60,10 @@ field stating its bound.
   creation, updated by polling — the push relay stays a Later item.
 - Two widgets (waiting · working), three App Intents, notification thread rules with
   parcel-photo attachments, share-in extension.
-- Local notifications + `BGAppRefreshTask` from journal events.
+- Local notifications + `BGAppRefreshTask` from journal events; a `BGProcessingTask`
+  full replay gated on unmetered Wi-Fi + charger; CloudKit silent notifications as a
+  cross-device wake-up once the shared-zone research lands — a trigger for our own
+  reconcile, not provider push (Yandex's webhooks cannot reach CloudKit, <doc:Design>).
 - When the package ships `tariffs`: swap the strip's and explainer's static bounds for
   live per-geo `supported_requirements`.
 

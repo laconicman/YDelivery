@@ -156,7 +156,9 @@ struct StoreControllerTests {
 
         #expect(merged.count == 2,
                 "recording a cancelled order over its searching self must not duplicate it (PR #32)")
-        #expect(merged.first?.status == .cancelled)
+        #expect(merged.first { $0.id == stale.id }?.status == .cancelled)
+        #expect(merged.first?.id == other.id,
+                "the newer order leads — the fallback sorts by `created` like the publish path")
         #expect(merged.filter { $0.id == stale.id }.count == 1)
     }
 
