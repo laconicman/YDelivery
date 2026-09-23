@@ -206,6 +206,23 @@ under load is a silent stall, not a refusal.
   not the 60 s default) alongside the page budgeting `maxPages` already gives each
   pass; revisit when sync moves onto the persistence substrate (<doc:Schema>).
 
+## YD-15 — `routeStops.role` is position-derived, not model-carried — **open**
+
+`AppDatabase.insertStops` writes `pickup` for index 0 and `dropoff` for the rest,
+because `Order.route` is bare `[RoutePoint]` — the app model carries no stop role,
+and placed-order construction discards the draft's roles before the store sees
+them (review, PR #38). Correct for every route the product can express today —
+one pickup, N dropoffs — but a future *return* leg (courier returns to origin)
+would persist as `dropoff`, indistinguishable from a delivery.
+
+- **Cost:** a return route would silently mislabel its last stop; provider-
+  discovered routes with a return point would likewise flatten. The schema column
+  exists — the write just can't fill it honestly yet.
+- **Discharge:** carry role on `RoutePoint` (or a route-stop value type) from the
+  draft through `Order` into `insertStops`, and map provider route kinds to the
+  same representation in claims discovery. Do it when the product gains return
+  routes — inventing the enum early only decorates a model nobody populates.
+
 ## See Also
 
 - <doc:Design>

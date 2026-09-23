@@ -275,9 +275,10 @@ nonisolated final class AppDatabase: Sendable {
 
     /// The stored state, defaulting to *start over*: absent and unreadable both read
     /// as a first sync — a corrupt cursor is not a credential, and replaying the feed
-    /// is the recovery, not the failure.
+    /// is the recovery, not the failure. The failure is logged, not silent.
     func readSyncState() -> SyncState {
         guard let db = try? queue else {
+            Self.logger.error("Sync-state read skipped — database unavailable")
             return SyncState(cursor: nil, historyBackfilled: false)
         }
         let state = try? db.read { db in
@@ -296,6 +297,9 @@ nonisolated final class AppDatabase: Sendable {
                 cursor: cursor,
                 historyBackfilled: backfilled == 1,
                 pendingClaimIDs: pending.isEmpty ? nil : pending)
+        }
+        if state == nil {
+            Self.logger.error("Sync-state read failed; replaying from the start")
         }
         return state ?? SyncState(cursor: nil, historyBackfilled: false)
     }
