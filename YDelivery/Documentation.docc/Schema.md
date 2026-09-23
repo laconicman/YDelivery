@@ -317,11 +317,13 @@ says they shouldn't, and `lastModifiedBy` preserves the audit trail if they do.
 **List ordering is derived, never written.** `lastActivityAt` marks provider-side
 activity and stays owner-written; participants can't touch it without breaking the
 authority matrix. But shared lists must still surface a participant's message — so the
-sort key is computed at read:
-`MAX(lastActivityAt, MAX(messages.sentAt), MAX(attachments.createdAt))` (Devin Review,
-PR #36 — a participant posting while the owner is offline would otherwise leave the
-order sorted stale until the owner's next write). Ordering is a presentation
-derivation, which needs no write authority at all.
+sort key is computed at read as the greatest of three candidate timestamps, each
+NULL-safe on its own: `MAX(lastActivityAt, COALESCE(MAX(m.sentAt), epoch),
+COALESCE(MAX(a.createdAt), epoch))`. SQLite's scalar `MAX` propagates NULL — an order
+with messages but no attachments would otherwise sort to NULL rather than its real
+latest activity (Devin Review, PR #36); coalescing each child aggregate to the epoch
+means "no such activity" simply never wins. Ordering is a presentation derivation,
+which needs no write authority at all.
 
 ## Freshness — the timestamps every surface needs
 
