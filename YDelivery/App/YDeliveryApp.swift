@@ -8,6 +8,9 @@ struct YDeliveryApp: App {
     @State private var session: ClientController
     @State private var store: StoreController
     @State private var sync: ClaimsSyncController
+    /// Owned by the composition root for the app's lifetime (rule 6) — a one-shot
+    /// start, retained so a future surface can observe or retry it.
+    @State private var syncTask: Task<Void, Never>?
 
     init() {
         let session = ClientController()
@@ -22,7 +25,7 @@ struct YDeliveryApp: App {
         session.onIdentityChange = { [weak sync] in sync?.resetIdentityState() }
         // CloudKit sync starts at launch, entitlement or not — `startSync` probes and
         // degrades to a logged, stored failure rather than a CKContainer trap.
-        if let database { Task { await database.startSync() } }
+        _syncTask = State(initialValue: Task { await database?.startSync() })
         _session = State(initialValue: session)
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
