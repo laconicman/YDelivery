@@ -57,8 +57,8 @@ Order ────────────────────────�
  │    (pickupStopRef, dropoffStopRef — values, NOT FKs)
  ├─ OrderProviderState orderID → Order (PK=FK)  1 FK ✓ shared, 1:1
  ├─ ProviderEvent      orderID → Order          1 FK ✓ shared
- ├─ OrderAnnotation    orderID → Order          1 FK ✓ shared
- ├─ OrderTag           orderID → Order          1 FK ✓ shared (provisional)
+ ├─ OrderMessage       orderID → Order          1 FK ✓ shared, append-only
+ │    (attachmentRef — value, NOT an FK)
  └─ OrderAttachment    orderID → Order          1 FK ✓ shared
       └─ AttachmentBlob attachmentID → (PK=FK)  1 FK ✓ shared transitively
 ```
@@ -133,12 +133,29 @@ Append-only; conflicts impossible by construction. `kind` + `at` + `providerStat
 `detail`? + `source` (`journal`/`search`/`claimCard`). This is the activity timeline the
 3e card reads, and what "members see each other's activity" means for provider truth.
 
-### `OrderAnnotation` — the collaborative feed (participant-writable)
+### `OrderMessage` — the chat, and the only participant-writable stream
 
-Notes, corrections, «the entrance is 3 not 2». Append-only, `at` + `kind` + `text` +
-`authorHint` (display name cached; CloudKit's `createdBy`/`lastModifiedBy` system fields
-carry the real attribution for free). This is the participant-writable counterpart to
-`ProviderEvent` — the write boundary expressed *in the schema*, not just in code review.
+Participant feedback is a **chat thread on the order**, not field edits (author's
+simplification, 2026-09-25, absorbing Devin's forgery finding on the first draft):
+sender, receiver, support, even the courier — whoever holds the share — post messages;
+nobody edits anything. Append-only is both the social contract and the design: there is
+no participant-writable history table, only a stream where every row has an author.
+
+| Column | Type | Note |
+|---|---|---|
+| `id` | UUID PK | |
+| `orderID` | UUID FK → `Order` | The one FK |
+| `sentAt` | Date | |
+| `kind` | TEXT | `text` · `photo` · `receptionConfirmed` — structured kinds render as human events («Ирина подтвердила получение»), never as provider status |
+| `text` | TEXT? | |
+| `attachmentRef` | UUID? | **Value** → `OrderAttachment.id` — a photo message carries its payload |
+| `authorHint` | TEXT? | Display name cache; `createdBy`/`lastModifiedBy` system fields carry the real attribution |
+
+`receptionConfirmed` is the deliberate shape of "the receiver marks it arrived": a
+human-authored event in the stream, **never** a write to provider state — the two are
+different truths and the UI says so («Ирина отметила: получено» alongside, not instead
+of, the provider's `delivered`). When the provider confirms delivery, `ProviderEvent`
+records it on its own authority.
 
 ### `OrderAttachment` + `AttachmentBlob` — parcel photos
 
@@ -149,12 +166,10 @@ guidance is exactly this split — keep megabytes out of the metadata row so lis
 never drag image data. Participants may add photos (a receiver documenting condition is
 the product story); blobs inherit the share transitively through the single-FK chain.
 
-### `OrderTag` — provisional
-
-`orderID` + `title`, deliberately denormalized per-order rather than a many-to-many join —
-the package's own refactor pattern, since join-table rows carry two FKs and can never be
-shared. Tag vocabulary dedup happens in queries. Provisional: included to pin the pattern
-before a real tagging feature leans on it.
+No `OrderTag` — the same one-FK arithmetic that forbids join tables would force a shared
+tag vocabulary to denormalize per-order (the package's own prescribed refactor), and the
+chat stream covers the collaborative need tags were standing in for. If a real tagging
+feature ever lands it starts private, not shared.
 
 ## The private tier — synced, never shared
 
@@ -187,6 +202,7 @@ relationship is needed inside the shared hierarchy, it is stored as a plain colu
 referenced key's type — no `REFERENCES` clause — named `*Ref` to mark it:
 
 - `OrderItem.pickupStopRef` / `dropoffStopRef` → `RouteStop.id` (an item's journey ends)
+- `OrderMessage.attachmentRef` → `OrderAttachment.id` (a photo message's payload)
 - `Order.providerAccountRef` → `ProviderAccount.key` (the root can't have FKs at all)
 
 The price is stated honestly: the database does not enforce these references. Integrity
@@ -202,26 +218,38 @@ moves.
 |---|---|---|
 | `Order`, `RouteStop`, `OrderItem` | Owner UI (order definition) | via share |
 | `OrderProviderState`, `ProviderEvent` | Owner sync only | via share |
-| `OrderAnnotation`, `OrderAttachment`, `OrderTag` | Any read-write participant | via share |
+| `OrderMessage`, `OrderAttachment` | Read-write participants — append-only | via share |
 | Private tier | Owner | never |
 | Device tier | This device | never |
 
-The provider-tables-are-owner-written rule is **convention, not constraint**: CloudKit
-permissions are per-record, so a read-write participant *can* technically write a mirror
-row. `sqlite-data` enforces read-only-ness locally (`SyncEngine.writePermissionError`),
-but field-level ACLs don't exist. The design accepts this because (a) the owner's next
-sync overwrites the mirror anyway, and (b) a participant without the provider credential
-cannot *source* an authoritative write — the mischief is self-limiting. The schema still
-separates the families so the rule is auditable at a glance.
+### The forgery boundary — the finding that reshaped the write surface
+
+CloudKit permissions are per-record: a read-write participant *can* technically write
+any row in the shared hierarchy, including the provider mirror — Devin Review flagged
+exactly this on the first draft (PR #36), and the author had the same concern
+independently. The original draft's "convention, not constraint" answer was honest but
+thin; the chat model is the real fix, and it works on three levels:
+
+1. **The writable surface shrank to append-only streams.** Messages and attachments are
+   rows a participant *adds*, never history they *edit* — a forged row here is just a
+   fake message, attributable through `createdBy`, legible as human chatter, and
+   worthless as provider impersonation because nothing in it can masquerade as a status.
+2. **Grant discipline does the rest.** The default share for a consumer is
+   **read-only** — locally enforced (`SyncEngine.writePermissionError`), no trust
+   required. Read-write is reserved for collaborators who actually post.
+3. **The owner remains the authority of last resort.** A forged mirror row lives only
+   until the owner's next sync overwrite; and since `CKRecord` system fields expose
+   `lastModifiedUserRecordID`, a later hardening pass can have reads distrust provider
+   rows the owner didn't write — noted as available, not yet designed.
 
 ## Conflict semantics
 
 `CKSyncEngine` merges at record-field granularity, last-writer-wins. The schema is shaped
-so that policy suffices: append-only tables (`ProviderEvent`, `OrderAnnotation`,
+so that policy suffices: append-only tables (`ProviderEvent`, `OrderMessage`,
 `OrderAttachment`) can't conflict; the mirror has one writer; the root's mutable surface
 is one denormalized `lastActivityAt`. The only true last-writer-wins exposure is
-participants editing each other's annotation/attachment metadata — acceptable, and
-`lastModifiedBy` preserves the audit trail.
+participants editing each other's message/attachment rows — the append-only convention
+says they shouldn't, and `lastModifiedBy` preserves the audit trail if they do.
 
 ## Freshness — the timestamps every surface needs
 
@@ -298,10 +326,12 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   this schema is shaped to permit.
 - **Draft persistence**: `Draft` is specified provisionally; whether parked drafts sync
   privately or stay device-local is a product call, not yet made.
-- **Read-only participants writing annotations**: today annotation write = read-write
-  grant. A "comment but don't edit" tier doesn't exist in CloudKit; if it is ever needed
-  it is app-enforced convention on top of read-write.
-- **Tag vocabulary normalization** if tags graduate from provisional.
+- **Read-only participants posting messages**: today message-posting = read-write
+  grant. A "comment but don't touch attachments" tier doesn't exist in CloudKit; if it
+  is ever needed it is app-enforced convention on top of read-write.
+- **Courier/support identities without iCloud accounts**: chat participants ride the
+  share, which rides iCloud — a courier who will never sign in to iCloud can still post
+  through the App Clip once CloudKit's share-acceptance path is verified there.
 
 ## See Also
 

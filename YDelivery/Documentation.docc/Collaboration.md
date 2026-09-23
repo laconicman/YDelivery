@@ -15,13 +15,13 @@ The architecture separates three kinds of truth, and the separation is the whole
 - **Local truth** — what a device persisted and can render offline: the order store, the
   sync cursor, the pending queue.
 - **Shared truth** — app-owned collaboration data: which orders are visible to whom,
-  photos, notes, annotations, activity. This layer contains *no provider authority*.
+  photos, and the per-order chat stream. This layer contains *no provider authority*.
 
 The consequence the author intuited ("we barely should rely on the same auth token") is
 that the token and the grant are independent axes: the Yandex token gates *provider
 operations*; CloudKit participation gates *app data*. A collaborator who never
-authenticated with Yandex can still legitimately read — and, where granted, annotate — a
-shared order.
+authenticated with Yandex can still legitimately read — and, where granted, post to — a
+shared order's stream.
 
 ## The grant mechanism is CKShare
 
@@ -31,7 +31,7 @@ private-sharing primitive, and its shape happens to match this product's needs c
 - **Two granularities.** A share wraps either an entire custom record zone, or a *record
   hierarchy rooted at one record* — children inferred **only** through each record's
   `parent` property, never through custom reference fields. For this app the natural root
-  is an `Order`; route points, attachments, and annotations hang below it. You share one
+  is an `Order`; route points, attachments, and the chat hang below it. You share one
   delivery, not a database.
 - **Private by construction.** `publicPermission = .none` makes the share invite-only:
   every participant needs an iCloud account, and a share caps at **100 participants**.
@@ -56,11 +56,17 @@ the sender's own second device — all the same mechanism.
 
 ## The write boundary
 
-Participants' write permission reaches **collaborative fields only** — attachments,
-notes, annotations, tags — never the provider-mirrored fields (`claimID`, status, price).
-Those are owner-written projections: the owner's device polls the journal, writes the
-new state into the shared record, and CloudKit propagates it. The schema must keep the
-two field families distinct, or a participant "edits" a status Yandex never heard about.
+Participants' writes reach **an append-only feedback stream, not fields** — the shared
+hierarchy exposes a per-order chat (`OrderMessage`: text, photos, structured kinds like
+`receptionConfirmed`) and attachment payloads; there is no participant-writable field
+surface to edit, which is the point. Provider-mirrored rows (`OrderProviderState`,
+`ProviderEvent`) are owner-written projections the owner's journal sync overwrites
+authoritatively — and since CloudKit permissions are per-record, a read-write
+participant *can* technically touch them, so the boundary holds by layering:
+read-only-by-default grants (locally enforced via `writePermissionError`), append-only
+writable surface, and owner-overwrite authority. The full accounting lives in
+<doc:Schema> → "The forgery boundary" — Devin Review caught the soft version of this
+claim on the first draft, and the author's own concern agreed.
 
 Because a participant's view of provider state is therefore a *relay* — fresh only as
 the owner's last sync — the product decision stands (author, 2026-09-24): **every shared
