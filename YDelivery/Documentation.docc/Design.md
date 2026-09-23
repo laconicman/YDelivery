@@ -95,10 +95,15 @@ the card. The cursor, the backfill flag, and the queue live in one small App Gro
 file beside the order store — wiped on the identity boundary, which is wired
 *synchronously*: `ClientController` fires a hook inside `signIn`/`signOut`
 themselves, because a 30-second poll cannot see a sign-out that ends before the
-next tick. Each feed keeps its own failure — a journal success never clears a
+next tick. A pass resumed across that boundary drops its writes — the identity
+generation is re-proved after every suspension and before every write, because a
+cleared file must not be repopulated by the old credential's late response.
+Each feed keeps its own failure — a journal success never clears a
 search refusal — and a search pass that runs out of pages with a live cursor
 reports `SyncIncomplete` rather than stamping `historyBackfilled` on partial
-membership (review, PR #35). The poll lives in
+membership (review, PR #35). The same page cap on the journal is *not* reported:
+its cursor already advanced past what it applied, so a truncated pass continues
+where it stopped on the next tick — self-healing, unlike search's reset. The poll lives in
 `ClaimsSyncController`, not a view: a map or detail pushed over the list must not
 freeze courier progress (CLAUDE.md rule 6). The wire's status zoo collapses into
 the sender's six states at the model boundary — statuses parked on the sender's

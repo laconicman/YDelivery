@@ -3,6 +3,11 @@ import Observation
 import YandexDeliveryExpressAPI
 import YDeliveryKit
 
+/// The marker a resumed pass throws when the identity generation moved under it —
+/// its writes are dropped at the guards and the catch is swallowed: abandonment
+/// by a newer identity is not a failure worth a footnote (review, PR #35).
+private struct SyncSuperseded: Error {}
+
 /// Keeps the claims list truthful — the hybrid sync of Phase 3 (Design → "Claims
 /// sync"). `claims/search` answers *what exists*: active and delayed claims every
 /// pass, finished history once ever. `claims/journal` answers *what changed*,
@@ -18,12 +23,20 @@ import YDeliveryKit
 @Observable @MainActor
 final class ClaimsSyncController {
     /// Each feed keeps its own failure — a journal success must not clear the
-    /// search error it knows nothing about (review, PR #35). The view reads the
-    /// union: whichever pass failed most recently is the staleness to show.
-    private var searchError: (any Error)?
-    private var journalError: (any Error)?
+    /// search error it knows nothing about (review, PR #35). Timestamps, not a
+    /// fixed union order, pick the view's line: an older refusal must not mask
+    /// the failure that happened last.
+    private var searchError: (error: any Error, at: Date)?
+    private var journalError: (error: any Error, at: Date)?
     /// The most recent sync failure — rendered beside history that may be stale.
-    var lastError: (any Error)? { searchError ?? journalError }
+    var lastError: (any Error)? {
+        switch (searchError, journalError) {
+        case let (search?, journal?): search.at > journal.at ? search.error : journal.error
+        case let (search?, nil): search.error
+        case let (nil, journal?): journal.error
+        case (nil, nil): nil
+        }
+    }
     /// When a pass last completed — either feed; the union error above carries
     /// the "but this half is stale" signal the timestamp alone cannot.
     private(set) var lastSyncedAt: Date?
@@ -32,11 +45,18 @@ final class ClaimsSyncController {
     private let session: ClientController
     private let store: StoreController
     private let syncStore: SyncStateStore?
-    /// The standing loop — a weak capture whose `if let` strengthens only for one
-    /// tick: a dead owner's task ends at the next hop, which is why no `deinit`
-    /// cancel is needed (the `logObservation` precedent).
-    private var loop: Task<Void, Never>?
+    /// The standing loop — owned, and cancelled in `deinit` per rule 6's
+    /// convention. `nonisolated` is what makes that possible (a `deinit` cannot
+    /// reach a MainActor member; `@ObservationIgnored` keeps the macro from
+    /// stamping it onto generated storage), and the weak capture is the second
+    /// belt: a dead owner's task ends at the next hop even if cancel doesn't.
+    @ObservationIgnored private nonisolated(unsafe) var loop: Task<Void, Never>?
     private var wasSignedIn = false
+    /// Bumped at every identity boundary. A pass captures it on entry and proves
+    /// it again before every write — a suspended pass holding the previous
+    /// credential resumes into a cleared file, and only the check keeps its
+    /// response from repopulating the old account's state (review, PR #35).
+    private var identityGeneration = 0
 
     /// The journal's poll cadence — cheap rows of what changed.
     private static let pollInterval: Duration = .seconds(30)
@@ -65,6 +85,8 @@ final class ClaimsSyncController {
         }
     }
 
+    deinit { loop?.cancel() }
+
     /// The visible-sync affordance — the list's appear and its pull-to-refresh ask
     /// for both halves: membership first (it discovers), then the delta catch-up.
     func syncNow() async {
@@ -82,10 +104,11 @@ final class ClaimsSyncController {
         guard session.isSignedIn, !isSyncing else { return }
         isSyncing = true
         defer { isSyncing = false }
+        let identity = identityGeneration
         await store.refresh()
         do {
-            try await drainPendingDiscovery()
-            try await journalPasses(from: syncStore?.read().cursor)
+            try await drainPendingDiscovery(identity: identity)
+            try await journalPasses(from: syncStore?.read().cursor, identity: identity)
             lastSyncedAt = .now
             journalError = nil
         } catch is JournalCursorInvalid {
@@ -94,17 +117,21 @@ final class ClaimsSyncController {
             // so the wipe that clears *them* belongs to the identity boundary.
             if var state = syncStore?.read() {
                 state.cursor = nil
-                try? syncStore?.write(state)
+                try? writeSyncState(state, identity: identity)
             }
             do {
-                try await journalPasses(from: nil)
+                try await journalPasses(from: nil, identity: identity)
                 lastSyncedAt = .now
                 journalError = nil
+            } catch is SyncSuperseded {
             } catch {
-                journalError = error
+                journalError = (error, .now)
             }
+        } catch is SyncSuperseded {
+            // The identity moved mid-pass — its writes were dropped at the
+            // guards, and the new account's own passes start fresh.
         } catch {
-            journalError = error
+            journalError = (error, .now)
         }
     }
 
@@ -117,6 +144,7 @@ final class ClaimsSyncController {
         guard session.isSignedIn, !isSyncing else { return }
         isSyncing = true
         defer { isSyncing = false }
+        let identity = identityGeneration
         await store.refresh()
         do {
             var state = syncStore?.read() ?? .init(cursor: nil, historyBackfilled: false)
@@ -127,7 +155,8 @@ final class ClaimsSyncController {
                 var cursor: String?
                 for _ in 0..<Self.maxPages {
                     let page = try await session.searchPage(state: searchState, cursor: cursor)
-                    try await persistChanged(ClaimsSync.merging(page.claims, into: store.orders))
+                    try await persistChanged(ClaimsSync.merging(page.claims, into: store.orders),
+                                             identity: identity)
                     cursor = page.cursor
                     if cursor == nil { break }
                 }
@@ -139,27 +168,28 @@ final class ClaimsSyncController {
                     truncated = true
                 } else if searchState == .finished {
                     state.historyBackfilled = true
-                    try syncStore?.write(state)
+                    try writeSyncState(state, identity: identity)
                 }
             }
             if truncated { throw SyncIncomplete() }
             lastSyncedAt = .now
             searchError = nil
+        } catch is SyncSuperseded {
         } catch {
-            searchError = error
+            searchError = (error, .now)
         }
     }
 
     /// Page after page of the feed, applying then persisting — the cursor's write
     /// follows the page's events, never precedes them.
-    private func journalPasses(from start: String?) async throws {
+    private func journalPasses(from start: String?, identity: Int) async throws {
         var cursor = start
         for _ in 0..<Self.maxPages {
             let page = try await session.journalPage(cursor: cursor)
-            try await applyJournal(page.events)
+            try await applyJournal(page.events, identity: identity)
             if var state = syncStore?.read() {
                 state.cursor = page.cursor
-                try syncStore?.write(state)
+                try writeSyncState(state, identity: identity)
             }
             cursor = page.cursor
             if page.events.isEmpty { break }
@@ -171,7 +201,8 @@ final class ClaimsSyncController {
     /// not spoil the page — but it is *not* forgotten: the cursor advances past
     /// these events, so the claim joins the persisted pending queue the next
     /// pass drains (review, PR #35).
-    private func applyJournal(_ events: [Components.Schemas.JournalEvent]) async throws {
+    private func applyJournal(_ events: [Components.Schemas.JournalEvent],
+                              identity: Int) async throws {
         var orders = store.orders
         for event in events {
             orders = ClaimsSync.applying(event, to: orders)
@@ -186,10 +217,10 @@ final class ClaimsSyncController {
             }
         }
         orders = ClaimsSync.merging(discovered, into: orders)
-        try await persistChanged(orders)
+        try await persistChanged(orders, identity: identity)
         if !missed.isEmpty, var state = syncStore?.read() {
             state.pendingClaimIDs = Array(Set(state.pendingClaimIDs ?? []).union(missed)).sorted()
-            try syncStore?.write(state)
+            try writeSyncState(state, identity: identity)
         }
     }
 
@@ -197,7 +228,7 @@ final class ClaimsSyncController {
     /// pending queue is the only memory of them once the feed moved on. Entries
     /// resolved by any pass (this drain or a search) drop out; entries still
     /// refusing stay for the next tick.
-    private func drainPendingDiscovery() async throws {
+    private func drainPendingDiscovery(identity: Int) async throws {
         guard let syncStore else { return }
         var state = syncStore.read()
         let pending = state.pendingClaimIDs ?? []
@@ -205,7 +236,7 @@ final class ClaimsSyncController {
         guard !unknown.isEmpty else {
             if !pending.isEmpty {
                 state.pendingClaimIDs = []
-                try? syncStore.write(state)
+                try? writeSyncState(state, identity: identity)
             }
             return
         }
@@ -218,17 +249,29 @@ final class ClaimsSyncController {
                 stillPending.append(id)
             }
         }
-        try await persistChanged(ClaimsSync.merging(discovered, into: store.orders))
+        try await persistChanged(ClaimsSync.merging(discovered, into: store.orders),
+                                 identity: identity)
         state.pendingClaimIDs = stillPending
-        try syncStore.write(state)
+        try writeSyncState(state, identity: identity)
     }
 
     /// Writes the rows a merge actually changed — never re-persisting untouched
-    /// history, so a no-op page writes nothing.
-    private func persistChanged(_ merged: [Order]) async throws {
+    /// history, so a no-op page writes nothing. Each write re-proves the identity:
+    /// a switch mid-loop must not let the old account's rows into the file.
+    private func persistChanged(_ merged: [Order], identity: Int) async throws {
         for order in merged where store.orders.first(where: { $0.id == order.id }) != order {
+            guard identity == identityGeneration else { throw SyncSuperseded() }
             try await store.record(order)
         }
+    }
+
+    /// The state file's only write path inside a pass: the identity is proved
+    /// *after* every suspension and *before* the bytes land, because a cleared
+    /// file must not be resurrected by a response the old credential fetched
+    /// (review, PR #35).
+    private func writeSyncState(_ state: SyncStateStore.State, identity: Int) throws {
+        guard identity == identityGeneration else { throw SyncSuperseded() }
+        try syncStore?.write(state)
     }
 
     /// Everything bound to one account's identity, forgotten at the boundary —
@@ -237,10 +280,15 @@ final class ClaimsSyncController {
     /// cannot see (a sign-out *and* a sign-in inside one interval, review PR #35).
     /// The tick's own edge calls it too, as the fallback when the hook is unwired.
     func resetIdentityState() {
+        identityGeneration += 1
         syncStore?.clear()
         searchError = nil
         journalError = nil
         lastSyncedAt = nil
+        // The next tick must see this as a fresh sign-in — an out-and-in inside
+        // one interval would otherwise keep `wasSignedIn` true and wait ~10
+        // minutes for the reconcile tick to run search (review, PR #35).
+        wasSignedIn = false
     }
 
     /// One standing-loop iteration — signed-in ticks sync, signed-out ticks idle.
