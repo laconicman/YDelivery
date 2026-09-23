@@ -131,7 +131,9 @@ pace with Point-Free's uncommon abstractions — is real and priced into the spi
 ### What the upstream pass verified (2026-09-25)
 
 The open-verifications checklist below is now mostly closed, by a compile spike against
-`sqlite-data` 1.12.0 (MIT, actively maintained, iOS 16 floor — under our iOS 17):
+`sqlite-data` 1.12.0 (MIT, actively maintained, iOS 16 floor — under our iOS 17). The
+spike's package and source are preserved in-repo at <doc:Spike> — the claims below are
+reproducible, not remembered:
 
 - **`Data` → `CKAsset` is automatic.** Every BLOB column becomes a `CKAsset` on the
   wire; the package's own guidance is to keep megabyte payloads in a dedicated table
@@ -190,6 +192,7 @@ a device, a second credential, or both:
 ## See Also
 
 - <doc:Schema> — the relational design this research produced
+- <doc:Spike> — the preserved compile spike behind the verified claims
 - <doc:Design> — the reopened persistence decision this research feeds
 - <doc:Roadmap> — the spike this research endorses
 - <doc:Vision> — where collaboration sits in the capability map

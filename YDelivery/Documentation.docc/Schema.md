@@ -56,6 +56,7 @@ Order ────────────────────────�
  ├─ OrderItem          orderID → Order          1 FK ✓ shared
  │    (pickupStopRef, dropoffStopRef — values, NOT FKs)
  ├─ OrderProviderState orderID → Order (PK=FK)  1 FK ✓ shared, 1:1
+ ├─ OrderOptions       orderID → Order (PK=FK)  1 FK ✓ shared, 1:1
  ├─ ProviderEvent      orderID → Order          1 FK ✓ shared
  ├─ OrderMessage       orderID → Order          1 FK ✓ shared, append-only
  │    (attachmentRef — value, NOT an FK)
@@ -127,11 +128,39 @@ is lossy; both forms are kept, as `RoutePoint` already does).
 | `sizeLengthCm`, `sizeWidthCm`, `sizeHeightCm` | Double? | Atomic — the UI's centimetres, conversion at the controller boundary |
 | `pickupStopRef`, `dropoffStopRef` | UUID? | **Values, not FKs** — see the `*Ref` convention. Nil reads as the route's ends |
 
+### `OrderOptions` — how the run should go (1:1)
+
+Every repeatable `DeliveryOptions` field, owner-written like the rest of the order's
+definition (Devin Review caught their absence, PR #36 — repeat silently dropped loaders
+and courier instructions without this row). PK is the FK again: one order, one options
+row.
+
+| Column | Type | Note |
+|---|---|---|
+| `orderID` | UUID PK + FK → `Order` | |
+| `proCourier` | Bool | «Профи» — experienced couriers only |
+| `toDoor` | Bool | Door-to-door; the wire speaks its negation |
+| `thermobag` | Bool | Courier-class only |
+| `loaders` | Int | Cargo-class only, 0–2 |
+| `due` | Date? | Requested pickup time; nil = ASAP. The *request* — the mirror's `dueAt` is what the provider echoed; usually equal, legitimately different |
+| `comment` | TEXT | Free text the courier reads — shared deliberately: a collaborator covering the door needs it |
+
+All order-level, matching the app's model: loaders ride the whole run, not a stop.
+Per-stop data that does exist — contacts, address parts — lives on `RouteStop`. If the
+wire ever offers per-point options they become `RouteStop` columns, not this row.
+
 ### `ProviderEvent` — the history feed (owner-written)
 
-Append-only; conflicts impossible by construction. `kind` + `at` + `providerStatus` +
-`detail`? + `source` (`journal`/`search`/`claimCard`). This is the activity timeline the
-3e card reads, and what "members see each other's activity" means for provider truth.
+Append-only; conflicts impossible by construction. Columns: `id` UUID PK, `orderID` FK,
+`providerEventID` INTEGER? — the journal's own `operation_id`, monotonic and unique per
+order. Replaying a journal page re-inserts by `INSERT OR IGNORE` on
+`(orderID, providerEventID)`, so retries can't duplicate the timeline (a review finding
+worth absorbing now, before implementation: journal pagination makes replays routine,
+not rare). Events synthesized from search/claim-card sightings carry no provider id —
+they dedup on `(orderID, providerStatus, source)` and their `at` is the *sighting* time,
+not an event time. Plus `at`, `kind`, `providerStatus`, `detail`?, `source`
+(`journal`/`search`/`claimCard`). This is the activity timeline the 3e card reads, and
+what "members see each other's activity" means for provider truth.
 
 ### `OrderMessage` — the chat, and the only participant-writable stream
 
@@ -189,7 +218,8 @@ account transfer is a re-key, not a migration.
 | Table | Key | Columns of note |
 |---|---|---|
 | `SyncState` | `providerAccountRef` TEXT PK | `journalCursor`, `historyBackfilled`, plus attempt bookkeeping — the journal cursor is per-device by correctness: two devices sharing one cursor would consume each other's events, while the *results* (order rows) already converge through CloudKit |
-| `PendingAcceptance` | `id` UUID PK | `providerAccountRef`, `claimID?`, `orderRef`?, `createdAt`, `lastCheckedAt`, `state` — the durable home for YD-5's unresolved acceptance: we POSTed, the answer was lost, the claim may exist provider-side; reconciled on launch against `claims/search` |
+| `PendingDiscovery` | `(providerAccountRef, claimID)` composite PK | The discovery-retry queue — a feed reported a claim whose card fetch failed; retried until the card lands. Today's `pendingClaimIDs` migrates here. Distinct from acceptance: this device saw the claim exists, it never tried to create it |
+| `PendingAcceptance` | `id` UUID PK | `providerAccountRef`, `claimID?`, `orderRef`?, `createdAt`, `lastCheckedAt`, `state` — the durable home for YD-5's unresolved *acceptance*: we POSTed, the answer was lost, the claim may exist provider-side; reconciled on launch against `claims/search`. Today's store holds no such attempts — it starts empty, which is precisely the gap YD-5 names |
 | `Draft` | `id` UUID PK | Provisional — an un-placed order has no provider existence, so it is *not* an `Order` row. Children (`DraftStop`, `DraftItem`) mirror the shared shape so promoting a draft to an order is a mechanical copy |
 
 The wire log stays a **file**, not a table: it is PII-bearing diagnostic output (YD-12)
@@ -216,7 +246,7 @@ moves.
 
 | Table | Writer | Participant read |
 |---|---|---|
-| `Order`, `RouteStop`, `OrderItem` | Owner UI (order definition) | via share |
+| `Order`, `RouteStop`, `OrderItem`, `OrderOptions` | Owner UI (order definition) | via share |
 | `OrderProviderState`, `ProviderEvent` | Owner sync only | via share |
 | `OrderMessage`, `OrderAttachment` | Read-write participants — append-only | via share |
 | Private tier | Owner | never |
@@ -267,8 +297,10 @@ stack:
    `price`, `currency`, `tariff`; `providerObservedAt` = file's last-write time as the
    best honest guess, `mirroredAt` = migration time). Legacy rows lack items/options —
    the columns are nullable, and the 3e card renders their absence honestly.
-2. `sync-state.json` → `SyncState` row + `PendingAcceptance` rows for the pending queue.
-3. `saved-places.json` → `SavedPlace` rows.
+2. `claims-sync.json` → `SyncState` row + `PendingDiscovery` rows from
+   `pendingClaimIDs` — the discovery-retry queue, not acceptance attempts;
+   `PendingAcceptance` has nothing to migrate yet.
+3. `places.json` → `SavedPlace` rows.
 4. Each source file is renamed `*.migrated-<timestamp>.json` **in place** after a verified
    import — kept, not deleted. A failed import leaves the file untouched and re-runs;
    inserts are `INSERT OR IGNORE` by PK so re-running a partial migration is safe.
@@ -300,7 +332,7 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   atomic unit, and account removal is a scoped delete inside the same boundary. The
   race dies structurally — there is no suspension point between check and write.
 - **The 3e history card**: `finishedAt`, `providerDetail` (refusal reasons), items,
-  options-bearing stops, and the event feed are all present — the card reads, it does
+  `OrderOptions`, and the event feed are all present — the card reads, it does
   not stretch the schema.
 - **«Повторить» / «Наоборот»**: an order now carries everything a repeat refills —
   stops with contacts and address parts, items with sizes and values, tariff.
