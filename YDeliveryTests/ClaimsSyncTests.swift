@@ -1,4 +1,5 @@
 import Foundation
+import OpenAPIRuntime
 import Testing
 import YandexDeliveryExpressAPI
 import YDeliveryKit
@@ -199,6 +200,25 @@ struct ClaimsSyncTests {
         #expect(ClaimsSync.missingClaimIDs(in: events, among: orders) == ["claim-9", "claim-7"])
     }
 
+    // MARK: Journal replay — every event sets an absolute state
+
+    @Test("Replaying an event is a no-op — the cursor's crash window is safe")
+    func eventReplayIsIdempotent() {
+        let orders = [order(claimID: "claim-1", status: .active)]
+        let once = ClaimsSync.applying(event(newStatus: .delivered), to: orders)
+        let twice = ClaimsSync.applying(event(newStatus: .delivered), to: once)
+        #expect(twice == once)
+        #expect(twice[0].status == .done)
+    }
+
+    @Test("An out-of-order event wins by arrival — absolute state, pinned")
+    func eventOrderIsLastWriterWins() {
+        let orders = [order(claimID: "claim-1", status: .done)]
+        let stale = ClaimsSync.applying(event(newStatus: .pickuped), to: orders)
+        #expect(stale[0].status == .active,
+                "the last arrival wins — no version guard; ordered dedup is the event feed's job in the new schema")
+    }
+
     // MARK: Search merge
 
     @Test("A searched claim updates in place — same local id, fresh wire truth")
@@ -234,7 +254,133 @@ struct ClaimsSyncTests {
         #expect(merged.contains { $0.id == draft.id && $0.status == .draft })
     }
 
+    // MARK: Merge identity — the concurrent-discovery lesson (review, PR #36)
+
+    @Test("Re-merging a discovered claim keeps its row and id — rediscovery is not re-creation")
+    func mergeIsIdempotentOnRediscovery() {
+        let discovered = ClaimsSync.merging([claim(id: "claim-9", status: .new)], into: [])
+        let rediscovered = ClaimsSync.merging([claim(id: "claim-9", status: .delivered)], into: discovered)
+
+        #expect(rediscovered.count == 1, "the provider's claimID joins — never a second row")
+        #expect(rediscovered[0].id == discovered[0].id,
+                "the local id is adopted, never re-minted — the same rule the shared schema derives deterministically")
+        #expect(rediscovered[0].status == .done)
+    }
+
+    @Test("The same claim twice in one feed page is still one row")
+    func mergeDeduplicatesWithinBatch() {
+        let merged = ClaimsSync.merging(
+            [claim(id: "claim-9", status: .new), claim(id: "claim-9", status: .performerFound)],
+            into: []
+        )
+        #expect(merged.count == 1)
+        #expect(merged[0].status == .active, "the later card wins")
+    }
+
+    @Test("A thin card still becomes a row — no route, no price, no crash")
+    func thinClaimBecomesOrder() {
+        let thin = Components.Schemas.ClaimResponse(
+            createdTs: Date(timeIntervalSince1970: 1_790_000_000),
+            id: "claim-thin",
+            items: [],
+            revision: 1,
+            routePoints: [],
+            status: .new,
+            updatedTs: Date(timeIntervalSince1970: 1_790_000_000),
+            userRequestRevision: "r1",
+            version: 1
+        )
+        let order = Order(claim: thin, adoptingID: UUID())
+        #expect(order.route.isEmpty, "a card without stops is a row without a route, not a failure")
+        #expect(order.price == nil)
+        #expect(order.status == .searching)
+    }
+
+    // MARK: Wire refusals — the response mappers behind the engine
+
+    @Test("invalid_cursor is the replay signal, not a refusal the list renders")
+    func invalidCursorUnwraps() {
+        let refusal = Operations.GetClaimsJournal.Output.badRequest(
+            .init(body: .json(.init(code: "invalid_cursor", message: "cursor expired")))
+        )
+        #expect(throws: JournalCursorInvalid.self) {
+            _ = try ClientController.journalPage(from: refusal)
+        }
+    }
+
+    @Test("Other journal refusals keep the provider's words")
+    func journalRefusalKeepsWords() {
+        let refusal = Operations.GetClaimsJournal.Output.badRequest(
+            .init(body: .json(.init(code: "parse_error", message: "Проверьте корректность")))
+        )
+        do {
+            _ = try ClientController.journalPage(from: refusal)
+            Issue.record("a refusal must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.errorDescription == "Проверьте корректность")
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
+    }
+
+    @Test("An undocumented journal status keeps its code")
+    func journalUndocumentedKeepsCode() {
+        let output = Operations.GetClaimsJournal.Output.undocumented(statusCode: 502, .init())
+        do {
+            _ = try ClientController.journalPage(from: output)
+            Issue.record("an undocumented status must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.status == 502)
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
+    }
+
+    @Test("Search refusals keep the provider's words")
+    func searchRefusalKeepsWords() {
+        let refusal = Operations.SearchClaims.Output.badRequest(
+            .init(body: .json(.init(code: "parse_error", message: "bad json")))
+        )
+        do {
+            _ = try ClientController.searchPage(from: refusal)
+            Issue.record("a refusal must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.errorDescription == "bad json")
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
+    }
+
+    @Test("An undocumented search status keeps its code")
+    func searchUndocumentedKeepsCode() {
+        let output = Operations.SearchClaims.Output.undocumented(statusCode: 502, .init())
+        do {
+            _ = try ClientController.searchPage(from: output)
+            Issue.record("an undocumented status must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.status == 502)
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
+    }
+
     // MARK: Sync state
+
+    @Test("The state file keeps its contract name — migration maps claims-sync.json, nothing else")
+    func syncStateFilenameIsTheContract() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = SyncStateStore(directory: directory)
+
+        try store.write(.init(cursor: "c", historyBackfilled: false))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("claims-sync.json").path
+            ),
+            "the migration contract names this file literally — a rename here breaks it"
+        )
+    }
 
     @Test("The cursor and the backfill flag round-trip together")
     func syncStateRoundTrips() throws {
