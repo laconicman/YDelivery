@@ -237,7 +237,10 @@ referenced key's type — no `REFERENCES` clause — named `*Ref` to mark it:
 
 The price is stated honestly: the database does not enforce these references. Integrity
 moves to the write boundary — the controller validates a `stopRef` against the order's
-stops at write time, and dangling refs read as "unknown" rather than crashing. This is
+stops at write time, and an `attachmentRef` against the *same order's* attachments at
+message-post time (the reference is by id alone, so "same order" is a rule the writer
+checks, not a join the reader trusts). Dangling refs read as "unknown" rather than
+crashing. This is
 the same trade the package prescribes for many-to-many (denormalize rather than join),
 extended to intra-hierarchy references. Queries still join by value — only enforcement
 moves.
@@ -271,6 +274,14 @@ thin; the chat model is the real fix, and it works on three levels:
    until the owner's next sync overwrite; and since `CKRecord` system fields expose
    `lastModifiedUserRecordID`, a later hardening pass can have reads distrust provider
    rows the owner didn't write — noted as available, not yet designed.
+
+One residual the layers don't remove, stated plainly: within the read-write set,
+"append-only" is convention too — record-level permissions cannot distinguish "add a
+row" from "edit a row", so a collaborator *can* rewrite an existing message. The
+mitigation is audit, not enforcement: `lastModifiedUserRecordID` exposes who touched
+what, and an owner who sees history rewritten has a social and administrative answer
+(remove the participant), not a technical one. Shared editing trust is granted per
+participant; the audit trail is what makes that grant accountable.
 
 ## Conflict semantics
 
@@ -361,9 +372,12 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
 - **Read-only participants posting messages**: today message-posting = read-write
   grant. A "comment but don't touch attachments" tier doesn't exist in CloudKit; if it
   is ever needed it is app-enforced convention on top of read-write.
-- **Courier/support identities without iCloud accounts**: chat participants ride the
-  share, which rides iCloud — a courier who will never sign in to iCloud can still post
-  through the App Clip once CloudKit's share-acceptance path is verified there.
+- **Accountless couriers and support staff**: out of this design's reach — a private
+  `CKShare` requires an iCloud account per participant, and an App Clip changes the
+  install experience, not the identity requirement (Devin Review, second round — an
+  earlier draft of this section promised otherwise and was wrong). If accountless
+  identities ever become a requirement, the answer is a separate authenticated relay,
+  not CloudKit — a different feature, not a flag on this one.
 
 ## See Also
 
