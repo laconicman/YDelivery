@@ -14,6 +14,12 @@ nonisolated struct SyncStateStore: Sendable {
         /// membership pass that discovers claims predating the cursor. The flag,
         /// not a timestamp, is what survives.
         var historyBackfilled: Bool
+        /// Claims the journal reported but whose card fetch failed — the cursor
+        /// moved past their events, so this queue is the only memory of them
+        /// until a retry or a search pass lands the card (review, PR #35).
+        /// A missing key on an older file reads as the same thing an empty
+        /// queue does: nothing owed.
+        var pendingClaimIDs: [String]? = nil
     }
 
     private let fileURL: URL

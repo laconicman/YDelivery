@@ -12,9 +12,14 @@ struct YDeliveryApp: App {
     init() {
         let session = ClientController()
         let store = StoreController()
+        let sync = ClaimsSyncController(session: session, store: store)
+        // The identity boundary, wired at composition: a sign-out + sign-in inside
+        // one poll interval is invisible to sampling — the hook fires inside the
+        // transition itself (review, PR #35).
+        session.onIdentityChange = { [weak sync] in sync?.resetIdentityState() }
         _session = State(initialValue: session)
         _store = State(initialValue: store)
-        _sync = State(initialValue: ClaimsSyncController(session: session, store: store))
+        _sync = State(initialValue: sync)
     }
 
     var body: some Scene {

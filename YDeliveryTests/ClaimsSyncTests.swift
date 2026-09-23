@@ -246,8 +246,11 @@ struct ClaimsSyncTests {
         #expect(store.read() == .init(cursor: nil, historyBackfilled: false),
                 "absent reads as first sync, never a crash")
 
-        try store.write(.init(cursor: "eyJ-opaque", historyBackfilled: true))
-        #expect(store.read() == .init(cursor: "eyJ-opaque", historyBackfilled: true))
+        try store.write(.init(cursor: "eyJ-opaque", historyBackfilled: true,
+                             pendingClaimIDs: ["claim-missed"]))
+        #expect(store.read() == .init(cursor: "eyJ-opaque", historyBackfilled: true,
+                                    pendingClaimIDs: ["claim-missed"]),
+                "the pending queue travels with the cursor — the only memory of failed card fetches")
 
         store.clear()
         #expect(store.read() == .init(cursor: nil, historyBackfilled: false),

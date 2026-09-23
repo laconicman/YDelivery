@@ -59,17 +59,28 @@ extension DeliveriesView {
                     } description: {
                         Text(historyUnavailable)
                     }
-                } else if isSignedIn {
-                    ContentUnavailableView {
-                        Label("No deliveries yet", systemSymbol: .shippingbox)
-                    } description: {
-                        Text("Orders you create will appear here, and stay here.")
-                    }
-                } else {
+                } else if !isSignedIn {
                     ContentUnavailableView {
                         Label("Sign in to start", systemSymbol: .key)
                     } description: {
                         Text("Add your Yandex Delivery OAuth token in Settings.")
+                    }
+                } else if let syncError {
+                    // The wire version of the branch above: a failed first sync on an
+                    // empty store must not wear the "No deliveries yet" face — *could
+                    // not check* is not *nothing there* (review, PR #35).
+                    ContentUnavailableView {
+                        Label("Deliveries can't be checked", systemSymbol: .exclamationmarkTriangle)
+                    } description: {
+                        Text(syncError)
+                    } actions: {
+                        Button("Try again") { Task { await refresh() } }
+                    }
+                } else {
+                    ContentUnavailableView {
+                        Label("No deliveries yet", systemSymbol: .shippingbox)
+                    } description: {
+                        Text("Orders you create will appear here, and stay here.")
                     }
                 }
             }
@@ -153,6 +164,15 @@ extension DeliveriesView.Content {
 
 #Preview("Signed in, empty") {
     DeliveriesView.Content(isSignedIn: true, rows: [], compose: {})
+}
+
+#Preview("Sync failed, empty") {
+    DeliveriesView.Content(
+        isSignedIn: true,
+        rows: [],
+        syncError: "The provider could not be reached.",
+        compose: {}
+    )
 }
 
 #Preview("Signed out") {

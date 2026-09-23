@@ -17,10 +17,15 @@ import YDeliveryKit
 /// is a state to show, never a crash.
 @Observable @MainActor
 final class ClaimsSyncController {
-    /// The most recent sync failure — rendered beside history that may be stale,
-    /// cleared by the next pass that lands.
-    private(set) var lastError: (any Error)?
-    /// When a pass last completed — the list's "fresh as of" answer.
+    /// Each feed keeps its own failure — a journal success must not clear the
+    /// search error it knows nothing about (review, PR #35). The view reads the
+    /// union: whichever pass failed most recently is the staleness to show.
+    private var searchError: (any Error)?
+    private var journalError: (any Error)?
+    /// The most recent sync failure — rendered beside history that may be stale.
+    var lastError: (any Error)? { searchError ?? journalError }
+    /// When a pass last completed — either feed; the union error above carries
+    /// the "but this half is stale" signal the timestamp alone cannot.
     private(set) var lastSyncedAt: Date?
     private(set) var isSyncing = false
 
@@ -79,23 +84,27 @@ final class ClaimsSyncController {
         defer { isSyncing = false }
         await store.refresh()
         do {
+            try await drainPendingDiscovery()
             try await journalPasses(from: syncStore?.read().cursor)
             lastSyncedAt = .now
-            lastError = nil
+            journalError = nil
         } catch is JournalCursorInvalid {
-            // The position rotted or belonged to another account — the feed
-            // replays from the start and events are absolute, so the retry costs
-            // requests, not truth.
-            syncStore?.clear()
+            // The position rotted — restart it and nothing else: the pending
+            // queue and the backfill flag are the account's, not the cursor's,
+            // so the wipe that clears *them* belongs to the identity boundary.
+            if var state = syncStore?.read() {
+                state.cursor = nil
+                try? syncStore?.write(state)
+            }
             do {
                 try await journalPasses(from: nil)
                 lastSyncedAt = .now
-                lastError = nil
+                journalError = nil
             } catch {
-                lastError = error
+                journalError = error
             }
         } catch {
-            lastError = error
+            journalError = error
         }
     }
 
@@ -113,6 +122,7 @@ final class ClaimsSyncController {
             var state = syncStore?.read() ?? .init(cursor: nil, historyBackfilled: false)
             var states: [Components.Schemas.SearchClaimState] = [.active, .delayed]
             if !state.historyBackfilled { states.append(.finished) }
+            var truncated = false
             for searchState in states {
                 var cursor: String?
                 for _ in 0..<Self.maxPages {
@@ -121,15 +131,22 @@ final class ClaimsSyncController {
                     cursor = page.cursor
                     if cursor == nil { break }
                 }
-                if searchState == .finished {
+                // A live cursor after the last page means membership beyond the
+                // cap — real claims the pass never reached. `finished` above all
+                // must not stamp its flag: backfilled means *all of it*, and a
+                // truncated pass is not all of it (review, PR #35).
+                if cursor != nil {
+                    truncated = true
+                } else if searchState == .finished {
                     state.historyBackfilled = true
                     try syncStore?.write(state)
                 }
             }
+            if truncated { throw SyncIncomplete() }
             lastSyncedAt = .now
-            lastError = nil
+            searchError = nil
         } catch {
-            lastError = error
+            searchError = error
         }
     }
 
@@ -150,22 +167,60 @@ final class ClaimsSyncController {
     }
 
     /// One page of events: statuses and prices onto known claims, then the
-    /// feed-discovered cards merged in. A card that refuses to be fetched skips
-    /// the claim — the next event or tick asks again; one bad apple must not spoil
-    /// the page's other updates.
+    /// feed-discovered cards merged in. A card that refuses to be fetched does
+    /// not spoil the page — but it is *not* forgotten: the cursor advances past
+    /// these events, so the claim joins the persisted pending queue the next
+    /// pass drains (review, PR #35).
     private func applyJournal(_ events: [Components.Schemas.JournalEvent]) async throws {
         var orders = store.orders
         for event in events {
             orders = ClaimsSync.applying(event, to: orders)
         }
         var discovered: [Components.Schemas.ClaimResponse] = []
-        for id in ClaimsSync.missingClaimIDs(in: events, among: store.orders) {
+        var missed: [String] = []
+        for id in ClaimsSync.missingClaimIDs(in: events, among: orders) {
             if let card = try? await session.claimCard(id: id) {
                 discovered.append(card)
+            } else {
+                missed.append(id)
             }
         }
         orders = ClaimsSync.merging(discovered, into: orders)
         try await persistChanged(orders)
+        if !missed.isEmpty, var state = syncStore?.read() {
+            state.pendingClaimIDs = Array(Set(state.pendingClaimIDs ?? []).union(missed)).sorted()
+            try syncStore?.write(state)
+        }
+    }
+
+    /// Retries the claims whose card fetch failed under an earlier cursor — the
+    /// pending queue is the only memory of them once the feed moved on. Entries
+    /// resolved by any pass (this drain or a search) drop out; entries still
+    /// refusing stay for the next tick.
+    private func drainPendingDiscovery() async throws {
+        guard let syncStore else { return }
+        var state = syncStore.read()
+        let pending = state.pendingClaimIDs ?? []
+        let unknown = pending.filter { id in !store.orders.contains { $0.claimID == id } }
+        guard !unknown.isEmpty else {
+            if !pending.isEmpty {
+                state.pendingClaimIDs = []
+                try? syncStore.write(state)
+            }
+            return
+        }
+        var discovered: [Components.Schemas.ClaimResponse] = []
+        var stillPending: [String] = []
+        for id in unknown {
+            if let card = try? await session.claimCard(id: id) {
+                discovered.append(card)
+            } else {
+                stillPending.append(id)
+            }
+        }
+        try await persistChanged(ClaimsSync.merging(discovered, into: store.orders))
+        state.pendingClaimIDs = stillPending
+        try syncStore.write(state)
     }
 
     /// Writes the rows a merge actually changed — never re-persisting untouched
@@ -176,12 +231,24 @@ final class ClaimsSyncController {
         }
     }
 
+    /// Everything bound to one account's identity, forgotten at the boundary —
+    /// called synchronously from `ClientController.onIdentityChange`, which fires
+    /// inside `signIn`/`signOut` themselves: the exact moment a 30-second tick
+    /// cannot see (a sign-out *and* a sign-in inside one interval, review PR #35).
+    /// The tick's own edge calls it too, as the fallback when the hook is unwired.
+    func resetIdentityState() {
+        syncStore?.clear()
+        searchError = nil
+        journalError = nil
+        lastSyncedAt = nil
+    }
+
     /// One standing-loop iteration — signed-in ticks sync, signed-out ticks idle.
     /// The sign-out edge wipes the sync state: the same identity boundary as the
     /// wire log's, so a new token never inherits this account's position.
     private func tick(_ count: Int) async {
         let signedIn = session.isSignedIn
-        if wasSignedIn, !signedIn { syncStore?.clear() }
+        if wasSignedIn, !signedIn { resetIdentityState() }
         if signedIn {
             if !wasSignedIn || count % Self.reconcileEveryTicks == 0 {
                 await syncSearch()

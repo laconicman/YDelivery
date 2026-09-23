@@ -17,6 +17,16 @@ nonisolated struct JournalCursorInvalid: LocalizedError, Hashable {
     }
 }
 
+/// A pass ran out of pages with a cursor still live — membership beyond the cap is
+/// real and still unfetched. Reported, never silent: rows that *are* synced stay,
+/// and the sender sees why the list may be short (review, PR #35). The deferred
+/// deep replay (`BGProcessingTask`, Wi-Fi + charger) owns the unbounded case.
+nonisolated struct SyncIncomplete: LocalizedError, Hashable {
+    var errorDescription: String? {
+        String(localized: "More deliveries exist than one sync could page — history is partial until a deep sync.")
+    }
+}
+
 /// The pure half of the claims sync: events and searched claims folded into history,
 /// nothing awaited, nothing thrown. The controller owns the wire; these own the merge.
 nonisolated enum ClaimsSync {

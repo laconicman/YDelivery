@@ -88,10 +88,17 @@ what the provider says.
 Mechanics that carry their reasons: the journal cursor persists *after* each page's
 events land — a crash mid-page replays, and replay is safe because every event sets
 an absolute state (status, price), never a diff. An `invalid_cursor` refusal means
-replay from the beginning, not an error shown to the sender. The cursor and the
-backfill flag live in one small App Group file beside the order store — wiped on
-sign-out, the same identity boundary as the wire log, so a new token never
-inherits the previous account's position. The poll lives in
+replay from the beginning, not an error shown to the sender. A journal claim whose
+card fetch fails joins a persisted *pending queue* — the cursor advances past its
+event, so the queue is the only memory of it until a retry or a search pass lands
+the card. The cursor, the backfill flag, and the queue live in one small App Group
+file beside the order store — wiped on the identity boundary, which is wired
+*synchronously*: `ClientController` fires a hook inside `signIn`/`signOut`
+themselves, because a 30-second poll cannot see a sign-out that ends before the
+next tick. Each feed keeps its own failure — a journal success never clears a
+search refusal — and a search pass that runs out of pages with a live cursor
+reports `SyncIncomplete` rather than stamping `historyBackfilled` on partial
+membership (review, PR #35). The poll lives in
 `ClaimsSyncController`, not a view: a map or detail pushed over the list must not
 freeze courier progress (CLAUDE.md rule 6). The wire's status zoo collapses into
 the sender's six states at the model boundary — statuses parked on the sender's
