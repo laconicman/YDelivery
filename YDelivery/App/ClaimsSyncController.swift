@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import YandexDeliveryExpressAPI
 import YDeliveryKit
 
@@ -44,7 +45,7 @@ final class ClaimsSyncController {
 
     private let session: ClientController
     private let store: StoreController
-    private let syncStore: SyncStateStore?
+    private let database: AppDatabase?
     /// The standing loop — owned, and cancelled in `deinit` per rule 6's
     /// convention. `nonisolated` is what makes that possible (a `deinit` cannot
     /// reach a MainActor member; `@ObservationIgnored` keeps the macro from
@@ -57,6 +58,15 @@ final class ClaimsSyncController {
     /// credential resumes into a cleared file, and only the check keeps its
     /// response from repopulating the old account's state (review, PR #35).
     private var identityGeneration = 0
+
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "claims-sync")
+
+    /// Set when the identity-boundary wipe threw: the account key is shared, so a
+    /// stale row would otherwise answer for the *next* credential — its cursor,
+    /// its backfill flag, its pending claims. While set, reads use an in-memory
+    /// fresh state and every pass retries the deletion first (review, PR #38).
+    private var needsStateReset = false
     /// The generation the last tick saw. Compared, never a boolean sample: a
     /// sign-out *and* a sign-in inside one interval still reads as changed,
     /// and a mid-tick bump is not consumed by the tick's own bookkeeping.
@@ -74,11 +84,11 @@ final class ClaimsSyncController {
     init(
         session: ClientController,
         store: StoreController,
-        syncStore: SyncStateStore? = .inAppGroup(id: AppGroup.id)
+        database: AppDatabase? = .inAppGroup(id: AppGroup.id)
     ) {
         self.session = session
         self.store = store
-        self.syncStore = syncStore
+        self.database = database
         loop = Task { [weak self] in
             var ticks = 0
             while !Task.isCancelled {
@@ -112,17 +122,16 @@ final class ClaimsSyncController {
         await store.refresh()
         do {
             try await drainPendingDiscovery(identity: identity)
-            try await journalPasses(from: syncStore?.read().cursor, identity: identity)
+            try await journalPasses(from: syncState().cursor, identity: identity)
             lastSyncedAt = .now
             journalError = nil
         } catch is JournalCursorInvalid {
             // The position rotted — restart it and nothing else: the pending
             // queue and the backfill flag are the account's, not the cursor's,
             // so the wipe that clears *them* belongs to the identity boundary.
-            if var state = syncStore?.read() {
-                state.cursor = nil
-                try? writeSyncState(state, identity: identity)
-            }
+            var state = syncState()
+            state.cursor = nil
+            try? writeSyncState(state, identity: identity)
             do {
                 try await journalPasses(from: nil, identity: identity)
                 lastSyncedAt = .now
@@ -151,7 +160,7 @@ final class ClaimsSyncController {
         let identity = identityGeneration
         await store.refresh()
         do {
-            var state = syncStore?.read() ?? .init(cursor: nil, historyBackfilled: false)
+            var state = syncState()
             var states: [Components.Schemas.SearchClaimState] = [.active, .delayed]
             if !state.historyBackfilled { states.append(.finished) }
             var truncated = false
@@ -191,10 +200,9 @@ final class ClaimsSyncController {
         for _ in 0..<Self.maxPages {
             let page = try await session.journalPage(cursor: cursor)
             try await applyJournal(page.events, identity: identity)
-            if var state = syncStore?.read() {
-                state.cursor = page.cursor
-                try writeSyncState(state, identity: identity)
-            }
+            var state = syncState()
+            state.cursor = page.cursor
+            try writeSyncState(state, identity: identity)
             cursor = page.cursor
             if page.events.isEmpty { break }
         }
@@ -222,7 +230,8 @@ final class ClaimsSyncController {
         }
         orders = ClaimsSync.merging(discovered, into: orders)
         try await persistChanged(orders, identity: identity)
-        if !missed.isEmpty, var state = syncStore?.read() {
+        if !missed.isEmpty {
+            var state = syncState()
             state.pendingClaimIDs = Array(Set(state.pendingClaimIDs ?? []).union(missed)).sorted()
             try writeSyncState(state, identity: identity)
         }
@@ -233,8 +242,8 @@ final class ClaimsSyncController {
     /// resolved by any pass (this drain or a search) drop out; entries still
     /// refusing stay for the next tick.
     private func drainPendingDiscovery(identity: Int) async throws {
-        guard let syncStore else { return }
-        var state = syncStore.read()
+        guard database != nil else { return }
+        var state = syncState()
         let pending = state.pendingClaimIDs ?? []
         let unknown = pending.filter { id in !store.orders.contains { $0.claimID == id } }
         guard !unknown.isEmpty else {
@@ -267,7 +276,7 @@ final class ClaimsSyncController {
             guard identity == identityGeneration else { throw SyncSuperseded() }
             // TODO(YD-13): the record still suspends — a boundary inside it lands
             // one row late; bounded while the store is not per-account.
-            try await store.record(order)
+            try await store.record(order, providerObservedAt: .now)
         }
     }
 
@@ -275,9 +284,27 @@ final class ClaimsSyncController {
     /// *after* every suspension and *before* the bytes land, because a cleared
     /// file must not be resurrected by a response the old credential fetched
     /// (review, PR #35).
-    private func writeSyncState(_ state: SyncStateStore.State, identity: Int) throws {
+    private func writeSyncState(_ state: SyncState, identity: Int) throws {
         guard identity == identityGeneration else { throw SyncSuperseded() }
-        try syncStore?.write(state)
+        try database?.writeSyncState(state)
+    }
+
+    /// The stored position — unless a boundary wipe is still owed. The account
+    /// key is shared, so while `needsStateReset` stands the stored row would
+    /// answer for the *next* credential: reads go fresh in memory and the
+    /// deletion is retried here before any pass consumes state (review, PR #38).
+    private func syncState() -> SyncState {
+        if needsStateReset {
+            do {
+                try database?.clearSyncState()
+                needsStateReset = false
+            } catch {
+                Self.logger.error(
+                    "Sync-state reset retry failed; reading fresh for this pass: \(error.localizedDescription, privacy: .public)")
+                return SyncState(cursor: nil, historyBackfilled: false)
+            }
+        }
+        return database?.readSyncState() ?? SyncState(cursor: nil, historyBackfilled: false)
     }
 
     /// Everything bound to one account's identity, forgotten at the boundary —
@@ -287,7 +314,14 @@ final class ClaimsSyncController {
     /// The tick's own edge calls it too, as the fallback when the hook is unwired.
     func resetIdentityState() {
         identityGeneration += 1
-        syncStore?.clear()
+        do {
+            try database?.clearSyncState()
+            needsStateReset = false
+        } catch {
+            needsStateReset = true
+            Self.logger.error(
+                "Identity-boundary state wipe failed; retrying before the next pass: \(error.localizedDescription, privacy: .public)")
+        }
         searchError = nil
         journalError = nil
         lastSyncedAt = nil

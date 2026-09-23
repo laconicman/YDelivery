@@ -135,6 +135,22 @@ reach CloudKit, so provider→device push still waits on the relay above.
 One platform until the product shape settles. The package supports macOS, and nothing in
 the architecture (no UIKit in shared code) forecloses a Mac target later.
 
+**Revisited 2026-09-26, same answer with a wider horizon.** The question was re-asked at
+the persistence fork — Android, a receiver-facing web page, server-side provider polling —
+and iCloud had quietly become the quasi-backend: it synchronizes, shares, and pushes to
+devices, but it cannot host logic, serve a web page, or poll a provider that offers no
+webhooks. The decision stays **iOS-first**: the product is a personal sender app and the
+second client is a rewrite, not a port — the cheapest widening is a thin backend serving
+shared-order pages, not a Kotlin app. What the schema work buys is that the *fork is
+priced*: `openapi.yaml` is platform-neutral, <doc:Schema> is a relational contract that
+ports to Room/SQLDelight/backend SQL unchanged, and the store seam is one object behind
+`StoreController`. The CloudKit layer — sync and `CKShare` collaboration — is the only
+Apple-locked piece, and a future AWS/Cloudflare/Supabase backend replaces *it*, not the
+domain model. If Swift for Android matures, even the UI layer's cost drops. The
+discipline that keeps the option open: SQL-shaped schema, deterministic identities,
+authority/sync-tier boundaries — all platform-neutral concepts — and provider truth kept
+separate from collaboration truth.
+
 **Rejected:** keeping a Mac destination buildable from day one — a standing tax on every
 screen for a target nobody runs yet (YAGNI).
 

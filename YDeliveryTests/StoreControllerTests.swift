@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 import YDeliveryKit
 @testable import YDelivery
@@ -15,10 +16,7 @@ struct StoreControllerTests {
     }
 
     private var controller: StoreController {
-        StoreController(
-            orderStore: OrderStore(directory: directory),
-            placeStore: SavedPlaceStore(directory: directory)
-        )
+        StoreController(database: AppDatabase(directory: directory))
     }
 
     private func order(created: Date, addresses: [String]) -> Order {
@@ -99,7 +97,7 @@ struct StoreControllerTests {
 
     @Test("No container is a stated reason, not an empty history")
     func containerlessHistoryExplainsItself() async {
-        let containerless = StoreController(orderStore: nil, placeStore: nil)
+        let containerless = StoreController(database: nil)
         #expect(containerless.historyUnavailable != nil,
                 "an empty list with no explanation reads as 'you have sent nothing'")
 
@@ -122,7 +120,7 @@ struct StoreControllerTests {
                 "one id for two doors let picking the second fill the first")
 
         // And the id round-trips back to the right point.
-        let picked = [twelve, fortySix].first { StoreController.destinationKey($0) == rows[1].id }
+        let picked = [twelve, fortySix].first { $0.destinationKey == rows[1].id }
         #expect(picked?.contactName == "Анна")
     }
 
@@ -131,13 +129,13 @@ struct StoreControllerTests {
         let controller = controller
         #expect(!controller.hasPlacedAnOrder)
 
-        try OrderStore(directory: directory).record(
+        try AppDatabase(directory: directory).recordOrder(
             Order(created: .now, status: .draft, route: [])
         )
         await controller.refresh()
         #expect(!controller.hasPlacedAnOrder, "a started-and-abandoned draft teaches nobody anything")
 
-        try OrderStore(directory: directory).record(
+        try AppDatabase(directory: directory).recordOrder(
             Order(created: .now, status: .cancelled, route: [])
         )
         await controller.refresh()
@@ -164,13 +162,13 @@ struct StoreControllerTests {
 
     @Test("Recording the same order twice keeps one row")
     func recordingIsIdempotent() throws {
-        let store = OrderStore(directory: directory)
+        let store = AppDatabase(directory: directory)
         let order = Order(created: .now, status: .searching, route: [], claimID: "claim-1")
 
-        try store.record(order)
-        try store.record(order)
+        try store.recordOrder(order)
+        try store.recordOrder(order)
 
-        #expect(try store.read().count == 1,
+        #expect(try store.readOrders().count == 1,
                 "a reopened draft observing its own placed order must not add a second delivery")
     }
 
@@ -185,8 +183,8 @@ struct StoreControllerTests {
     @Test("Refresh publishes both files; an empty container reads as empty")
     func refreshReadsBoth() async throws {
         let controller = controller
-        try OrderStore(directory: directory).record(order(created: .now, addresses: ["Москворечье, 6"]))
-        try SavedPlaceStore(directory: directory).save(
+        try AppDatabase(directory: directory).recordOrder(order(created: .now, addresses: ["Москворечье, 6"]))
+        try AppDatabase(directory: directory).savePlace(
             SavedPlace(name: "Дом", kind: .home, point: RoutePoint(latitude: 55, longitude: 37, address: "Дом"))
         )
 
@@ -216,7 +214,7 @@ struct StoreControllerTests {
         )
 
         #expect(controller.savedPlaces.map(\.name) == ["Склад"])
-        #expect(try SavedPlaceStore(directory: directory).read().count == 1)
+        #expect(try AppDatabase(directory: directory).readPlaces().count == 1)
     }
 
     @Test("A retried save is one chip — dedupe consults the file, not memory")
@@ -228,24 +226,19 @@ struct StoreControllerTests {
         try await controller.save(SavedPlace(name: "Склад", kind: .warehouse, point: point))
         try await controller.save(SavedPlace(name: "Склад (уточнил)", kind: .warehouse, point: point))
 
-        let stored = try SavedPlaceStore(directory: directory).read()
+        let stored = try AppDatabase(directory: directory).readPlaces()
         #expect(stored.count == 1, "same destination key — one memory, updated")
         #expect(stored.first?.name == "Склад (уточнил)")
     }
 
     @Test("A successful bookmark does not dress unreadable history as empty")
     func saveLeavesOrderErrorsStanding() async throws {
-        // An order store whose *file cannot be read at all* — a directory squatting on
-        // its path. (Malformed bytes deliberately read as empty in the Kit; this test
-        // needs the read to genuinely fail.)
-        try FileManager.default.createDirectory(
-            at: directory.appendingPathComponent("orders.json"),
-            withIntermediateDirectories: true
-        )
-        let controller = StoreController(
-            orderStore: OrderStore(directory: directory),
-            placeStore: SavedPlaceStore(directory: directory)
-        )
+        // An orders table that cannot be read at all — dropped after the database
+        // opened. One store means one failure point now; the channels still separate
+        // which side failed.
+        let database = AppDatabase(directory: directory)
+        try await database.queue.write { try $0.execute(sql: "DROP TABLE \"orders\"") }
+        let controller = StoreController(database: database)
         await controller.refresh()
         #expect(controller.historyUnavailable != nil)
 
@@ -260,15 +253,10 @@ struct StoreControllerTests {
 
     @Test("The picker's memory speaks when either file fails; deliveries only for orders")
     func pickerMemorySpeaksForBothChannels() async throws {
-        // A place store whose file cannot be read; orders healthy.
-        try FileManager.default.createDirectory(
-            at: directory.appendingPathComponent("places.json"),
-            withIntermediateDirectories: true
-        )
-        let controller = StoreController(
-            orderStore: OrderStore(directory: directory),
-            placeStore: SavedPlaceStore(directory: directory)
-        )
+        // A places table that cannot be read; orders healthy.
+        let database = AppDatabase(directory: directory)
+        try await database.queue.write { try $0.execute(sql: "DROP TABLE \"savedPlaces\"") }
+        let controller = StoreController(database: database)
         await controller.refresh()
         // Chips would be silently absent without their own channel (review, PR #28).
         #expect(controller.historyUnavailable == nil)
@@ -277,7 +265,7 @@ struct StoreControllerTests {
 
     @Test("No container is a rendered state: saving reports, never crashes")
     func unavailableStoreReports() async throws {
-        let controller = StoreController(orderStore: nil, placeStore: nil)
+        let controller = StoreController(database: nil)
         #expect(!controller.canSavePlaces)
 
         // It throws rather than absorbing, so the sheet that asked can stay open and

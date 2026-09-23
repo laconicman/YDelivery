@@ -11,8 +11,11 @@ struct YDeliveryApp: App {
 
     init() {
         let session = ClientController()
-        let store = StoreController()
-        let sync = ClaimsSyncController(session: session, store: store)
+        // One database, both consumers — orders/places on one side, the sync cursor
+        // on the other. Sharing the instance shares the queue, not just the file.
+        let database = AppDatabase.inAppGroup(id: AppGroup.id)
+        let store = StoreController(database: database)
+        let sync = ClaimsSyncController(session: session, store: store, database: database)
         // The identity boundary, wired at composition: a sign-out + sign-in inside
         // one poll interval is invisible to sampling — the hook fires inside the
         // transition itself (review, PR #35).

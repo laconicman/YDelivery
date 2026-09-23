@@ -51,9 +51,9 @@ struct DeliveriesView: View {
 
 #Preview {
     let session = ClientController(tokenStore: TokenStore(service: "preview.YDelivery"))
-    let store = StoreController(orderStore: nil, placeStore: nil)
+    let store = StoreController(database: nil)
     DeliveriesView(compose: {})
         .environment(session)
         .environment(store)
-        .environment(ClaimsSyncController(session: session, store: store, syncStore: nil))
+        .environment(ClaimsSyncController(session: session, store: store, database: nil))
 }

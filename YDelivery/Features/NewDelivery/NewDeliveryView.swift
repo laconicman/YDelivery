@@ -102,7 +102,7 @@ struct NewDeliveryView: View {
                 if draft.ordering == .placed, !draft.placedOrderIsRecorded,
                    let order = draft.placedOrder {
                     do {
-                        try await store.record(order)
+                        try await store.record(order, providerObservedAt: .now)
                         draft.notePlacedOrderRecorded()
                     } catch {
                         draft.notePlacedButUnrecorded(error)
@@ -115,7 +115,7 @@ struct NewDeliveryView: View {
                 if draft.ordering == .placed, !draft.placedOrderIsRecorded,
                    let order = draft.placedOrder {
                     do {
-                        try await store.record(order)
+                        try await store.record(order, providerObservedAt: .now)
                         draft.notePlacedOrderRecorded()
                     } catch {
                         draft.notePlacedButUnrecorded(error)
@@ -127,7 +127,7 @@ struct NewDeliveryView: View {
                       !draft.placedOrderIsRecorded, let order = draft.placedOrder
                 else { return }
                 do {
-                    try await store.record(order)
+                    try await store.record(order, providerObservedAt: .now)
                     draft.notePlacedOrderRecorded()
                 } catch {
                     draft.notePlacedButUnrecorded(error)
@@ -348,7 +348,7 @@ extension NewDeliveryView.Model.Role {
 #Preview("Empty draft") {
     NewDeliveryView(draft: NewDeliveryView.Model(), placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-        .environment(StoreController(orderStore: nil, placeStore: nil))
+        .environment(StoreController(database: nil))
 }
 
 #Preview("Route complete") {
@@ -367,7 +367,7 @@ extension NewDeliveryView.Model.Role {
     )
     return NewDeliveryView(draft: draft, placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-        .environment(StoreController(orderStore: nil, placeStore: nil))
+        .environment(StoreController(database: nil))
 }
 
 #Preview("Five stops with a return") {
@@ -402,5 +402,5 @@ extension NewDeliveryView.Model.Role {
     )
     return NewDeliveryView(draft: draft, placed: {})
         .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-        .environment(StoreController(orderStore: nil, placeStore: nil))
+        .environment(StoreController(database: nil))
 }

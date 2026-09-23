@@ -87,7 +87,7 @@ struct OrderDetailView: View {
         var updated = order
         updated.status = .cancelled
         do {
-            try await store.record(updated)
+            try await store.record(updated, providerObservedAt: .now)
         } catch {
             throw CancellationUnrecorded(error)
         }
@@ -286,7 +286,7 @@ extension OrderDetailView {
     NavigationStack {
         OrderDetailView(order: .previewSearching)
             .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-            .environment(StoreController(orderStore: nil, placeStore: nil))
+            .environment(StoreController(database: nil))
     }
 }
 
@@ -294,6 +294,6 @@ extension OrderDetailView {
     NavigationStack {
         OrderDetailView(order: .previewDone)
             .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-            .environment(StoreController(orderStore: nil, placeStore: nil))
+            .environment(StoreController(database: nil))
     }
 }

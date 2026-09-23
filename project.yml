@@ -77,6 +77,33 @@ packages:
   PhoneNumberKitUI:
     url: https://github.com/PhoneNumberKit/PhoneNumberKitUI
     from: 1.1.0
+  # The persistence substrate (Design → the reopened store decision; Schema.md is the
+  # contract it implements). Exact pin: the schema was verified against 1.12.0's
+  # SyncEngine validation in the spike — an upgrade re-verifies deliberately.
+  SQLiteData:
+    url: https://github.com/pointfreeco/sqlite-data
+    exactVersion: 1.12.0
+  # Pulled transitively by sqlite-data; declared because the app imports it directly
+  # (DatabaseQueue, db.write, raw DDL) — never rely on a transitive module.
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: 7.11.0
+  # The @Table macro expands to StructuredQueriesCore calls — a *direct* product link,
+  # or the app target's debug dylib has undefined symbols despite the transitive import.
+  # StructuredQueriesSQLite specifically: it builds as a shared framework (SQLiteData
+  # needs it) that re-exports StructuredQueriesCore's symbols, so the app, SQLiteData,
+  # and the framework all resolve ONE `Table` protocol descriptor. A statically-linked
+  # product would embed a second copy in the app binary, and SyncEngine.init crashes
+  # resolving OrderRow's Table conformance against the other descriptor.
+  swift-structured-queries:
+    url: https://github.com/pointfreeco/swift-structured-queries
+    from: 0.39.2
+  # sqlite-data's test seam: `.test` context swaps the SyncEngine's CloudKit state for
+  # a mock so schema validation runs without iCloud entitlements (spike-verified).
+  # Test target only.
+  swift-dependencies:
+    url: https://github.com/pointfreeco/swift-dependencies
+    from: 1.17.0
 
 targets:
   YDelivery:
@@ -97,6 +124,12 @@ targets:
         product: PhoneNumberKitUI
       - package: SFSafeSymbols
         product: SFSafeSymbols
+      - package: SQLiteData
+        product: SQLiteData
+      - package: GRDB
+        product: GRDB
+      - package: swift-structured-queries
+        product: StructuredQueriesSQLite
     settings:
       groups: [signing]
       base:
@@ -135,6 +168,16 @@ targets:
       # The entitlement test speaks the store's own group ID rather than respelling it.
       - package: YDeliveryKit
         product: YDeliveryKit
+      # The schema-validation test instantiates SyncEngine under `.test`, and the
+      # failure-injection tests drive the queue directly — all test-only seams.
+      - package: SQLiteData
+        product: SQLiteData
+      - package: swift-dependencies
+        product: Dependencies
+      - package: GRDB
+        product: GRDB
+      - package: swift-structured-queries
+        product: StructuredQueriesSQLite
     settings:
       groups: [signing]
       base:

@@ -366,40 +366,24 @@ struct ClaimsSyncTests {
 
     // MARK: Sync state
 
-    @Test("The state file keeps its contract name — migration maps claims-sync.json, nothing else")
-    func syncStateFilenameIsTheContract() throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let store = SyncStateStore(directory: directory)
-
-        try store.write(.init(cursor: "c", historyBackfilled: false))
-        #expect(
-            FileManager.default.fileExists(
-                atPath: directory.appendingPathComponent("claims-sync.json").path
-            ),
-            "the migration contract names this file literally — a rename here breaks it"
-        )
-    }
-
     @Test("The cursor and the backfill flag round-trip together")
     func syncStateRoundTrips() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let store = SyncStateStore(directory: directory)
+        let database = AppDatabase(directory: directory)
 
-        #expect(store.read() == .init(cursor: nil, historyBackfilled: false),
+        #expect(database.readSyncState() == .init(cursor: nil, historyBackfilled: false),
                 "absent reads as first sync, never a crash")
 
-        try store.write(.init(cursor: "eyJ-opaque", historyBackfilled: true,
-                             pendingClaimIDs: ["claim-missed"]))
-        #expect(store.read() == .init(cursor: "eyJ-opaque", historyBackfilled: true,
-                                    pendingClaimIDs: ["claim-missed"]),
+        try database.writeSyncState(.init(cursor: "eyJ-opaque", historyBackfilled: true,
+                                          pendingClaimIDs: ["claim-missed"]))
+        #expect(database.readSyncState() == .init(cursor: "eyJ-opaque", historyBackfilled: true,
+                                                  pendingClaimIDs: ["claim-missed"]),
                 "the pending queue travels with the cursor — the only memory of failed card fetches")
 
-        store.clear()
-        #expect(store.read() == .init(cursor: nil, historyBackfilled: false),
+        try database.clearSyncState()
+        #expect(database.readSyncState() == .init(cursor: nil, historyBackfilled: false),
                 "the sign-out boundary returns to a first sync")
     }
 }
