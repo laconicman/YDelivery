@@ -231,6 +231,60 @@ struct StoreControllerTests {
         #expect(stored.first?.name == "Склад (уточнил)")
     }
 
+    @Test("The editor's rename keeps the place's identity — one chip, new label")
+    func renameKeepsIdentity() async throws {
+        let controller = controller
+        let point = RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100")
+        try await controller.save(SavedPlace(name: "Склад", kind: .warehouse, point: point))
+        let id = try #require(controller.savedPlaces.first?.id)
+
+        // The chip editor's write: same point, new name and kind, the row's id.
+        try await controller.save(SavedPlace(id: id, name: "Дом", kind: .home, point: point))
+
+        let stored = try AppDatabase(directory: directory).readPlaces()
+        #expect(stored.count == 1)
+        #expect(stored.first?.id == id)
+        #expect(stored.first?.name == "Дом")
+        #expect(stored.first?.kind == .home)
+    }
+
+    @Test("Forgetting a place removes the chip and the row")
+    func deleteForgets() async throws {
+        let controller = controller
+        try await controller.save(
+            SavedPlace(name: "Дом", kind: .home, point: RoutePoint(latitude: 55, longitude: 37, address: "Дом"))
+        )
+        let id = try #require(controller.savedPlaces.first?.id)
+
+        await controller.deletePlace(id)
+
+        #expect(controller.savedPlaces.isEmpty)
+        #expect(try AppDatabase(directory: directory).readPlaces().isEmpty)
+        #expect(controller.placesError == nil)
+
+        // Forgetting twice is forgetting — an unknown id is not an error to render.
+        await controller.deletePlace(id)
+        #expect(controller.placesError == nil)
+    }
+
+    @Test("A delete that cannot write keeps the chip and says why")
+    func failedDeleteLeavesTheChip() async throws {
+        let controller = controller
+        try await controller.save(
+            SavedPlace(name: "Дом", kind: .home, point: RoutePoint(latitude: 55, longitude: 37, address: "Дом"))
+        )
+        let id = try #require(controller.savedPlaces.first?.id)
+        // The table goes missing between the save and the ask — the context menu has
+        // already dismissed, so the failure lands on the channel the picker renders.
+        let database = AppDatabase(directory: directory)
+        try await database.queue.write { try $0.execute(sql: "DROP TABLE \"savedPlaces\"") }
+
+        await controller.deletePlace(id)
+
+        #expect(controller.savedPlaces.map(\.id) == [id], "a delete that did not happen keeps the chip")
+        #expect(controller.placesError != nil)
+    }
+
     @Test("A successful bookmark does not dress unreadable history as empty")
     func saveLeavesOrderErrorsStanding() async throws {
         // An orders table that cannot be read at all — dropped after the database

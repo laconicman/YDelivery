@@ -346,6 +346,17 @@ nonisolated final class AppDatabase: Sendable {
         }
     }
 
+    /// Forgets a place — the `3e` editor's delete. Unknown ids delete nothing and
+    /// succeed: forgetting twice is forgetting.
+    func deletePlace(id: SavedPlace.ID) throws {
+        try queue.write { db in
+            try db.execute(
+                sql: "DELETE FROM \"savedPlaces\" WHERE \"id\" = ?",
+                arguments: Self.args([id])
+            )
+        }
+    }
+
     /// Keeps a place, adopting the stored identity when the destination is already
     /// remembered — the dedupe the file store did read-then-write, now one transaction
     /// (the retry this guards against exists because a read can fail, so memory may

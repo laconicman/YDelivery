@@ -52,9 +52,13 @@ field stating its bound.
   claims becoming cancellable rows, and the unresolved-acceptance window (YD-5 — a
   claim the flow lost track of is found by search on the next pass; the remaining
   sliver is persisting the pending id for an *immediate* reconcile, now easy).
-- The `3e` history card with «Повторить»/«Наоборот» replaces the minimal list —
-  `RouteLine`'s first consumer (handoff §6's last unbuilt component) — and the `3e`
-  saved-place editor gives the bookmark's chips a management surface.
+- **The `3e` history card — landed:** rows draw the whole route via `RouteLine`
+  (handoff §6's last unbuilt component, `YDeliveryKit` 0.1.2), and the swipe pair
+  «Повторить»/«Наоборот» opens a pre-filled draft — route and contacts ride back,
+  the class is what the strip re-offers. The saved-place editor rides the chips'
+  context menu: rename/retype reuse the naming sheet, delete asks once and forgets.
+  Items, options and schedule never reached `Order`, so the repeat prices and packs
+  fresh — that gap is YD-15's neighbor, not this card's scope.
 - Custom fields: settings schema, two flags, own draft section, Spotlight indexing.
 - Live Activity (seven states, failures never auto-dismiss), started locally on order
   creation, updated by polling — the push relay stays a Later item.

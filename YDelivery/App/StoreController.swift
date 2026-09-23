@@ -155,6 +155,21 @@ final class StoreController {
         }
     }
 
+    /// Forgets a place and republishes the chips — the `3e` editor's delete. Unlike
+    /// ``save(_:)`` nothing stands in front of the sender to render a thrown error
+    /// (a context menu dismisses on selection), so a failure lands on ``placesError``
+    /// — the picker's banner reads it — and the chip it meant to remove stays.
+    func deletePlace(_ id: SavedPlace.ID) async {
+        guard let database else { return }
+        do {
+            try await Self.deletePlace(id, from: database)
+            savedPlaces = try await Self.readPlaces(database)
+            placesError = nil
+        } catch {
+            placesError = error
+        }
+    }
+
     /// Records a placed order and republishes history. Throws — an order that was
     /// *placed* but not *remembered* is a state the sender must see, not a silent gap
     /// in the list. `providerObservedAt` marks a provider sighting: callers fresh off
@@ -204,6 +219,11 @@ final class StoreController {
     @concurrent
     private static func write(_ place: SavedPlace, to database: AppDatabase) async throws {
         try database.savePlace(place)
+    }
+
+    @concurrent
+    private static func deletePlace(_ id: SavedPlace.ID, from database: AppDatabase) async throws {
+        try database.deletePlace(id: id)
     }
 
     @concurrent

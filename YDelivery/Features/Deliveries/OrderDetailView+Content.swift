@@ -20,20 +20,8 @@ extension OrderDetailView {
         var body: some View {
             List {
                 Section {
-                    ForEach(Array(order.route.enumerated()), id: \.offset) { index, point in
-                        HStack(alignment: .top, spacing: Layout.Spacing.unit) {
-                            PointBadge(role: badgeRole(at: index))
-                            VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                                Text(point.address)
-                                    .font(.subheadline)
-                                if let name = point.contactName, !name.isEmpty {
-                                    Text(name)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
+                    RouteLine(points: order.route)
+                        .font(.subheadline)
                 }
 
                 Section {
@@ -108,13 +96,6 @@ extension OrderDetailView {
             }
         }
 
-        /// First stop wears the ring, last the teardrop, middles their position number —
-        /// the same `2c` mapping the draft rows use.
-        private func badgeRole(at index: Int) -> PointBadge.Role {
-            if index == 0 { return .start }
-            if index == order.route.count - 1 { return .end }
-            return .stop(number: index + 1)
-        }
     }
 }
 

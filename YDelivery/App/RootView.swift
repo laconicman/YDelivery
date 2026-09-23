@@ -54,7 +54,16 @@ struct RootView: View {
 
     var body: some View {
         TabView {
-            DeliveriesView(compose: { isComposing = true })
+            DeliveriesView(
+                compose: { isComposing = true },
+                repeatOrder: { order, reversed in
+                    // A repeat is a new draft, not a mutation of the parked one —
+                    // whatever was half-composed is replaced, same as compose's
+                    // `placed` reset mints a fresh idempotency token.
+                    draft = NewDeliveryView.Model(repeating: order, reversed: reversed)
+                    isComposing = true
+                }
+            )
                 .tabItem { Label("Deliveries", systemSymbol: .shippingbox) }
             SettingsView()
                 .tabItem { Label("Settings", systemSymbol: .gearshape) }

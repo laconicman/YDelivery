@@ -15,8 +15,10 @@ extension DeliveriesView {
         struct Row: Identifiable {
             let id: UUID
             let status: OrderStatus
-            let from: String
-            let to: String
+            /// The route as remembered — `RouteLine`'s read of the order, badges and
+            /// contacts included (board `3e`). Thin synced claims may carry fewer
+            /// than two points; the line draws what exists.
+            let route: [RoutePoint]
             let dateText: String
             let priceText: String?
         }
@@ -33,6 +35,9 @@ extension DeliveriesView {
         /// The pull-to-refresh ask — the root forwards it to the sync engine.
         var refresh: () async -> Void = {}
         let compose: () -> Void
+        /// «Повторить»/«Наоборот» — the row's order id and whether the route runs
+        /// backwards; the root turns it into a pre-filled draft (board `3e`).
+        var repeatOrder: (Row.ID, _ reversed: Bool) -> Void = { _, _ in }
 
         var body: some View {
             Group {
@@ -41,6 +46,19 @@ extension DeliveriesView {
                         ForEach(rows) { row in
                             NavigationLink(value: row.id) {
                                 OrderRow(row: row)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button {
+                                    repeatOrder(row.id, false)
+                                } label: {
+                                    Label("Repeat", systemSymbol: .arrowClockwise)
+                                }
+                                Button {
+                                    repeatOrder(row.id, true)
+                                } label: {
+                                    Label("Reverse", systemSymbol: .arrowUturnLeft)
+                                }
+                                .tint(.gray)
                             }
                         }
                         if let syncError {
@@ -100,8 +118,9 @@ extension DeliveriesView {
 }
 
 extension DeliveriesView.Content {
-    /// The minimal honest row: ends, status, date, price. The richer history card
-    /// (board `3e`, «Повторить») joins with Phase 3's journal work.
+    /// The `3e` history card: status and date over the whole route drawn as a
+    /// connected line, the price closing it. The repeat asks ride the row's swipe
+    /// actions — they belong to the order, not the card's surface.
     struct OrderRow: View {
         let row: Row
 
@@ -114,16 +133,10 @@ extension DeliveriesView.Content {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                HStack(alignment: .top, spacing: Layout.Spacing.unit) {
-                    PointBadge(role: .start)
-                    Text(row.from)
-                        .font(.subheadline)
-                }
-                HStack(alignment: .top, spacing: Layout.Spacing.unit) {
-                    PointBadge(role: .end)
-                    Text(row.to)
-                        .font(.subheadline)
-                    if let priceText = row.priceText {
+                RouteLine(points: row.route)
+                    .font(.subheadline)
+                if let priceText = row.priceText {
+                    HStack {
                         Spacer()
                         Text(priceText)
                             .font(.subheadline.weight(.semibold))
@@ -143,16 +156,37 @@ extension DeliveriesView.Content {
             .init(
                 id: UUID(),
                 status: .searching,
-                from: "Москва, ул Москворечье, 6",
-                to: "Москва, Каширское шоссе, 52",
+                route: [
+                    RoutePoint(
+                        latitude: 55.7137, longitude: 37.6323,
+                        address: "Москва, ул Москворечье, 6",
+                        contactName: "Иван Петров", contactPhone: "+79123456789"
+                    ),
+                    RoutePoint(
+                        latitude: 55.7133, longitude: 37.5856,
+                        address: "Москва, Каширское шоссе, 52"
+                    ),
+                ],
                 dateText: "6 Sep, 11:40",
                 priceText: "1 190 ₽"
             ),
             .init(
                 id: UUID(),
                 status: .done,
-                from: "Санкт-Петербург, Невский проспект, 100",
-                to: "Москва, Арбат, 10",
+                route: [
+                    RoutePoint(
+                        latitude: 59.9311, longitude: 30.3609,
+                        address: "Санкт-Петербург, Невский проспект, 100"
+                    ),
+                    RoutePoint(
+                        latitude: 55.7558, longitude: 37.6173,
+                        address: "Москва, Тверская, 6"
+                    ),
+                    RoutePoint(
+                        latitude: 55.7495, longitude: 37.5938,
+                        address: "Москва, Арбат, 10"
+                    ),
+                ],
                 dateText: "4 Sep",
                 priceText: "3 400 ₽"
             ),
