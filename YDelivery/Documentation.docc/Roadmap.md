@@ -75,9 +75,10 @@ field stating its bound.
 checklist** (<doc:Collaboration>). The sharing model is settled before the stack: private
 `CKShare` hierarchies rooted at an order — invite-URL, per-participant read/write, no
 public records — because collaborators need not share an org or a credential. The
-grant and the provider token are independent axes: participant writes reach only
-collaborative fields (attachments, notes), provider-mirrored fields stay owner-written
-projections, and every shared surface shows the timestamp of the state it presents.
+grant and the provider token are independent axes: participant writes reach only an
+append-only stream (per-order chat, attachments), provider-mirrored rows stay
+owner-written projections, and every shared surface shows the timestamp of the state
+it presents.
 Share URLs open the app or an **App Clip** for pure consumers. Schema first (relational
 discipline — Codd, not vibes; the LearnWords sessions record how a rushed CloudKit schema
 went), provider-plurality in the schema from day one; the container stays **exclusive to

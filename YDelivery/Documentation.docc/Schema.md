@@ -77,6 +77,18 @@ Order ────────────────────────�
 No `claimID` here — the provider mirror carries it (below), keeping every provider-derived
 fact in one owner-written row.
 
+### Order identity — deterministic for discovered, random for created
+
+An order created on this device gets a random UUID — there is no provider fact to key
+on yet. An order *discovered* from a provider feed derives its id from
+`(providerAccountRef, claimID)` — same derivation everywhere — so two devices finding
+the same claim before either syncs produce the **same** `Order.id`, and CloudKit
+merges them into one record instead of keeping duplicate roots (Devin Review, PR #36 —
+random ids would preserve both). The residual window — a locally created order whose
+claimID arrives while a discovered twin already exists on another device — is the
+merge rule: `claimID` joins them, the locally created row wins (it carries the
+sender's intent), the twin's mirror facts fold in, the twin is deleted.
+
 ### `OrderProviderState` — the mirror (1:1)
 
 The whole provider projection in one row, overwritten atomically when the owner's journal
@@ -156,15 +168,16 @@ Append-only; conflicts impossible by construction. Columns: `id` UUID PK, `order
 order — plus `at`, `kind`, `providerStatus`, `detail`?, `source`
 (`journal`/`search`/`claimCard`).
 
-Dedup is a declared constraint, not a convention: `UNIQUE(orderID, providerEventID)`
-sits in the DDL, and journal replays insert with `INSERT OR IGNORE` against it — a
-re-fetched page cannot duplicate the timeline (journal pagination makes replays
-routine, not rare). SQLite treats NULLs as distinct under UNIQUE, so synthesized events
-— sightings from `search`/claim cards, which carry no provider id — pass the constraint
-freely and never collide with each other; *their* dedup is app-level on
-`(orderID, providerStatus, source)`, and their `at` is the *sighting* time, not an
-event time. This is the activity timeline the 3e card reads, and what "members see
-each other's activity" means for provider truth.
+Dedup is **identity, not a constraint** — and it has to be: `SyncEngine` rejects every
+non-PK unique index on a synchronized table at init (`SchemaError.uniquenessConstraint`
+— verified live in the spike, <doc:Spike>). So `ProviderEvent.id` is *derived*, not
+random: `UUIDv5(orderID ‖ providerEventID)` for journal events — replaying a page
+re-produces the same key, and two devices recording the same event produce one
+`CKRecord` that merges rather than colliding. Synthesized sightings (`search`/
+claim-card rows carry no provider id) derive their key from
+`(orderID, providerStatus, source)` and upsert on re-sight — `at` keeps the latest
+observation; one row per observed state. This is the activity timeline the 3e card
+reads, and what "members see each other's activity" means for provider truth.
 
 ### `OrderMessage` — the chat, and the only participant-writable stream
 
@@ -222,9 +235,9 @@ account transfer is a re-key, not a migration.
 | Table | Key | Columns of note |
 |---|---|---|
 | `SyncState` | `providerAccountRef` TEXT PK | `journalCursor`, `historyBackfilled`, plus attempt bookkeeping — the journal cursor is per-device by correctness: two devices sharing one cursor would consume each other's events, while the *results* (order rows) already converge through CloudKit |
-| `PendingDiscovery` | `(providerAccountRef, claimID)` composite PK | The discovery-retry queue — a feed reported a claim whose card fetch failed; retried until the card lands. Today's `pendingClaimIDs` migrates here. Distinct from acceptance: this device saw the claim exists, it never tried to create it |
+| `PendingDiscovery` | `id` UUID PK + `UNIQUE(providerAccountRef, claimID)` | The discovery-retry queue — a feed reported a claim whose card fetch failed; retried until the card lands. Today's `pendingClaimIDs` migrates here. Distinct from acceptance: this device saw the claim exists, it never tried to create it. A secondary UNIQUE is legal *here* precisely because the table is never synchronized — the `uniquenessConstraint` ban governs `tables:`/`privateTables:` only |
 | `PendingAcceptance` | `id` UUID PK | `providerAccountRef`, `claimID?`, `orderRef`?, `createdAt`, `lastCheckedAt`, `state` — the durable home for YD-5's unresolved *acceptance*: we POSTed, the answer was lost, the claim may exist provider-side; reconciled on launch against `claims/search`. Today's store holds no such attempts — it starts empty, which is precisely the gap YD-5 names |
-| `Draft` | `id` UUID PK | Provisional — an un-placed order has no provider existence, so it is *not* an `Order` row. Children (`DraftStop`, `DraftItem`) mirror the shared shape so promoting a draft to an order is a mechanical copy |
+| `OrderDraft` | `id` UUID PK | Provisional — an un-placed order has no provider existence, so it is *not* an `Order` row. Children (`DraftStop`, `DraftItem`) mirror the shared shape so promoting a draft to an order is a mechanical copy. Named `OrderDraft`, not `Draft`: `@Table` synthesizes a `.Draft` nested type on every model, and a table literally named `Draft` collides inside the macro (spike-verified) |
 
 The wire log stays a **file**, not a table: it is PII-bearing diagnostic output (YD-12)
 with rotation semantics files already give it, and it must never sync.
@@ -314,9 +327,11 @@ The substrate's rule applies: **bytes are never destroyed**. First launch under 
 stack:
 
 1. `orders.json` → `Order` + `RouteStop`×n + `OrderProviderState` (`claimID`, `status`,
-   `price`, `currency`, `tariff`; `providerObservedAt` = file's last-write time as the
-   best honest guess, `mirroredAt` = migration time). Legacy rows lack items/options —
-   the columns are nullable, and the 3e card renders their absence honestly.
+   `price`, `currency`, `tariff`; `providerObservedAt` = NULL — the file has one mtime
+   for the whole array, so stamping it on every row would fabricate freshness for
+   orders not observed since (Devin Review, PR #36); `mirroredAt` = migration time).
+   Legacy rows lack items/options — the columns are nullable, and the 3e card renders
+   their absence honestly.
 2. `claims-sync.json` → `SyncState` row + `PendingDiscovery` rows from
    `pendingClaimIDs` — the discovery-retry queue, not acceptance attempts;
    `PendingAcceptance` has nothing to migrate yet.
@@ -384,8 +399,8 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   (<doc:Collaboration>) may make it unnecessary. If it is ever needed, the migration
   path is re-rooting — `Workspace` as root, `Order` demoted to single-FK child — which
   this schema is shaped to permit.
-- **Draft persistence**: `Draft` is specified provisionally; whether parked drafts sync
-  privately or stay device-local is a product call, not yet made.
+- **Draft persistence**: `OrderDraft` is specified provisionally; whether parked drafts
+  sync privately or stay device-local is a product call, not yet made.
 - **Read-only participants posting messages**: today message-posting = read-write
   grant. A "comment but don't touch attachments" tier doesn't exist in CloudKit; if it
   is ever needed it is app-enforced convention on top of read-write.
