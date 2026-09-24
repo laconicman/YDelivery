@@ -18,6 +18,9 @@ struct RootView: View {
     /// activity before `refresh()` lands (review, PR #42).
     @State private var pendingOrderID: UUID?
     @Environment(StoreController.self) private var store
+    @Environment(ClaimsSyncController.self) private var sync
+    @Environment(NotificationController.self) private var notifications
+    @Environment(\.scenePhase) private var scenePhase
 
     enum Tab { case deliveries, settings }
 
@@ -94,6 +97,19 @@ struct RootView: View {
                 selectedTab = .deliveries
             }
         }
+        // A tapped banner is the same ask as a Spotlight result: find the row
+        // once the store can confirm it's still in history.
+        .onChange(of: notifications.requestedOrderID) {
+            if let id = notifications.consumeRequest() {
+                pendingOrderID = id
+                selectedTab = .deliveries
+            }
+        }
+        // Leaving the foreground is when the refresh chain gets armed — the
+        // system decides when it actually wakes the journal pass.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { sync.scheduleAppRefresh() }
+        }
         .sheet(isPresented: $isComposing) {
             NewDeliveryView(
                 draft: draft,
@@ -115,4 +131,5 @@ struct RootView: View {
         .environment(session)
         .environment(store)
         .environment(ClaimsSyncController(session: session, store: store, database: nil))
+        .environment(NotificationController(store: store))
 }

@@ -186,6 +186,17 @@ final class StoreController {
         orderFields.filter { $0.orderID == orderID }
     }
 
+    /// The sender's own number for this order — the value the order-number
+    /// carrier carried to the provider — for surfaces that name the order
+    /// aloud: a notification title reads «Order №4417», not a UUID.
+    func orderNumber(for orderID: Order.ID) -> String? {
+        let numberFields = Set(fieldDefinitions.lazy
+            .filter { $0.carrier == .orderNumber }.map(\.id))
+        return orderFields.first {
+            $0.orderID == orderID && numberFields.contains($0.fieldRef)
+        }?.value
+    }
+
     /// Keeps a field definition and republishes the schema — the settings editor's
     /// write. Throws like ``save(_:)``: the editor stands in front of the sender and
     /// renders the refusal (a taken carrier) where it happened.

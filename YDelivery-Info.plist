@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The keys Xcode's generated Info.plist cannot express: INFOPLIST_KEY_ only
+	  covers keys Xcode knows, and UIBackgroundModes / BGTaskSchedulerPermitted-
+	  Identifiers are not among them — a user-defined INFOPLIST_KEY_ of the same
+	  name is ignored (verified: absent from the built plist). GENERATE_INFOPLIST_FILE
+	  stays on; Xcode merges this partial file with the generated values.
+	  Lives at the repo root because YDelivery/ is a syncedSources folder — inside
+	  it, the file would also be bundled as a resource.
+	-->
+	<key>UIBackgroundModes</key>
+	<array>
+		<!-- CloudKit's silent pushes wake CKSyncEngine for fetch-changes. -->
+		<string>remote-notification</string>
+		<!-- BGAppRefreshTask — the journal pass's quiet wake-up (board 5c). -->
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<!-- ClaimsSyncController.refreshTaskIdentifier — keep in sync. -->
+		<string>com.learnable.YDelivery.claims-refresh</string>
+	</array>
+</dict>
+</plist>

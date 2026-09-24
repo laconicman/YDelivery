@@ -86,6 +86,72 @@ nonisolated enum ClaimsSync {
         }
         return orders.sorted { $0.created > $1.created }
     }
+
+    /// Provider-side as-of stamps for a page of claims — `updatedTs` per
+    /// claimID. The mirror's freshness follows the provider's clock, not the
+    /// read's: this is what `recordOrder(providerObservedAt:)` receives.
+    static func stamps(
+        of claims: [Components.Schemas.ClaimResponse]
+    ) -> [String: Date] {
+        Dictionary(claims.map { ($0.id, $0.updatedTs) },
+                   uniquingKeysWith: { Swift.max($0, $1) })
+    }
+
+    /// A feed event as the feed's own row (`providerEvents`, doc:Schema): the
+    /// journal's `operationId` is the dedupe key, so a replayed page re-derives
+    /// the same row and `recordProviderEvent` answers "new to us". `at` is the
+    /// event's own stamp — provider time is what the mirror's freshness gate
+    /// compares, never the read's clock.
+    static func providerEvent(
+        _ event: Components.Schemas.JournalEvent,
+        orderID: Order.ID
+    ) -> ProviderEvent {
+        ProviderEvent(
+            orderID: orderID,
+            providerEventID: event.operationId,
+            at: event.updatedTs,
+            kind: event.changeType.rawValue,
+            providerStatus: event.newStatus?.rawValue,
+            detail: detail(of: event),
+            source: "journal"
+        )
+    }
+
+    /// A claim observed outside the feed — a search page or a fetched card — as
+    /// the id-less half of the event stream. `at` is the claim's own `updatedTs`,
+    /// the as-of time its content describes: a delayed answer can't rewind the
+    /// mirror past a journal event it predates. The derived key
+    /// (`orderID ‖ status ‖ source`) makes the hundredth sighting of the same
+    /// status merge into its first row — while still freshening the mirror's
+    /// observation stamp.
+    static func sighting(
+        of claim: Components.Schemas.ClaimResponse,
+        orderID: Order.ID,
+        source: String
+    ) -> ProviderEvent {
+        ProviderEvent(
+            orderID: orderID,
+            at: claim.updatedTs,
+            kind: "sighting",
+            providerStatus: claim.status.rawValue,
+            source: source
+        )
+    }
+
+    /// The event's payload as one detail string: a status change carries the
+    /// terminal `resolution` when it has one (`success`/`failed`); a price
+    /// change carries the new figure with its currency.
+    private static func detail(of event: Components.Schemas.JournalEvent) -> String? {
+        switch event.changeType {
+        case .statusChanged:
+            return event.resolution?.rawValue
+        case .priceChanged:
+            let joined = [event.newPrice, event.newCurrency]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            return joined.isEmpty ? nil : joined
+        }
+    }
 }
 
 nonisolated extension OrderStatus {

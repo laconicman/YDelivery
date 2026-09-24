@@ -1,3 +1,4 @@
+import BackgroundTasks
 import SwiftUI
 import YDeliveryKit
 
@@ -9,6 +10,7 @@ struct YDeliveryApp: App {
     @State private var session: ClientController
     @State private var store: StoreController
     @State private var sync: ClaimsSyncController
+    @State private var notifications: NotificationController
     /// Owned by the composition root for the app's lifetime (rule 6) — a one-shot
     /// start, retained so a future surface can observe or retry it.
     @State private var syncTask: Task<Void, Never>?
@@ -22,17 +24,30 @@ struct YDeliveryApp: App {
             providerAccountRef: SyncIdentity.providerAccountRef,
             containerIdentifier: SyncIdentity.cloudKitContainer)
         let store = StoreController(database: database)
-        let sync = ClaimsSyncController(session: session, store: store, database: database)
+        let notifications = NotificationController(store: store)
+        let sync = ClaimsSyncController(session: session, store: store,
+                                        database: database, notifications: notifications)
         // The identity boundary, wired at composition: a sign-out + sign-in inside
         // one poll interval is invisible to sampling — the hook fires inside the
         // transition itself (review, PR #35).
         session.onIdentityChange = { [weak sync] in sync?.resetIdentityState() }
+        // The background-refresh registration must complete before launch finishes;
+        // the handler is the journal pass — the feed's cheap delta, not the
+        // membership re-ask.
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: ClaimsSyncController.refreshTaskIdentifier,
+            using: nil
+        ) { task in
+            guard let refresh = task as? BGAppRefreshTask else { return }
+            sync.handleAppRefresh(refresh)
+        }
         // CloudKit sync starts at launch, entitlement or not — `startSync` probes and
         // degrades to a logged, stored failure rather than a CKContainer trap.
         _syncTask = State(initialValue: Task { await database?.startSync() })
         _session = State(initialValue: session)
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
+        _notifications = State(initialValue: notifications)
         #if DEBUG
         Task { await Self.seedFieldsIfFlagged(store) }
         #endif
@@ -61,6 +76,7 @@ struct YDeliveryApp: App {
                 .environment(session)
                 .environment(store)
                 .environment(sync)
+                .environment(notifications)
         }
     }
 }

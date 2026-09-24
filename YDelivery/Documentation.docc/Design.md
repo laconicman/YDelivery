@@ -121,6 +121,20 @@ cheaply); and keeping the `return` point out of merged routes (this app *sends*
 its drop-off as `return`, so the wire's last stop is the sender's destination,
 not courier bookkeeping).
 
+**Provider time is the freshness clock (2026-09-25).** Every merge stamp and
+every timeline row carries the wire's own `updatedTs` — never `.now`: a delayed
+answer describes *older* provider truth and must not be able to rewind what a
+newer event already saw. `recordOrder` treats a stamped write as a merge and
+skips it wholesale when the stored observation is fresher; `providerEvents`
+keeps the feed's own rows (a journal `operationId` dedupes, an id-less sighting
+keys on `orderID ‖ status ‖ source`), and `statusAdvanced` — *not* row
+insertion — is the notification layer's gate, so a cursor-reset replay, a stale
+arrival, and a same-word re-sighting all stay silent. Notifications ride
+`BGAppRefreshTask` journal wakes between foreground polls (board `5c`): one
+thread per order, a new status posts new while a refinement replaces in place,
+and only the sender's moments banner — courier assigned, courier at a door,
+delivered, and the provider's endings.
+
 **Deferred, on the record:** a *scheduled* full replay — paging `finished`
 repeatedly or replaying the journal from epoch — belongs to a maintenance task
 gated on favorable conditions (unmetered Wi-Fi, charging), which the platform can

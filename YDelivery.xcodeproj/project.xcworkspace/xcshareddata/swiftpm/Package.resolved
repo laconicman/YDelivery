@@ -1,5 +1,5 @@
 {
-  "originHash" : "0312d5bd7c1dc5dc9707a46c8bca71768391938777b01275b9eb6235311f9b2d",
+  "originHash" : "b44cf3889f8665a29c4b4d2474c34c476fa7f3e75a4419285434456564ef5396",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -267,8 +267,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/YDeliveryKit",
       "state" : {
-        "revision" : "4f80aa78c1a8ebb81b1c8fd0f7699dfdb5ab740a",
-        "version" : "0.2.2"
+        "revision" : "b21c5554f0911773743534b9a26a67bd2573ab2d",
+        "version" : "0.3.0"
       }
     }
   ],

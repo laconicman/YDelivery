@@ -63,9 +63,9 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.2.2 adds «Ваши поля» — the field schema and order values this slice
-    # consumes. (0.2.1 remains the link floor from PR #41.)
-    minorVersion: 0.2.2
+    # 0.3.0 carries the provider-events feed — `recordProviderEvent` and its
+    # `ProviderEventOutcome`, the signal the notification layer announces.
+    minorVersion: 0.3.0
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
@@ -137,12 +137,15 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: YES
+        # The two array keys INFOPLIST_KEY_ cannot express (Xcode ignores unknown
+        # INFOPLIST_KEY_ names) live in a partial plist the generation merges in —
+        # kept at the repo root, outside the synced sources folder.
+        INFOPLIST_FILE: YDelivery-Info.plist
         # When-In-Use only, asked considerately (Roadmap → Phase 2): the picker explains
         # first, and everything works without it.
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Your position appears on the map and becomes the pickup point. Everything works without it.
         # CloudKit sync (Schema → Sync tiers): silent pushes wake CKSyncEngine for
         # fetch changes; CKSharingSupported opens the per-order CKShare flow.
-        INFOPLIST_KEY_UIBackgroundModes: remote-notification
         INFOPLIST_KEY_CKSharingSupported: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
