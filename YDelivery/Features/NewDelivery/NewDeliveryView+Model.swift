@@ -92,6 +92,10 @@ extension NewDeliveryView {
         /// store by the view. The draft holds *values*, keyed by definition id;
         /// definitions live in settings, not in the draft.
         var fieldDefinitions: [CustomFieldDefinition] = []
+        /// Whether the schema could not be read at all — distinct from *empty*:
+        /// an unread schema hides required fields rather than waiving them, so the
+        /// draft must not treat it as "nothing configured" (review, PR #42).
+        var fieldsUnavailable = false
         var fieldValues: [UUID: String] = [:]
         /// The «Add field» disclosure — definitions not shown by default stay
         /// behind the menu until asked for; a required one is never hidden (the
@@ -168,7 +172,13 @@ extension NewDeliveryView {
             // Field values ride the repeat too — the sender's «Заказ 4417» was as
             // much a part of that order as its route. Keyed by `fieldRef` —
             // definition id — so a schema reload matches them to today's labels.
-            for field in fields { fieldValues[field.fieldRef] = field.value }
+            // And a carried answer must be *seen*: revealing every answered field
+            // keeps a hidden one from sending a value the sender never looked at
+            // (review, PR #42).
+            for field in fields {
+                fieldValues[field.fieldRef] = field.value
+                revealedFieldIDs.insert(field.fieldRef)
+            }
         }
 
         /// Every stop chosen, nothing pending — the gate for everything downstream
@@ -599,6 +609,12 @@ extension NewDeliveryView {
             }
             if items.contains(where: { $0.quantity < 1 }) {
                 blockers.append(String(localized: "Every item needs a count of at least one."))
+            }
+            if fieldsUnavailable && fieldDefinitions.isEmpty {
+                // An unread schema is not an empty one — required fields may exist
+                // that nobody is being asked about (review, PR #42).
+                blockers.append(String(localized:
+                    "Your fields couldn't load — the order waits until the schema is readable."))
             }
             for field in fieldDefinitions where !field.isOptional {
                 if (fieldValues[field.id]?.trimmingCharacters(in: .whitespaces) ?? "").isEmpty {

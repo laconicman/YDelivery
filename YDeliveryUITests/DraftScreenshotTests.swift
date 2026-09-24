@@ -7,6 +7,9 @@ final class DraftScreenshotTests: XCTestCase {
     @MainActor
     func testItemJourneyAndChooserShots() throws {
         continueAfterFailure = false
+        // The launch suite leaves the device rotated — a landscape draft squeezes
+        // the card into a strip where swipes land on the map and rows never draw.
+        XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-three-stop-draft"]
         app.launch()
@@ -42,13 +45,17 @@ final class DraftScreenshotTests: XCTestCase {
         snap("1b-draft-item-row-journey")
 
         // The item editor: journey rows must show whole addresses. The journey row
-        // is a NavigationLink — one button, children's labels combined.
+        // is a NavigationLink — one button, children's labels combined — at the
+        // editor's end, so it may need a scroll before it exists at all.
         itemRow.tap()
         let pickupRow = app.buttons.containing(
             NSPredicate(format: "label CONTAINS %@", "Picked up at")
         ).firstMatch
-        XCTAssertTrue(pickupRow.waitForExistence(timeout: 5))
-        app.swipeUp() // the journey section sits at the editor's end
+        let editorList = app.collectionViews.firstMatch
+        for _ in 0..<6 where !pickupRow.waitForExistence(timeout: 1) {
+            (editorList.exists ? editorList : app).swipeUp()
+        }
+        XCTAssertTrue(pickupRow.waitForExistence(timeout: 3))
         snap("2-item-journey-rows")
 
         // The chooser: full-width rows, the impossible stop disabled with its reason.

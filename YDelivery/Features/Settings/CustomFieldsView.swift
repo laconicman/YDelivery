@@ -34,17 +34,17 @@ struct CustomFieldsView: View {
                 .buttonStyle(.plain)
             }
             .onDelete { offsets in
-                for index in offsets {
-                    Task { await store.deleteField(store.fieldDefinitions[index].id) }
-                }
+                // Ids resolve *now*, against the list this gesture saw — a task per
+                // offset would read a republished, shorter list and hit shifted rows.
+                let ids = offsets.map { store.fieldDefinitions[$0].id }
+                Task { for id in ids { await store.deleteField(id) } }
             }
             .onMove { offsets, destination in
                 var fields = store.fieldDefinitions
                 fields.move(fromOffsets: offsets, toOffset: destination)
-                for (position, var field) in fields.enumerated() {
-                    field.position = position
-                    Task { try? await store.saveField(field) }
-                }
+                // One serialized write for the whole arrangement — position-by-position
+                // tasks could interleave with the next gesture (review, PR #42).
+                Task { await store.saveFields(fields) }
             }
 
             if store.fieldDefinitions.isEmpty && store.fieldsError == nil {

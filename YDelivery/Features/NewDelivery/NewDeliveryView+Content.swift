@@ -70,9 +70,13 @@ extension NewDeliveryView {
         let itemRows: [ItemRow]
         /// «Ваши поля» — the schema reduced to rows on the root's side of the
         /// seam: `fieldRows` draw now, `hiddenFieldRows` feed the «Add field»
-        /// menu. Empty means no schema configured, and the section stays away.
+        /// menu. Empty means no schema configured — unless `fieldsError` says the
+        /// schema could not be read at all, which the section renders instead of
+        /// impersonating "nothing configured" (review, PR #42).
         let fieldRows: [FieldRow]
         let hiddenFieldRows: [FieldRow]
+        let fieldsError: String?
+        let retryFields: () -> Void
         let optionsSummary: String
         let whenSummary: String
         let commentSummary: String?
@@ -281,9 +285,19 @@ extension NewDeliveryView {
 
                 // Its own section, per board `4b` — the sender's schema, not a row
                 // mixed into the order's mechanics. Absent entirely when no fields
-                // are configured: nothing asks for fields nobody defined.
-                if !fieldRows.isEmpty || !hiddenFieldRows.isEmpty {
+                // are configured: nothing asks for fields nobody defined. A schema
+                // that failed to *read* still draws — as the error and its retry.
+                if fieldsError != nil || !fieldRows.isEmpty || !hiddenFieldRows.isEmpty {
                     Section {
+                        if let fieldsError {
+                            VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                                Text(fieldsError)
+                                    .font(.footnote)
+                                    .foregroundStyle(.red)
+                                Button("Retry", action: retryFields)
+                                    .font(.footnote)
+                            }
+                        }
                         ForEach(fieldRows) { row in
                             fieldRow(row)
                         }
@@ -828,6 +842,8 @@ private extension MKCoordinateRegion {
         itemRows: [],
         fieldRows: [],
         hiddenFieldRows: [],
+        fieldsError: nil,
+        retryFields: {},
         optionsSummary: "to the door",
         whenSummary: "as soon as possible",
         commentSummary: nil,
@@ -914,6 +930,8 @@ private extension MKCoordinateRegion {
             .init(id: UUID(), name: "Накладная", kind: .text, choices: [],
                   isOptional: true, value: ""),
         ],
+        fieldsError: nil,
+        retryFields: {},
         optionsSummary: "pro courier · to the door",
         whenSummary: "as soon as possible",
         commentSummary: nil,

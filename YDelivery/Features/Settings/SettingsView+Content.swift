@@ -65,6 +65,8 @@ extension SettingsView {
     }
 }
 
+// «Your fields» reads the environment — every preview carries a store so
+// navigating there from a preview works (review, PR #42).
 #Preview("Signed out") {
     @Previewable @State var token = ""
     @Previewable @State var city = ""
@@ -77,6 +79,7 @@ extension SettingsView {
         signIn: {},
         signOut: {}
     )
+    .environment(StoreController(database: nil))
 }
 
 #Preview("Signed in") {
@@ -91,6 +94,7 @@ extension SettingsView {
         signIn: {},
         signOut: {}
     )
+    .environment(StoreController(database: nil))
 }
 
 #Preview("Failed sign-in") {
@@ -105,4 +109,5 @@ extension SettingsView {
         signIn: {},
         signOut: {}
     )
+    .environment(StoreController(database: nil))
 }

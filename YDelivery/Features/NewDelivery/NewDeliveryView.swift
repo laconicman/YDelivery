@@ -39,6 +39,15 @@ struct NewDeliveryView: View {
         let attempt: Int
     }
 
+    /// The schema sync's key — both the definitions and whether they could be read
+    /// at all. An error flip with unchanged definitions must still reach the draft:
+    /// it is the difference between "no fields configured" and "schema unread"
+    /// (review, PR #42).
+    private struct FieldSync: Equatable {
+        let definitions: [CustomFieldDefinition]
+        let unavailable: Bool
+    }
+
     var body: some View {
         NavigationStack {
             Content(
@@ -50,6 +59,8 @@ struct NewDeliveryView: View {
                 itemRows: contentItemRows,
                 fieldRows: fieldRows(draft.visibleFieldDefinitions),
                 hiddenFieldRows: fieldRows(draft.hiddenFieldDefinitions),
+                fieldsError: store.fieldsError?.localizedDescription,
+                retryFields: { Task { await store.refresh() } },
                 optionsSummary: draft.options.summary,
                 whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
@@ -145,9 +156,12 @@ struct NewDeliveryView: View {
             }
             .task { await store.refresh() }
             // The «Ваши поля» schema follows the store — an edit mid-draft re-types
-            // the section without losing typed values (keyed by definition id).
-            .task(id: store.fieldDefinitions) {
+            // the section without losing typed values (keyed by definition id), and
+            // a read that failed keeps the draft from mistaking unread for empty.
+            .task(id: FieldSync(definitions: store.fieldDefinitions,
+                                unavailable: store.fieldsError != nil)) {
                 draft.fieldDefinitions = store.fieldDefinitions
+                draft.fieldsUnavailable = store.fieldsError != nil
             }
             .sheet(isPresented: $showsExplainer) {
                 TariffExplainer(cards: explainerCards)

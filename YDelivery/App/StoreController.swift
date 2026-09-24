@@ -44,6 +44,11 @@ final class StoreController {
     /// must not hold the reads' publication or any caller that awaited them.
     private var indexing: Task<Void, Never>?
 
+    /// Field-schema writes queue through this tail: a reorder writes every position,
+    /// and a second gesture (move, delete, save) starting mid-write would otherwise
+    /// interleave positions into an arrangement nobody chose (review, PR #42).
+    private var fieldWrites: Task<Void, Error>?
+
     init(database: AppDatabase? = .inAppGroup(
         id: AppGroup.id,
         providerAccountRef: SyncIdentity.providerAccountRef,
@@ -147,11 +152,20 @@ final class StoreController {
             } catch {
                 fieldsError = error
             }
-            reindexSpotlight(orders: orders, fields: orderFields,
-                             definitions: fieldDefinitions)
+            reindexSpotlightIfHealthy()
         } else {
             hasLoaded = true
         }
+    }
+
+    /// A full-domain replace may only run on healthy reads: a failed read leaves an
+    /// empty or stale array published, and indexing that would wipe good results the
+    /// disk still holds (review, PR #42). The index keeps its last good state until
+    /// the next refresh where every input read succeeded.
+    private func reindexSpotlightIfHealthy() {
+        guard ordersError == nil, fieldsError == nil else { return }
+        reindexSpotlight(orders: orders, fields: orderFields,
+                         definitions: fieldDefinitions)
     }
 
     /// Queues the index write behind any in-flight one and returns — the caller's
@@ -176,33 +190,62 @@ final class StoreController {
     /// write. Throws like ``save(_:)``: the editor stands in front of the sender and
     /// renders the refusal (a taken carrier) where it happened.
     func saveField(_ definition: CustomFieldDefinition) async throws {
-        guard let database else { throw StoreUnavailable() }
-        try await Self.write(definition, to: database)
+        try await enqueueFieldWrite { try $0.saveFieldDefinition(definition) }
+        // The carrier slot may have moved — the index's promoted title follows.
+        reindexSpotlightIfHealthy()
+    }
+
+    /// A reorder writes every position. Serialized behind any in-flight schema write
+    /// and republished once at the end — two gestures can then never interleave
+    /// positions into an order nobody arranged (review, PR #42).
+    func saveFields(_ ordered: [CustomFieldDefinition]) async {
         do {
-            fieldDefinitions = try await Self.readFieldDefinitions(database)
-            fieldsError = nil
+            try await enqueueFieldWrite { database in
+                for (position, definition) in ordered.enumerated() {
+                    var definition = definition
+                    definition.position = position
+                    try database.saveFieldDefinition(definition)
+                }
+            }
+            reindexSpotlightIfHealthy()
         } catch {
             fieldsError = error
-            throw error
         }
-        // The carrier slot may have moved — the index's promoted title follows.
-        reindexSpotlight(orders: orders, fields: orderFields,
-                         definitions: fieldDefinitions)
     }
 
     /// Forgets a definition — values already on orders keep their name snapshot.
     /// Mirrors ``deletePlace(_:)``: nobody renders a thrown error, so a failure lands
     /// on ``fieldsError``.
     func deleteField(_ id: CustomFieldDefinition.ID) async {
-        guard let database else { return }
         do {
-            try await Self.deleteField(id, from: database)
-            fieldDefinitions = try await Self.readFieldDefinitions(database)
-            fieldsError = nil
-            reindexSpotlight(orders: orders, fields: orderFields,
-                             definitions: fieldDefinitions)
+            try await enqueueFieldWrite { try $0.deleteFieldDefinition(id: id) }
+            reindexSpotlightIfHealthy()
         } catch {
             fieldsError = error
+        }
+    }
+
+    /// The schema-write serializer: each caller's work runs after the previous
+    /// write finished (a failed one must not strand the queue), then republishes the
+    /// schema as the write's own confirmation. Errors land on ``fieldsError`` *and*
+    /// propagate — the editor renders them, gestures only record them.
+    private func enqueueFieldWrite(
+        _ work: @escaping @concurrent @Sendable (AppDatabase) async throws -> Void
+    ) async throws {
+        guard let database else { throw StoreUnavailable() }
+        let prior = fieldWrites
+        let task = Task {
+            _ = try? await prior?.value
+            try await work(database)
+            fieldDefinitions = try await Self.readFieldDefinitions(database)
+            fieldsError = nil
+        }
+        fieldWrites = task
+        do {
+            try await task.value
+        } catch {
+            fieldsError = error
+            throw error
         }
     }
 
@@ -279,8 +322,7 @@ final class StoreController {
         } catch {
             fieldsError = error
         }
-        reindexSpotlight(orders: orders, fields: orderFields,
-                         definitions: fieldDefinitions)
+        reindexSpotlightIfHealthy()
     }
 
     /// The fallback merge when the confirming read fails: the written order kept,
@@ -345,19 +387,5 @@ final class StoreController {
         _ database: AppDatabase
     ) async throws -> [OrderCustomField] {
         try database.allOrderCustomFields()
-    }
-
-    @concurrent
-    private static func write(
-        _ definition: CustomFieldDefinition, to database: AppDatabase
-    ) async throws {
-        try database.saveFieldDefinition(definition)
-    }
-
-    @concurrent
-    private static func deleteField(
-        _ id: CustomFieldDefinition.ID, from database: AppDatabase
-    ) async throws {
-        try database.deleteFieldDefinition(id: id)
     }
 }

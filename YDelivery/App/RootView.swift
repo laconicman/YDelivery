@@ -1,3 +1,4 @@
+import CoreSpotlight
 import SFSafeSymbols
 import SwiftUI
 import YDeliveryKit
@@ -10,7 +11,15 @@ import YDeliveryKit
 struct RootView: View {
     @State private var draft = RootView.initialDraft()
     @State private var isComposing = RootView.opensComposing
+    /// Which tab is up — a Spotlight result steers it to Deliveries.
+    @State private var selectedTab = Tab.deliveries
+    /// An order a Spotlight result asked for, retained until the store's first
+    /// read can answer whether it's still in history — a cold start delivers the
+    /// activity before `refresh()` lands (review, PR #42).
+    @State private var pendingOrderID: UUID?
     @Environment(StoreController.self) private var store
+
+    enum Tab { case deliveries, settings }
 
     #if DEBUG
     /// UI-test seeding: a three-stop draft with real-length addresses, opened on the
@@ -55,7 +64,7 @@ struct RootView: View {
     #endif
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             DeliveriesView(
                 compose: { isComposing = true },
                 repeatOrder: { order, reversed in
@@ -67,11 +76,23 @@ struct RootView: View {
                         repeating: order, reversed: reversed,
                         fields: store.fields(for: order.id))
                     isComposing = true
-                }
+                },
+                pendingOrderID: $pendingOrderID
             )
                 .tabItem { Label("Deliveries", systemSymbol: .shippingbox) }
+                .tag(Tab.deliveries)
             SettingsView()
                 .tabItem { Label("Settings", systemSymbol: .gearshape) }
+                .tag(Tab.settings)
+        }
+        // A Spotlight result carries the order id — DeliveriesView pushes the row
+        // once the store's read can confirm it's still in history.
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            if let id = (activity.userInfo?[CSSearchableItemActivityIdentifier] as? String)
+                .flatMap(UUID.init(uuidString:)) {
+                pendingOrderID = id
+                selectedTab = .deliveries
+            }
         }
         .sheet(isPresented: $isComposing) {
             NewDeliveryView(

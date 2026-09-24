@@ -7,6 +7,9 @@ final class FieldsScreenshotTests: XCTestCase {
     @MainActor
     func testFieldSectionAndEditorShots() throws {
         continueAfterFailure = false
+        // Same guard: the launch suite ends landscape, and these scrolls assume
+        // the portrait card.
+        XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-three-stop-draft", "--uitest-fields"]
         app.launch()

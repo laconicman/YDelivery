@@ -105,4 +105,22 @@ struct RepeatDraftTests {
 
         #expect(model.fieldValues[defID] == "4417")
     }
+
+    /// A field that hides behind «Add field» but carries a value on the repeated
+    /// order comes back *visible* — a carried answer must be seen, not sent
+    /// invisibly (review, PR #42).
+    @Test("A carried answer reveals its hidden field")
+    func repeatRevealsAnsweredHiddenField() {
+        let order = rememberedOrder()
+        let def = CustomFieldDefinition(
+            name: "Накладная", isOptional: true, isShownByDefault: false)
+        let model = NewDeliveryView.Model(
+            repeating: order,
+            fields: [OrderCustomField(
+                orderID: order.id, fieldRef: def.id, name: def.name, value: "T-12")])
+        model.fieldDefinitions = [def]
+
+        #expect(model.visibleFieldDefinitions.map(\.id) == [def.id])
+        #expect(model.hiddenFieldDefinitions.isEmpty)
+    }
 }
