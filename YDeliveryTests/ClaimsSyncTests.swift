@@ -65,17 +65,21 @@ struct ClaimsSyncTests {
         changeType: Components.Schemas.JournalChangeType = .statusChanged,
         newStatus: Components.Schemas.ClaimStatus? = .delivered,
         newPrice: String? = nil,
-        newCurrency: String? = nil
+        newCurrency: String? = nil,
+        operationId: Int64 = 1,
+        updatedTs: Date = Date(timeIntervalSince1970: 1_790_000_100),
+        resolution: Components.Schemas.ClaimStatusResolution? = nil
     ) -> Components.Schemas.JournalEvent {
         .init(
             changeType: changeType,
             claimId: claimId,
-            operationId: 1,
+            operationId: operationId,
             revision: 2,
-            updatedTs: Date(timeIntervalSince1970: 1_790_000_100),
+            updatedTs: updatedTs,
             newCurrency: newCurrency,
             newPrice: newPrice,
-            newStatus: newStatus
+            newStatus: newStatus,
+            resolution: resolution
         )
     }
 
@@ -277,6 +281,24 @@ struct ClaimsSyncTests {
         #expect(merged[0].status == .active, "the later card wins")
     }
 
+    @Test("A repeated claim folds to its newest card — the stamp and the content agree")
+    func mergeKeepsNewestDuplicate() {
+        // The provider answering one claim twice with nonmonotonic order is
+        // legal enough to defend: the row must store the card `stamps` calls
+        // freshest, or a later correct update reads as stale (review, PR #43).
+        let newer = claim(id: "claim-9", status: .delivered,
+                          createdTs: Date(timeIntervalSince1970: 1_790_001_000))
+        let older = claim(id: "claim-9", status: .performerFound,
+                          createdTs: Date(timeIntervalSince1970: 1_790_000_000))
+        let merged = ClaimsSync.merging([newer, older], into: [])
+
+        #expect(merged.count == 1)
+        #expect(merged[0].status == .done, "the newest card wins regardless of array order")
+        #expect(ClaimsSync.stamps(of: [newer, older])["claim-9"]
+                == newer.updatedTs,
+                "the stamp names the card the merge kept — not a time it never saw")
+    }
+
     @Test("A thin card still becomes a row — no route, no price, no crash")
     func thinClaimBecomesOrder() {
         let thin = Components.Schemas.ClaimResponse(
@@ -362,6 +384,83 @@ struct ClaimsSyncTests {
         } catch {
             Issue.record("expected ProviderRefusal, got \(error)")
         }
+    }
+
+    // MARK: Provider events — the feed's own rows
+
+    @Test("A journal event becomes the feed row — operationId is the dedupe key")
+    func journalEventBecomesProviderEvent() {
+        let orderID = UUID()
+        let wire = event(
+            claimId: "claim-1", newStatus: .performerFound,
+            operationId: 42, updatedTs: Date(timeIntervalSince1970: 1_790_000_500),
+            resolution: .success)
+        let row = ClaimsSync.providerEvent(wire, orderID: orderID)
+
+        #expect(row.orderID == orderID)
+        #expect(row.providerEventID == 42, "the feed's sequence id is the row's identity")
+        #expect(row.at == Date(timeIntervalSince1970: 1_790_000_500),
+                "provider time, not the read's clock")
+        #expect(row.kind == "status_changed")
+        #expect(row.providerStatus == "performer_found", "the raw word survives the collapse")
+        #expect(row.detail == "success", "the terminal resolution is the status's detail")
+        #expect(row.source == "journal")
+    }
+
+    @Test("A price event's detail is the new figure, and it carries no status")
+    func priceEventDetailIsTheFigure() {
+        let row = ClaimsSync.providerEvent(
+            event(changeType: .priceChanged, newStatus: nil,
+                  newPrice: "1300", newCurrency: "RUB"),
+            orderID: UUID())
+        #expect(row.detail == "1300 RUB")
+        #expect(row.providerStatus == nil)
+        #expect(row.kind == "price_changed")
+    }
+
+    @Test("The same operation replays to the same row — replay merges, never duplicates")
+    func eventIdIsStableAcrossReplays() {
+        let orderID = UUID()
+        let once = ClaimsSync.providerEvent(event(operationId: 7), orderID: orderID)
+        let again = ClaimsSync.providerEvent(event(operationId: 7), orderID: orderID)
+        #expect(once.id == again.id)
+        #expect(once.id != ClaimsSync.providerEvent(
+            event(operationId: 8), orderID: orderID).id)
+    }
+
+    @Test("A sighting stamps the claim's own updatedTs — provider time, not read time")
+    func sightingStampsProviderTime() {
+        let claim = claim(id: "claim-1", status: .deliveryArrived,
+                          createdTs: Date(timeIntervalSince1970: 1_790_000_000))
+        let row = ClaimsSync.sighting(of: claim, orderID: UUID(), source: "search")
+        #expect(row.at == claim.updatedTs)
+        #expect(row.providerStatus == "delivery_arrived")
+        #expect(row.kind == "sighting")
+        #expect(row.source == "search")
+        #expect(row.providerEventID == nil, "no feed id — the status is the key")
+    }
+
+    @Test("A repeated sighting re-derives its first row; a new status is a new row")
+    func sightingIdIsStatusKeyed() {
+        let seen = claim(id: "claim-1", status: .deliveryArrived)
+        let orderID = UUID()
+        let first = ClaimsSync.sighting(of: seen, orderID: orderID, source: "search")
+        #expect(ClaimsSync.sighting(of: seen, orderID: orderID, source: "search").id == first.id,
+                "the hundredth sighting merges")
+        #expect(ClaimsSync.sighting(
+            of: claim(id: "claim-1", status: .delivered),
+            orderID: orderID, source: "search").id != first.id,
+                "a status the feed never sent is still timeline news")
+    }
+
+    @Test("Stamps carry each claim's updatedTs, keyed by claimID")
+    func stampsCarryProviderTime() {
+        let stamps = ClaimsSync.stamps(of: [
+            claim(id: "claim-1", createdTs: Date(timeIntervalSince1970: 1_000)),
+            claim(id: "claim-2", createdTs: Date(timeIntervalSince1970: 2_000)),
+        ])
+        #expect(stamps == ["claim-1": Date(timeIntervalSince1970: 1_000),
+                           "claim-2": Date(timeIntervalSince1970: 2_000)])
     }
 
     // MARK: Sync state

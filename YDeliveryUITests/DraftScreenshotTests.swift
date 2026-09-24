@@ -55,9 +55,13 @@ final class DraftScreenshotTests: XCTestCase {
         let pickupRow = app.buttons.containing(
             NSPredicate(format: "label CONTAINS %@", "Picked up at")
         ).firstMatch
-        let editorList = app.collectionViews.firstMatch
+        // The editor is a sheet: two collection views exist once it covers the
+        // draft, and `firstMatch` can resolve to the covered one — scroll
+        // whichever list is actually hittable (sheet's), else the screen.
         for _ in 0..<6 where !pickupRow.waitForExistence(timeout: 1) {
-            (editorList.exists ? editorList : app).swipeUp()
+            let scrollable = app.collectionViews.allElementsBoundByIndex
+                .first(where: { $0.isHittable })
+            (scrollable ?? app).swipeUp()
         }
         XCTAssertTrue(pickupRow.waitForExistence(timeout: 3))
         snap("2-item-journey-rows")

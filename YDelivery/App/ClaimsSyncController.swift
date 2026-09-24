@@ -1,3 +1,4 @@
+import BackgroundTasks
 import Foundation
 import Observation
 import OSLog
@@ -46,6 +47,9 @@ final class ClaimsSyncController {
     private let session: ClientController
     private let store: StoreController
     private let database: AppDatabase?
+    /// The lock-screen surface feed events drive — optional so previews and
+    /// tests can stand the controller up without a notification center.
+    private let notifications: NotificationController?
     /// The standing loop — owned, and cancelled in `deinit` per rule 6's
     /// convention. `nonisolated` is what makes that possible (a `deinit` cannot
     /// reach a MainActor member; `@ObservationIgnored` keeps the macro from
@@ -81,17 +85,27 @@ final class ClaimsSyncController {
     /// chasing its own tail, not syncing.
     private static let maxPages = 20
 
+    /// The background-refresh task's identifier — must match
+    /// `BGTaskSchedulerPermittedIdentifiers` in the generated Info.plist.
+    nonisolated static let refreshTaskIdentifier = "com.learnable.YDelivery.claims-refresh"
+    /// How soon after backgrounding the app asks to sync again — a hint to the
+    /// system scheduler, not a timer: iOS grants refresh windows by usage and
+    /// battery, and delivers them when it decides.
+    private nonisolated static let refreshLeadTime: TimeInterval = 15 * 60
+
     init(
         session: ClientController,
         store: StoreController,
         database: AppDatabase? = .inAppGroup(
             id: AppGroup.id,
             providerAccountRef: SyncIdentity.providerAccountRef,
-            containerIdentifier: SyncIdentity.cloudKitContainer)
+            containerIdentifier: SyncIdentity.cloudKitContainer),
+        notifications: NotificationController? = nil
     ) {
         self.session = session
         self.store = store
         self.database = database
+        self.notifications = notifications
         loop = Task { [weak self] in
             var ticks = 0
             while !Task.isCancelled {
@@ -114,11 +128,15 @@ final class ClaimsSyncController {
     /// The delta pass: journal events applied to known claims, whole cards fetched
     /// for claims history never recorded. The cursor persists only *after* the
     /// page's events land — a crash mid-page replays, and replay is safe because
-    /// every event sets an absolute state.
-    func syncJournal() async {
+    /// every event sets an absolute state. Returns whether the pass completed —
+    /// the background-refresh handler reports it to `BGTask` so a failed pass
+    /// doesn't read as success to the scheduler; a skipped pass (signed out,
+    /// already running) is vacuously true.
+    @discardableResult
+    func syncJournal() async -> Bool {
         // One pass at a time — a manual pull landing on a running tick is a no-op,
         // not a doubled feed. Idempotency makes the skip free.
-        guard session.isSignedIn, !isSyncing else { return }
+        guard session.isSignedIn, !isSyncing else { return true }
         isSyncing = true
         defer { isSyncing = false }
         let identity = identityGeneration
@@ -128,6 +146,7 @@ final class ClaimsSyncController {
             try await journalPasses(from: syncState().cursor, identity: identity)
             lastSyncedAt = .now
             journalError = nil
+            return true
         } catch is JournalCursorInvalid {
             // The position rotted — restart it and nothing else: the pending
             // queue and the backfill flag are the account's, not the cursor's,
@@ -139,15 +158,20 @@ final class ClaimsSyncController {
                 try await journalPasses(from: nil, identity: identity)
                 lastSyncedAt = .now
                 journalError = nil
+                return true
             } catch is SyncSuperseded {
+                return true
             } catch {
                 journalError = (error, .now)
+                return false
             }
         } catch is SyncSuperseded {
             // The identity moved mid-pass — its writes were dropped at the
             // guards, and the new account's own passes start fresh.
+            return true
         } catch {
             journalError = (error, .now)
+            return false
         }
     }
 
@@ -171,8 +195,12 @@ final class ClaimsSyncController {
                 var cursor: String?
                 for _ in 0..<Self.maxPages {
                     let page = try await session.searchPage(state: searchState, cursor: cursor)
-                    try await persistChanged(ClaimsSync.merging(page.claims, into: store.orders),
+                    let merged = ClaimsSync.merging(page.claims, into: store.orders)
+                    try await persistChanged(merged,
+                                             stamps: ClaimsSync.stamps(of: page.claims),
                                              identity: identity)
+                    try await recordSightings(page.claims, among: merged,
+                                              source: "search", identity: identity)
                     cursor = page.cursor
                     if cursor == nil { break }
                 }
@@ -232,7 +260,20 @@ final class ClaimsSyncController {
             }
         }
         orders = ClaimsSync.merging(discovered, into: orders)
-        try await persistChanged(orders, identity: identity)
+        // Provider-side as-of stamps — an event's own `updatedTs`, a card's
+        // own. The mirror's freshness follows the provider's clock, never the
+        // read's: a stale page can't rewind what a newer event already saw.
+        var stamps = ClaimsSync.stamps(of: discovered)
+        for event in events {
+            stamps[event.claimId] = max(stamps[event.claimId] ?? .distantPast,
+                                        event.updatedTs)
+        }
+        try await persistChanged(orders, stamps: stamps, identity: identity)
+        // The feed's own rows land after the merge so a just-discovered
+        // claim's events record against its new row.
+        try await recordJournal(events, among: orders, identity: identity)
+        try await recordSightings(discovered, among: orders,
+                                  source: "card", identity: identity)
         if !missed.isEmpty {
             var state = syncState()
             state.pendingClaimIDs = Array(Set(state.pendingClaimIDs ?? []).union(missed)).sorted()
@@ -265,8 +306,11 @@ final class ClaimsSyncController {
                 stillPending.append(id)
             }
         }
-        try await persistChanged(ClaimsSync.merging(discovered, into: store.orders),
+        let merged = ClaimsSync.merging(discovered, into: store.orders)
+        try await persistChanged(merged, stamps: ClaimsSync.stamps(of: discovered),
                                  identity: identity)
+        try await recordSightings(discovered, among: merged,
+                                  source: "card", identity: identity)
         state.pendingClaimIDs = stillPending
         try writeSyncState(state, identity: identity)
     }
@@ -274,13 +318,92 @@ final class ClaimsSyncController {
     /// Writes the rows a merge actually changed — never re-persisting untouched
     /// history, so a no-op page writes nothing. Each write re-proves the identity:
     /// a switch mid-loop must not let the old account's rows into the file.
-    private func persistChanged(_ merged: [Order], identity: Int) async throws {
+    /// `stamps` keys provider-side as-of time by claimID — the claim's or event's
+    /// own `updatedTs`, so the mirror's freshness is provider truth, not the
+    /// read's clock (Kit: the column only moves forward).
+    private func persistChanged(_ merged: [Order], stamps: [String: Date],
+                                identity: Int) async throws {
         for order in merged where store.orders.first(where: { $0.id == order.id }) != order {
             guard identity == identityGeneration else { throw SyncSuperseded() }
             // TODO(YD-13): the record still suspends — a boundary inside it lands
             // one row late; bounded while the store is not per-account.
-            try await store.record(order, providerObservedAt: .now)
+            try await store.record(order,
+                                   providerObservedAt: order.claimID.flatMap { stamps[$0] })
         }
+    }
+
+    /// The feed's own history rows — one `ProviderEvent` per journal entry.
+    /// `statusAdvanced` is the announce gate: only a genuinely new provider
+    /// word banners, so a replayed page, a stale arrival, or a status the
+    /// mirror already holds stays silent (Kit PR #7). A write failure throws
+    /// the whole page: the cursor has not moved yet, so the next pass replays
+    /// and the dedupe key makes the retry a merge, never a second row
+    /// (review, PR #43 — a swallowed failure would lose the event for good).
+    private func recordJournal(_ events: [Components.Schemas.JournalEvent],
+                               among orders: [Order], identity: Int) async throws {
+        for event in events {
+            guard identity == identityGeneration else { throw SyncSuperseded() }
+            guard let order = orders.first(where: { $0.claimID == event.claimId }) else {
+                continue
+            }
+            let providerEvent = ClaimsSync.providerEvent(event, orderID: order.id)
+            guard (try database?.recordProviderEvent(providerEvent))?.statusAdvanced == true
+            else { continue }
+            await notifications?.announce(providerEvent, for: order)
+        }
+    }
+
+    /// The id-less half of the feed: every claim a pass sighted records a
+    /// `ProviderEvent` keyed `orderID ‖ status ‖ source`. The hundredth
+    /// sighting of the same status merges into its first row yet still
+    /// freshens the mirror's stamp — and a status the journal never reported
+    /// (a feed gap) still announces through this backstop. Failures throw like
+    /// `recordJournal`'s: the pass fails and replays rather than losing the
+    /// sighting permanently (review, PR #43).
+    private func recordSightings(_ claims: [Components.Schemas.ClaimResponse],
+                                 among orders: [Order],
+                                 source: String, identity: Int) async throws {
+        for claim in claims {
+            guard identity == identityGeneration else { throw SyncSuperseded() }
+            guard let order = orders.first(where: { $0.claimID == claim.id }) else {
+                continue
+            }
+            let sighting = ClaimsSync.sighting(of: claim, orderID: order.id, source: source)
+            guard (try database?.recordProviderEvent(sighting))?.statusAdvanced == true
+            else { continue }
+            await notifications?.announce(sighting, for: order)
+        }
+    }
+
+    /// The background-refresh half: iOS wakes the app briefly, one journal pass
+    /// is the whole job — the feed's cheap delta, not the membership re-ask.
+    /// The next request is armed *first*, so a run killed mid-pass still
+    /// leaves a wake-up queued behind it. `nonisolated`: the launch handler
+    /// runs on a system background queue (`nil` in `register`), and everything
+    /// here — `BGTaskScheduler`, the `Task` spawn — is already off-actor safe;
+    /// the journal pass itself hops to MainActor at the `await`.
+    nonisolated func handleAppRefresh(_ task: BGAppRefreshTask) {
+        scheduleAppRefresh()
+        // BGTask predates Sendable — its completion/expiry API is thread-safe
+        // by contract (the object lives to be driven from the queue the system
+        // delivers it on), so the unchecked marker is honest, not a workaround.
+        nonisolated(unsafe) let task = task
+        let work = Task { @MainActor [weak self] in
+            let completed = await self?.syncJournal() ?? true
+            task.setTaskCompleted(success: completed && !Task.isCancelled)
+        }
+        task.expirationHandler = { work.cancel() }
+    }
+
+    /// Queues the next background wake — a hint, not a timer: iOS grants
+    /// refresh windows by usage and battery. Called when the app backgrounds
+    /// and re-armed inside each refresh run, so the chain survives a kill.
+    /// `nonisolated`: `BGTaskScheduler` is thread-safe — the launch handler and
+    /// the `.background` scene change call this from different executors.
+    nonisolated func scheduleAppRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskIdentifier)
+        request.earliestBeginDate = .now.addingTimeInterval(Self.refreshLeadTime)
+        try? BGTaskScheduler.shared.submit(request)
     }
 
     /// The state file's only write path inside a pass: the identity is proved

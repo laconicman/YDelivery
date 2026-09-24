@@ -238,6 +238,21 @@ the sharper cousin — the claim may exist provider-side; a lost draft is merely
   anticipated it; the slice landed without it because an in-memory draft is the
   honest minimum while the draft tier's own shape is still provisional.
 
+## YD-17 — A deleted order-number definition orphans its saved values — **open**
+
+`StoreController.orderNumber(for:)` finds an order's «Заказ №» by joining stored
+values against the *live* definition carrying `.orderNumber`. Deleting that
+definition leaves the values on past orders but removes the only thing that
+identifies them — a notification for an old order then falls back to the
+unnamed title even though its number is still on disk (review, PR #43).
+
+- **Cost:** one degraded title per notification on orders placed before the
+  schema edit; the value itself is never lost, just unfindable.
+- **Discharge:** snapshot `carrier` onto `OrderCustomField` at write time (a Kit
+  column, additive), so identification survives the definition's deletion. Held
+  out of the notifications slice: a schema change for an edge the sender opts
+  into is its own PR, not a rider on this one.
+
 ## See Also
 
 - <doc:Design>
