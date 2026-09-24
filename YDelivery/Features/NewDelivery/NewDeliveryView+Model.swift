@@ -88,6 +88,16 @@ extension NewDeliveryView {
         private(set) var items: [ParcelItem] = []
         var options = DeliveryOptions()
 
+        /// «Ваши поля» — the sender's field schema (board `4b`), loaded from the
+        /// store by the view. The draft holds *values*, keyed by definition id;
+        /// definitions live in settings, not in the draft.
+        var fieldDefinitions: [CustomFieldDefinition] = []
+        var fieldValues: [UUID: String] = [:]
+        /// The «Add field» disclosure — definitions not shown by default stay
+        /// behind the menu until asked for; a required one is never hidden (the
+        /// store normalizes `!isOptional ⇒ isShownByDefault` on write).
+        var revealedFieldIDs: Set<UUID> = []
+
         /// The card the order button will spend — auto-selected to the first offer when
         /// prices land, switchable by tapping the strip. Changing class renormalizes the
         /// options that are bound to one (§4): a thermal bag cannot leave with anything
@@ -138,6 +148,7 @@ extension NewDeliveryView {
         /// same honest read `RouteLine` makes. Items, options and the schedule were
         /// never stored on `Order`; the repeat prices and packs fresh.
         convenience init(repeating order: Order, reversed: Bool = false,
+                         fields: [OrderCustomField] = [],
                          estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
             self.init(estimateRoute: estimateRoute)
             let route = reversed ? order.route.reversed() : order.route
@@ -154,6 +165,10 @@ extension NewDeliveryView {
                 }
             }
             chosenTariff = order.tariff.map(TariffClass.init(wireSpelling:))
+            // Field values ride the repeat too — the sender's «Заказ 4417» was as
+            // much a part of that order as its route. Keyed by `fieldRef` —
+            // definition id — so a schema reload matches them to today's labels.
+            for field in fields { fieldValues[field.fieldRef] = field.value }
         }
 
         /// Every stop chosen, nothing pending — the gate for everything downstream
@@ -585,10 +600,48 @@ extension NewDeliveryView {
             if items.contains(where: { $0.quantity < 1 }) {
                 blockers.append(String(localized: "Every item needs a count of at least one."))
             }
+            for field in fieldDefinitions where !field.isOptional {
+                if (fieldValues[field.id]?.trimmingCharacters(in: .whitespaces) ?? "").isEmpty {
+                    blockers.append(String(
+                        localized: "«\(field.name)» is required — the order doesn't leave without it."
+                    ))
+                }
+            }
             if selectedOffer == nil {
                 blockers.append(String(localized: "Pick a delivery class once prices arrive."))
             }
             return blockers
+        }
+
+        /// The fields the draft draws now — shown-by-default plus any the «Add
+        /// field» menu pulled in, in schema order.
+        var visibleFieldDefinitions: [CustomFieldDefinition] {
+            fieldDefinitions.filter { $0.isShownByDefault || revealedFieldIDs.contains($0.id) }
+        }
+
+        /// What still waits behind «Add field» — the menu's entries.
+        var hiddenFieldDefinitions: [CustomFieldDefinition] {
+            fieldDefinitions.filter { !$0.isShownByDefault && !revealedFieldIDs.contains($0.id) }
+        }
+
+        func setFieldValue(_ value: String, for fieldID: CustomFieldDefinition.ID) {
+            fieldValues[fieldID] = value
+        }
+
+        func revealField(_ id: CustomFieldDefinition.ID) {
+            revealedFieldIDs.insert(id)
+        }
+
+        /// The values as they'd persist on a placed order — `name` snapshots the
+        /// label so a later schema edit doesn't rewrite history. Empty values drop:
+        /// a placeholder row is not a value.
+        func customFields(for orderID: Order.ID) -> [OrderCustomField] {
+            fieldDefinitions.compactMap { def in
+                let value = fieldValues[def.id]?.trimmingCharacters(in: .whitespaces) ?? ""
+                guard !value.isEmpty else { return nil }
+                return OrderCustomField(
+                    orderID: orderID, fieldRef: def.id, name: def.name, value: value)
+            }
         }
 
         /// The create call's payload — assembled only when nothing blocks it.
@@ -609,6 +662,10 @@ extension NewDeliveryView {
             return OrderRequest(
                 points: requestPoints,
                 items: items,
+                fieldEntries: fieldDefinitions.compactMap { def in
+                    let value = fieldValues[def.id]?.trimmingCharacters(in: .whitespaces) ?? ""
+                    return value.isEmpty ? nil : OrderRequest.FieldEntry(definition: def, value: value)
+                },
                 // The same options the quote was built from. Pricing normalised a lapsed
                 // schedule and this did not, so the sheet showed a price for an immediate
                 // run while the create carried the expired time — a quote that could not

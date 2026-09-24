@@ -223,6 +223,21 @@ would persist as `dropoff`, indistinguishable from a delivery.
   same representation in claims discovery. Do it when the product gains return
   routes — inventing the enum early only decorates a model nobody populates.
 
+## YD-16 — Draft field values are memory, not disk — **open**
+
+`orderDrafts`/`draftStops`/`draftItems` exist as a skeletal tier (<doc:Schema>), but the
+draft the sender edits — including its «Ваши поля» answers — lives in
+`NewDeliveryView.Model` only. A force-quit mid-draft loses typed values along with the
+route; custom fields made the loss *larger*, not new (YD-5's unresolved acceptance is
+the sharper cousin — the claim may exist provider-side; a lost draft is merely annoying).
+
+- **Cost:** minutes of re-typing at worst; no money moves and no provider state
+  forks — a draft has no provider existence by definition.
+- **Discharge:** real columns on `OrderDraft` + children, a `draftCustomFields`
+  (or denormalized values on the draft row), and a save-on-edit loop — the schema
+  anticipated it; the slice landed without it because an in-memory draft is the
+  honest minimum while the draft tier's own shape is still provisional.
+
 ## See Also
 
 - <doc:Design>

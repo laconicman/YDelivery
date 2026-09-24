@@ -86,9 +86,25 @@ extension ClientController {
                 order.points.firstIndex { $0.pointID == candidate }.map { $0 + 1 }
             } ?? fallback)
         }
+        // The custom-field carriers resolve here — the substrate names the role,
+        // this boundary picks the wire slot (board `4b`): the claim's document,
+        // the sender's own order number on every destination, the per-item tag.
+        // Each slot admits one claimant — the store already refused a second.
+        let claimDocument = order.fieldEntries.first {
+            $0.definition.carrier == .claimDocument
+        }?.value
+        let orderNumber = order.fieldEntries.first {
+            $0.definition.carrier == .orderNumber
+        }?.value
+        let itemTag = order.fieldEntries.first {
+            $0.definition.carrier == .itemTag
+        }?.value
         return .init(
-            items: order.items.map { Self.wireItem($0, pointID: pointID, lastPoint: order.points.count) },
-            routePoints: order.points.enumerated().map { Self.wirePoint($1, at: $0) },
+            items: order.items.map { Self.wireItem(
+                $0, pointID: pointID, lastPoint: order.points.count, itemTag: itemTag) },
+            routePoints: order.points.enumerated().map {
+                Self.wirePoint($1, at: $0, orderNumber: orderNumber)
+            },
             clientRequirements: .init(
                 taxiClass: order.tariffWireValue.flatMap(Components.Schemas.TaxiClass.init(rawValue:)) ?? .courier,
                 cargoLoaders: order.options.loaders > 0 ? order.options.loaders : nil,
@@ -98,6 +114,7 @@ extension ClientController {
             comment: order.options.comment.wireTrimmed,
             due: order.options.due,
             offerPayload: order.offerPayload,
+            shippingDocument: claimDocument,
             skipDoorToDoor: order.options.toDoor ? nil : true
         )
     }
@@ -105,7 +122,8 @@ extension ClientController {
     private nonisolated static func wireItem(
         _ item: ParcelItem,
         pointID: (UUID?, Int) -> Int64,
-        lastPoint: Int
+        lastPoint: Int,
+        itemTag: String? = nil
     ) -> Components.Schemas.CargoItem {
         let currency: Components.Schemas.Currency = .init(rawValue: item.currency) ?? .rub
         let cost: String = Self.wireDecimal(item.cost ?? 0)
@@ -120,6 +138,7 @@ extension ClientController {
             quantity: item.quantity,
             title: item.name,
             dropoffPoint: pointID(item.dropoffPointID, lastPoint),
+            extraId: itemTag,
             size: size,
             weight: item.weightKg
         )
@@ -127,7 +146,8 @@ extension ClientController {
 
     private nonisolated static func wirePoint(
         _ point: OrderRequest.Point,
-        at index: Int
+        at index: Int,
+        orderNumber: String? = nil
     ) -> Components.Schemas.RoutePointBase {
         let coordinates: [Double] = [point.longitude, point.latitude]
         let address = Components.Schemas.Address(
@@ -148,7 +168,11 @@ extension ClientController {
             contact: contact,
             pointId: Int64(index + 1),
             _type: .init(point.role),
-            visitOrder: index + 1
+            visitOrder: index + 1,
+            // The spec is explicit: `external_order_id` rides destination points —
+            // the sender's own order number the courier's flow and `claims/search`
+            // both key on. Pickup and return legs don't take it.
+            externalOrderId: point.role == .dropoff ? orderNumber : nil
         )
     }
 
@@ -166,6 +190,9 @@ extension ClientController {
 nonisolated struct OrderRequest: Hashable, Sendable {
     var points: [Point]
     private(set) var items: [ParcelItem]
+    /// «Ваши поля» answers that filled the draft — definition + value, so the
+    /// mapping can read the carrier each value rides (board `4b`).
+    var fieldEntries: [FieldEntry]
     var options: DeliveryOptions
     var offerPayload: String?
     var tariffWireValue: String?
@@ -178,11 +205,13 @@ nonisolated struct OrderRequest: Hashable, Sendable {
     init(
         points: [Point],
         items: [ParcelItem],
+        fieldEntries: [FieldEntry] = [],
         options: DeliveryOptions,
         offerPayload: String? = nil,
         tariffWireValue: String? = nil
     ) {
         self.points = points
+        self.fieldEntries = fieldEntries
         self.options = options
         self.offerPayload = offerPayload
         self.tariffWireValue = tariffWireValue
@@ -204,6 +233,13 @@ nonisolated struct OrderRequest: Hashable, Sendable {
         var parts: AddressParts?
         var contact: Contact
         var role: NewDeliveryView.Model.Role
+    }
+
+    /// A filled field with its definition — the carrier lives on the definition,
+    /// so the value alone could not say which wire slot it claims.
+    nonisolated struct FieldEntry: Hashable, Sendable {
+        var definition: CustomFieldDefinition
+        var value: String
     }
 }
 

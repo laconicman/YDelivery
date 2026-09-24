@@ -69,6 +69,62 @@ struct NewDeliveryOrderingTests {
         #expect(model.orderRequest == nil)
     }
 
+    /// Board `4b`: a required field the sender hasn't answered blocks the order —
+    /// named in the blockers, and the request refuses to assemble without it.
+    @Test("A required custom field blocks until filled — and then rides the request")
+    func requiredFieldBlocks() async {
+        let model = readyDraft()
+        await priced(model)
+        let field = CustomFieldDefinition(
+            name: "Заказ", isOptional: false, carrier: .orderNumber)
+        model.fieldDefinitions = [field]
+
+        #expect(model.orderBlockers == [
+            String(localized: "«Заказ» is required — the order doesn't leave without it.")
+        ])
+        #expect(model.orderRequest == nil)
+
+        model.setFieldValue("4417", for: field.id)
+        #expect(model.orderBlockers.isEmpty)
+        #expect(model.orderRequest?.fieldEntries.first?.value == "4417")
+        #expect(model.orderRequest?.fieldEntries.first?.definition.carrier == .orderNumber)
+    }
+
+    /// The optional counterpart: an unanswered optional field blocks nothing and
+    /// simply doesn't ride — empty is a state, not a value.
+    @Test("An optional field unanswered sends nothing")
+    func optionalFieldEmpty() async {
+        let model = readyDraft()
+        await priced(model)
+        model.fieldDefinitions = [
+            CustomFieldDefinition(name: "Накладная", isOptional: true),
+        ]
+
+        #expect(model.orderBlockers.isEmpty)
+        #expect(model.orderRequest?.fieldEntries.isEmpty == true)
+        #expect(model.customFields(for: UUID()).isEmpty)
+    }
+
+    /// «Add field» mechanics: hidden fields stay behind the menu until named in,
+    /// and a required one can never hide — the store and editor both enforce it.
+    @Test("Hidden fields wait behind Add field; required ones never hide")
+    func fieldVisibility() {
+        let model = NewDeliveryView.Model()
+        let shown = CustomFieldDefinition(name: "Заказ", isShownByDefault: true)
+        let hidden = CustomFieldDefinition(name: "Накладная", isShownByDefault: false)
+        let required = CustomFieldDefinition(
+            name: "Платёж", isOptional: false, isShownByDefault: true)
+        model.fieldDefinitions = [shown, hidden, required]
+
+        #expect(model.visibleFieldDefinitions.map(\.name) == ["Заказ", "Платёж"])
+        #expect(model.hiddenFieldDefinitions.map(\.name) == ["Накладная"])
+
+        model.revealField(hidden.id)
+        #expect(model.visibleFieldDefinitions.map(\.name) == ["Заказ", "Накладная", "Платёж"],
+                "revealed, it takes its authored place — schema order, not append order")
+        #expect(model.hiddenFieldDefinitions.isEmpty)
+    }
+
     @Test("Create → watch → accept lands placed, with the order history remembers")
     func happyPathPlaces() async {
         let model = readyDraft()

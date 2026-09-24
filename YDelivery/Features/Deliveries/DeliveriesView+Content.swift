@@ -21,6 +21,10 @@ extension DeliveriesView {
             let route: [RoutePoint]
             let dateText: String
             let priceText: String?
+            /// What typing in the search field can hit — addresses and «Ваши поля»
+            /// values, precomputed on the root's side (board `4b`: history is
+            /// searchable by their values).
+            var searchableText: String = ""
         }
 
         let isSignedIn: Bool
@@ -39,11 +43,22 @@ extension DeliveriesView {
         /// backwards; the root turns it into a pre-filled draft (board `3e`).
         var repeatOrder: (Row.ID, _ reversed: Bool) -> Void = { _, _ in }
 
+        @State private var searchText = ""
+
+        /// The typed filter — addresses and field values, case-insensitive.
+        private var visibleRows: [Row] {
+            let query = searchText.trimmingCharacters(in: .whitespaces)
+            guard !query.isEmpty else { return rows }
+            return rows.filter {
+                $0.searchableText.localizedCaseInsensitiveContains(query)
+            }
+        }
+
         var body: some View {
             Group {
                 if !rows.isEmpty {
                     List {
-                        ForEach(rows) { row in
+                        ForEach(visibleRows) { row in
                             NavigationLink(value: row.id) {
                                 OrderRow(row: row)
                             }
@@ -69,6 +84,7 @@ extension DeliveriesView {
                         }
                     }
                     .refreshable { await refresh() }
+                    .searchable(text: $searchText, prompt: "Address or your field")
                 } else if let historyUnavailable {
                     // Checked before the empty states: *could not look* is not *nothing
                     // there*, and only this branch knows the difference.

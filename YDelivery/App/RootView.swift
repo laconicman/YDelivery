@@ -1,5 +1,6 @@
 import SFSafeSymbols
 import SwiftUI
+import YDeliveryKit
 
 /// The app's top-level structure: one tab per standing *place*, and the New Delivery flow
 /// presented modally — it is a verb, not a peer location (Design → "The tab bar goes").
@@ -9,6 +10,7 @@ import SwiftUI
 struct RootView: View {
     @State private var draft = RootView.initialDraft()
     @State private var isComposing = RootView.opensComposing
+    @Environment(StoreController.self) private var store
 
     #if DEBUG
     /// UI-test seeding: a three-stop draft with real-length addresses, opened on the
@@ -59,8 +61,11 @@ struct RootView: View {
                 repeatOrder: { order, reversed in
                     // A repeat is a new draft, not a mutation of the parked one —
                     // whatever was half-composed is replaced, same as compose's
-                    // `placed` reset mints a fresh idempotency token.
-                    draft = NewDeliveryView.Model(repeating: order, reversed: reversed)
+                    // `placed` reset mints a fresh idempotency token. The order's
+                    // field values ride too — «Заказ 4417» is part of the repeat.
+                    draft = NewDeliveryView.Model(
+                        repeating: order, reversed: reversed,
+                        fields: store.fields(for: order.id))
                     isComposing = true
                 }
             )

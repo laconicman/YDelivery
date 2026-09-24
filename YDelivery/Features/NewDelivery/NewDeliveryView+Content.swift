@@ -36,6 +36,19 @@ extension NewDeliveryView {
             let badge: PointBadge.Role
         }
 
+        /// One «Ваши поля» row, reduced to what it renders (board `4b`).
+        struct FieldRow: Identifiable {
+            let id: UUID
+            let name: String
+            let kind: CustomFieldDefinition.Kind
+            let choices: [String]
+            /// Whether the order may leave without it — `false` pins the required
+            /// hint beside the field (the blocker explains where it's asked, not
+            /// only on the review sheet).
+            let isOptional: Bool
+            let value: String
+        }
+
         /// One parcel item, reduced to its row.
         struct ItemRow: Identifiable {
             let id: UUID
@@ -55,6 +68,11 @@ extension NewDeliveryView {
         let offers: NewDeliveryView.Model.Offers
         let selectedOfferID: Offer.ID?
         let itemRows: [ItemRow]
+        /// «Ваши поля» — the schema reduced to rows on the root's side of the
+        /// seam: `fieldRows` draw now, `hiddenFieldRows` feed the «Add field»
+        /// menu. Empty means no schema configured, and the section stays away.
+        let fieldRows: [FieldRow]
+        let hiddenFieldRows: [FieldRow]
         let optionsSummary: String
         let whenSummary: String
         let commentSummary: String?
@@ -78,10 +96,14 @@ extension NewDeliveryView {
         let addItem: () -> Void
         let editItem: (UUID) -> Void
         let removeItems: (IndexSet) -> Void
+        let setFieldValue: (UUID, String) -> Void
+        let revealField: (UUID) -> Void
         let editOptions: (NewDeliveryView.OptionsEditor.Focus) -> Void
 
         @State private var camera: MapCameraPosition = .automatic
         @State private var editMode: EditMode = .inactive
+        /// The «Add field» chooser — presentation state only, like `editMode`.
+        @State private var pickingField = false
 
         let openReview: () -> Void
 
@@ -128,6 +150,35 @@ extension NewDeliveryView {
                     .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
+        }
+
+        /// One schema field as an editor: a text field or a choice picker — the
+        /// definition types it, the row renders it. The required hint lives *here*
+        /// (board `4b`: the blocker explains beside the field, not only on review)
+        /// and only while it's actually blocking — an answered field is quiet.
+        private func fieldRow(_ row: FieldRow) -> some View {
+            let value = Binding(
+                get: { row.value },
+                set: { setFieldValue(row.id, $0) }
+            )
+            return VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                switch row.kind {
+                case .text:
+                    TextField(row.name, text: value)
+                case .choice:
+                    Picker(row.name, selection: value) {
+                        Text("Not set").tag("")
+                        ForEach(row.choices, id: \.self) { choice in
+                            Text(choice).tag(choice)
+                        }
+                    }
+                }
+                if !row.isOptional, row.value.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Text("Required — the order doesn't leave without it.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
         }
 
         private var routeCard: some View {
@@ -226,6 +277,40 @@ extension NewDeliveryView {
                     Text("What's inside")
                 } footer: {
                     Text("The declared value is what the insurance covers.")
+                }
+
+                // Its own section, per board `4b` — the sender's schema, not a row
+                // mixed into the order's mechanics. Absent entirely when no fields
+                // are configured: nothing asks for fields nobody defined.
+                if !fieldRows.isEmpty || !hiddenFieldRows.isEmpty {
+                    Section {
+                        ForEach(fieldRows) { row in
+                            fieldRow(row)
+                        }
+                        if !hiddenFieldRows.isEmpty {
+                            // A confirmationDialog, not a Menu: the choice is one
+                            // of a few named fields — and a Menu inside List never
+                            // opens under synthesized taps, so the dialog is also
+                            // the version the UI tests can drive.
+                            Button {
+                                pickingField = true
+                            } label: {
+                                Label("Add field", systemSymbol: .plus)
+                            }
+                            .confirmationDialog(
+                                "Add field", isPresented: $pickingField,
+                                titleVisibility: .visible
+                            ) {
+                                ForEach(hiddenFieldRows) { row in
+                                    Button(row.name) { revealField(row.id) }
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Your fields")
+                    } footer: {
+                        Text("Configured in Settings — they ride the order to history and, where marked, to the courier's paperwork.")
+                    }
                 }
 
                 Section {
@@ -741,6 +826,8 @@ private extension MKCoordinateRegion {
         offers: .idle,
         selectedOfferID: nil,
         itemRows: [],
+        fieldRows: [],
+        hiddenFieldRows: [],
         optionsSummary: "to the door",
         whenSummary: "as soon as possible",
         commentSummary: nil,
@@ -760,6 +847,8 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
+        setFieldValue: { _, _ in },
+        revealField: { _ in },
         editOptions: { _ in },
         openReview: {}
     )
@@ -815,6 +904,16 @@ private extension MKCoordinateRegion {
                 journey: "Москва, ул Москворечье, 6 → Москва, Каширское шоссе, 52"
             ),
         ],
+        fieldRows: [
+            .init(id: UUID(), name: "Заказ", kind: .text, choices: [],
+                  isOptional: false, value: "4417"),
+            .init(id: UUID(), name: "Тип груза", kind: .choice,
+                  choices: ["Документы", "Коробка"], isOptional: true, value: ""),
+        ],
+        hiddenFieldRows: [
+            .init(id: UUID(), name: "Накладная", kind: .text, choices: [],
+                  isOptional: true, value: ""),
+        ],
         optionsSummary: "pro courier · to the door",
         whenSummary: "as soon as possible",
         commentSummary: nil,
@@ -834,6 +933,8 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
+        setFieldValue: { _, _ in },
+        revealField: { _ in },
         editOptions: { _ in },
         openReview: {}
     )

@@ -48,6 +48,8 @@ struct NewDeliveryView: View {
                 offers: draft.offers,
                 selectedOfferID: draft.selectedOfferID,
                 itemRows: contentItemRows,
+                fieldRows: fieldRows(draft.visibleFieldDefinitions),
+                hiddenFieldRows: fieldRows(draft.hiddenFieldDefinitions),
                 optionsSummary: draft.options.summary,
                 whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
@@ -74,6 +76,8 @@ struct NewDeliveryView: View {
                 addItem: { editingItem = ParcelItem() },
                 editItem: { editingItem = draft.item(withID: $0) },
                 removeItems: { draft.removeItems(at: $0) },
+                setFieldValue: { draft.setFieldValue($1, for: $0) },
+                revealField: { draft.revealField($0) },
                 editOptions: { editingOptions = $0 },
                 openReview: { showsReview = true }
             )
@@ -102,7 +106,9 @@ struct NewDeliveryView: View {
                 if draft.ordering == .placed, !draft.placedOrderIsRecorded,
                    let order = draft.placedOrder {
                     do {
-                        try await store.record(order, providerObservedAt: .now)
+                        try await store.record(
+                            order, customFields: draft.customFields(for: order.id),
+                            providerObservedAt: .now)
                         draft.notePlacedOrderRecorded()
                     } catch {
                         draft.notePlacedButUnrecorded(error)
@@ -115,7 +121,9 @@ struct NewDeliveryView: View {
                 if draft.ordering == .placed, !draft.placedOrderIsRecorded,
                    let order = draft.placedOrder {
                     do {
-                        try await store.record(order, providerObservedAt: .now)
+                        try await store.record(
+                            order, customFields: draft.customFields(for: order.id),
+                            providerObservedAt: .now)
                         draft.notePlacedOrderRecorded()
                     } catch {
                         draft.notePlacedButUnrecorded(error)
@@ -127,13 +135,20 @@ struct NewDeliveryView: View {
                       !draft.placedOrderIsRecorded, let order = draft.placedOrder
                 else { return }
                 do {
-                    try await store.record(order, providerObservedAt: .now)
+                    try await store.record(
+                        order, customFields: draft.customFields(for: order.id),
+                        providerObservedAt: .now)
                     draft.notePlacedOrderRecorded()
                 } catch {
                     draft.notePlacedButUnrecorded(error)
                 }
             }
             .task { await store.refresh() }
+            // The «Ваши поля» schema follows the store — an edit mid-draft re-types
+            // the section without losing typed values (keyed by definition id).
+            .task(id: store.fieldDefinitions) {
+                draft.fieldDefinitions = store.fieldDefinitions
+            }
             .sheet(isPresented: $showsExplainer) {
                 TariffExplainer(cards: explainerCards)
             }
@@ -270,6 +285,21 @@ private extension NewDeliveryView {
                         : String(localized: "Doesn't fit \(offer.tariff.words)")
                 },
                 journey: draft.journeyLine(for: item)
+            )
+        }
+    }
+
+    /// «Ваши поля» reduced to rows — visible fields draw, hidden ones feed the
+    /// «Add field» menu (board `4b`). Values live in the draft; this only bridges.
+    func fieldRows(_ definitions: [CustomFieldDefinition]) -> [Content.FieldRow] {
+        definitions.map { def in
+            Content.FieldRow(
+                id: def.id,
+                name: def.name,
+                kind: def.kind,
+                choices: def.choices,
+                isOptional: def.isOptional,
+                value: draft.fieldValues[def.id] ?? ""
             )
         }
     }

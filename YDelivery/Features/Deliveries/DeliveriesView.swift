@@ -1,3 +1,4 @@
+import CoreSpotlight
 import SwiftUI
 import YDeliveryKit
 
@@ -13,8 +14,12 @@ struct DeliveriesView: View {
     /// the route runs backwards. `RootView` turns it into a pre-filled draft.
     let repeatOrder: (Order, _ reversed: Bool) -> Void
 
+    /// The navigation path — a Spotlight result push lands here by order id
+    /// (`CSSearchableItem.uniqueIdentifier` is that id).
+    @State private var path: [UUID] = []
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Content(
                 isSignedIn: session.isSignedIn,
                 rows: rows,
@@ -37,6 +42,15 @@ struct DeliveriesView: View {
                     await store.refresh()
                     await sync.syncNow()
                 }
+                // A Spotlight result carries the order id — push the row onto the
+                // stack when the order is still in history.
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    if let id = (activity.userInfo?[CSSearchableItemActivityIdentifier] as? String)
+                        .flatMap(UUID.init(uuidString:)),
+                       store.orders.contains(where: { $0.id == id }) {
+                        path = [id]
+                    }
+                }
         }
     }
 
@@ -49,7 +63,12 @@ struct DeliveriesView: View {
                 status: order.status,
                 route: order.route,
                 dateText: order.created.formatted(date: .abbreviated, time: .shortened),
-                priceText: order.priceText
+                priceText: order.priceText,
+                // Search hits the route's addresses and the sender's own field
+                // values — «Заказ 4417» finds its order (board `4b`).
+                searchableText: (order.route.map(\.address)
+                    + store.fields(for: order.id).map(\.value))
+                    .joined(separator: " ")
             )
         }
     }

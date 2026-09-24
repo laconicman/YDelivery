@@ -63,9 +63,9 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.2.1 is the floor: 0.2.0 lacks the direct StructuredQueriesSQLite link its
-    # dynamic framework needs — a clean resolve at 0.2.0 fails at link time.
-    minorVersion: 0.2.1
+    # 0.2.2 adds «Ваши поля» — the field schema and order values this slice
+    # consumes. (0.2.1 remains the link floor from PR #41.)
+    minorVersion: 0.2.2
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols

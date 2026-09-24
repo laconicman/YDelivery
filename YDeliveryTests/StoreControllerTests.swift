@@ -201,6 +201,36 @@ struct StoreControllerTests {
         #expect(controller.placesError == nil)
     }
 
+    /// «Ваши поля» end to end through the controller: the schema saves and
+    /// republishes, values record with the order, and `fields(for:)` filters the
+    /// one published list the detail view and repeat path share.
+    @Test("Field schema and values publish through the store")
+    func fieldsPublish() async throws {
+        let controller = controller
+        let def = CustomFieldDefinition(name: "Заказ", carrier: .orderNumber, position: 0)
+        try await controller.saveField(def)
+        #expect(controller.fieldDefinitions.map(\.name) == ["Заказ"])
+
+        let order = order(created: .now, addresses: ["Москворечье, 6"])
+        try await controller.record(order, customFields: [
+            OrderCustomField(orderID: order.id, fieldRef: def.id, name: "Заказ", value: "4417"),
+        ])
+
+        #expect(controller.fields(for: order.id).map(\.value) == ["4417"])
+
+        // A status-only update leaves the values standing.
+        var cancelled = order
+        cancelled.status = .cancelled
+        try await controller.record(cancelled, providerObservedAt: .now)
+        #expect(controller.fields(for: order.id).map(\.value) == ["4417"])
+
+        await controller.deleteField(def.id)
+        #expect(controller.fieldDefinitions.isEmpty)
+        // …while the order's snapshot survives — deleting the schema cannot
+        // rewrite history.
+        #expect(controller.fields(for: order.id).map(\.name) == ["Заказ"])
+    }
+
     @Test("An unread store is not an empty one — first-run surfaces wait for the read")
     func emptinessIsNotKnownBeforeTheRead() async throws {
         let controller = controller

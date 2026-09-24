@@ -39,6 +39,9 @@ extension SettingsView {
                 Section {
                     TextField("Start city", text: $startCity)
                         .textContentType(.addressCity)
+                    // «Ваши поля» — the draft's extra fields are organization-level
+                    // settings, not per-order chores (board `4b`).
+                    NavigationLink("Your fields", destination: CustomFieldsView())
                 } header: {
                     Text("New delivery")
                 } footer: {

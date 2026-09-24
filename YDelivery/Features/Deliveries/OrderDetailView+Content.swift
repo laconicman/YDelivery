@@ -8,6 +8,9 @@ extension OrderDetailView {
     /// answered, refused, in flight, done.
     struct Content: View {
         let order: Order
+        /// «Ваши поля» values as stored — name snapshots, in schema order.
+        /// Absent means none were written, and the section stays away.
+        var fields: [OrderCustomField] = []
         let cancellation: Model.Cancellation
         /// Post-answer work is in flight — the retry stays visible but refuses a
         /// second tap, so the button says so rather than swallowing it (PR #32).
@@ -37,6 +40,18 @@ extension OrderDetailView {
                     }
                     if let tariff = order.tariff {
                         LabeledContent("Tariff", value: tariff)
+                    }
+                }
+
+                // The sender's own fields, as they were recorded — the snapshots
+                // render even where their definition is since deleted (board `4b`).
+                if !fields.isEmpty {
+                    Section {
+                        ForEach(fields) { field in
+                            LabeledContent(field.name, value: field.value)
+                        }
+                    } header: {
+                        Text("Your fields")
                     }
                 }
 

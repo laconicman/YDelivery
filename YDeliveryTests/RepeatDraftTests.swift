@@ -91,4 +91,18 @@ struct RepeatDraftTests {
         }
         #expect(TariffClass(wireSpelling: "whatever-next") == .other("whatever-next"))
     }
+
+    /// «Заказ 4417» was part of that order — the repeat carries the field values
+    /// too, keyed by `fieldRef` so a schema reload matches them to today's labels.
+    @Test("Repeating refills the sender's field values")
+    func repeatRefillsFields() {
+        let order = rememberedOrder()
+        let defID = UUID()
+        let model = NewDeliveryView.Model(
+            repeating: order,
+            fields: [OrderCustomField(
+                orderID: order.id, fieldRef: defID, name: "Заказ", value: "4417")])
+
+        #expect(model.fieldValues[defID] == "4417")
+    }
 }

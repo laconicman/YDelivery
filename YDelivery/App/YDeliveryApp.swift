@@ -33,7 +33,27 @@ struct YDeliveryApp: App {
         _session = State(initialValue: session)
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
+        #if DEBUG
+        Task { await Self.seedFieldsIfFlagged(store) }
+        #endif
     }
+
+    #if DEBUG
+    /// `--uitest-fields`: seed a «Ваши поля» schema through the real save path —
+    /// the same write the settings editor performs — so screenshot tests can see
+    /// the draft's section and the editor's list (board `4b`). Idempotent: a
+    /// configured store is left alone, so repeated launches don't accumulate rows.
+    private static func seedFieldsIfFlagged(_ store: StoreController) async {
+        guard ProcessInfo.processInfo.arguments.contains("--uitest-fields") else { return }
+        await store.refresh()
+        guard store.fieldDefinitions.isEmpty else { return }
+        try? await store.saveField(CustomFieldDefinition(
+            name: "Заказ", isOptional: false, carrier: .orderNumber, position: 0))
+        try? await store.saveField(CustomFieldDefinition(
+            name: "Тип груза", kind: .choice, choices: ["Документы", "Коробка"],
+            isOptional: true, isShownByDefault: false, position: 1))
+    }
+    #endif
 
     var body: some Scene {
         WindowGroup {

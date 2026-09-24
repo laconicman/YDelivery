@@ -13,6 +13,11 @@ import YDeliveryKit
 final class StoreController {
     private(set) var orders: [Order] = []
     private(set) var savedPlaces: [SavedPlace] = []
+    /// «Ваши поля» — the sender's field schema (board `4b`), in definition order.
+    private(set) var fieldDefinitions: [CustomFieldDefinition] = []
+    /// Every stored field value — the search filter, Spotlight, and the detail view
+    /// all read this one list rather than per-order queries.
+    private(set) var orderFields: [OrderCustomField] = []
 
     /// The most recent failure reading *orders* — *could not look* must never render
     /// as *nothing there*. Places carry their own channel below: a place save that
@@ -21,6 +26,9 @@ final class StoreController {
     private(set) var ordersError: (any Error)?
     /// The most recent failure reading *saved places* — the chips' side of the seam.
     private(set) var placesError: (any Error)?
+    /// The fields side of the seam — a schema that failed to read is a draft showing
+    /// no fields, which is exactly the state to tell apart from "nothing configured".
+    private(set) var fieldsError: (any Error)?
 
     /// Whether the store has been read through at least once, successfully. Until it
     /// has, an empty ``orders`` means *not looked yet*, not *nothing there* — and a
@@ -29,6 +37,12 @@ final class StoreController {
     private(set) var hasLoaded = false
 
     private let database: AppDatabase?
+
+    /// The indexing tail of a refresh — serialized so a later wipe can never land
+    /// under an earlier add, and never awaited: Spotlight is best-effort, and a
+    /// stalled index service (a cold simulator's `searchd` takes a minute to wake)
+    /// must not hold the reads' publication or any caller that awaited them.
+    private var indexing: Task<Void, Never>?
 
     init(database: AppDatabase? = .inAppGroup(
         id: AppGroup.id,
@@ -126,8 +140,69 @@ final class StoreController {
             } catch {
                 placesError = error
             }
+            do {
+                fieldDefinitions = try await Self.readFieldDefinitions(database)
+                orderFields = try await Self.readOrderFields(database)
+                fieldsError = nil
+            } catch {
+                fieldsError = error
+            }
+            reindexSpotlight(orders: orders, fields: orderFields,
+                             definitions: fieldDefinitions)
         } else {
             hasLoaded = true
+        }
+    }
+
+    /// Queues the index write behind any in-flight one and returns — the caller's
+    /// data is already published; the index catches up on its own clock.
+    private func reindexSpotlight(orders: [Order], fields: [OrderCustomField],
+                                  definitions: [CustomFieldDefinition]) {
+        let prior = indexing
+        indexing = Task {
+            await prior?.value
+            await SpotlightIndexer.reindex(
+                orders: orders, fields: fields, definitions: definitions)
+        }
+    }
+
+    /// An order's field values — the detail view and the repeat path read this
+    /// filtered view of the one published list.
+    func fields(for orderID: Order.ID) -> [OrderCustomField] {
+        orderFields.filter { $0.orderID == orderID }
+    }
+
+    /// Keeps a field definition and republishes the schema — the settings editor's
+    /// write. Throws like ``save(_:)``: the editor stands in front of the sender and
+    /// renders the refusal (a taken carrier) where it happened.
+    func saveField(_ definition: CustomFieldDefinition) async throws {
+        guard let database else { throw StoreUnavailable() }
+        try await Self.write(definition, to: database)
+        do {
+            fieldDefinitions = try await Self.readFieldDefinitions(database)
+            fieldsError = nil
+        } catch {
+            fieldsError = error
+            throw error
+        }
+        // The carrier slot may have moved — the index's promoted title follows.
+        reindexSpotlight(orders: orders, fields: orderFields,
+                         definitions: fieldDefinitions)
+    }
+
+    /// Forgets a definition — values already on orders keep their name snapshot.
+    /// Mirrors ``deletePlace(_:)``: nobody renders a thrown error, so a failure lands
+    /// on ``fieldsError``.
+    func deleteField(_ id: CustomFieldDefinition.ID) async {
+        guard let database else { return }
+        do {
+            try await Self.deleteField(id, from: database)
+            fieldDefinitions = try await Self.readFieldDefinitions(database)
+            fieldsError = nil
+            reindexSpotlight(orders: orders, fields: orderFields,
+                             definitions: fieldDefinitions)
+        } catch {
+            fieldsError = error
         }
     }
 
@@ -178,9 +253,12 @@ final class StoreController {
     /// in the list. `providerObservedAt` marks a provider sighting: callers fresh off
     /// the wire (claim accepted, cancelled, merged) pass it; local writes leave it
     /// nil so the mirror never fabricates freshness.
-    func record(_ order: Order, providerObservedAt: Date? = nil) async throws {
+    func record(_ order: Order, customFields: [OrderCustomField]? = nil,
+                providerObservedAt: Date? = nil) async throws {
         guard let database else { throw StoreUnavailable() }
-        try await Self.write(order, providerObservedAt: providerObservedAt, to: database)
+        try await Self.write(
+            order, customFields: customFields,
+            providerObservedAt: providerObservedAt, to: database)
         // The write held; if the confirming read stumbles, the order still leads the
         // list rather than vanishing until the next refresh — but the write and the
         // read report different facts, and only the read may clear the error: a
@@ -193,6 +271,16 @@ final class StoreController {
             orders = Self.upserting(order, into: orders)
             ordersError = error
         }
+        // Field values are written together with the order; the published cache and
+        // the index follow the same read.
+        do {
+            orderFields = try await Self.readOrderFields(database)
+            fieldsError = nil
+        } catch {
+            fieldsError = error
+        }
+        reindexSpotlight(orders: orders, fields: orderFields,
+                         definitions: fieldDefinitions)
     }
 
     /// The fallback merge when the confirming read fails: the written order kept,
@@ -237,9 +325,39 @@ final class StoreController {
     @concurrent
     private static func write(
         _ order: Order,
+        customFields: [OrderCustomField]?,
         providerObservedAt: Date?,
         to database: AppDatabase
     ) async throws {
-        try database.recordOrder(order, providerObservedAt: providerObservedAt)
+        try database.recordOrder(
+            order, customFields: customFields, providerObservedAt: providerObservedAt)
+    }
+
+    @concurrent
+    private static func readFieldDefinitions(
+        _ database: AppDatabase
+    ) async throws -> [CustomFieldDefinition] {
+        try database.fieldDefinitions()
+    }
+
+    @concurrent
+    private static func readOrderFields(
+        _ database: AppDatabase
+    ) async throws -> [OrderCustomField] {
+        try database.allOrderCustomFields()
+    }
+
+    @concurrent
+    private static func write(
+        _ definition: CustomFieldDefinition, to database: AppDatabase
+    ) async throws {
+        try database.saveFieldDefinition(definition)
+    }
+
+    @concurrent
+    private static func deleteField(
+        _ id: CustomFieldDefinition.ID, from database: AppDatabase
+    ) async throws {
+        try database.deleteFieldDefinition(id: id)
     }
 }

@@ -15,6 +15,7 @@ struct OrderDetailView: View {
     var body: some View {
         Content(
             order: order,
+            fields: store.fields(for: order.id),
             cancellation: model.cancellation,
             reconciling: model.isReconciling,
             retry: retryCancellation,
