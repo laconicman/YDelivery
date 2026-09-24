@@ -27,6 +27,20 @@ struct NewDeliveryModelTests {
         #expect(!model.isRouteComplete)
     }
 
+    /// A schema that could not be read is not an empty one — required fields may
+    /// exist that nobody is being asked about, so the draft refuses to order until
+    /// the schema is readable again (review, PR #42). With a schema on hand the
+    /// stale copy still enforces what it knows, so no extra blocker.
+    @Test("An unread field schema blocks ordering; a failed refresh with one on hand doesn't")
+    func unreadSchemaBlocks() {
+        let model = NewDeliveryView.Model()
+        model.fieldsUnavailable = true
+        #expect(model.orderBlockers.contains { $0.contains("fields couldn't load") })
+
+        model.fieldDefinitions = [CustomFieldDefinition(name: "Заказ")]
+        #expect(!model.orderBlockers.contains { $0.contains("fields couldn't load") })
+    }
+
     @Test("The route completes only when every stop is chosen")
     func routeCompleteness() {
         let model = NewDeliveryView.Model()

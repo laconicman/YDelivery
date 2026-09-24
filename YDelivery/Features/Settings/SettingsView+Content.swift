@@ -39,6 +39,9 @@ extension SettingsView {
                 Section {
                     TextField("Start city", text: $startCity)
                         .textContentType(.addressCity)
+                    // «Ваши поля» — the draft's extra fields are organization-level
+                    // settings, not per-order chores (board `4b`).
+                    NavigationLink("Your fields", destination: CustomFieldsView())
                 } header: {
                     Text("New delivery")
                 } footer: {
@@ -62,6 +65,8 @@ extension SettingsView {
     }
 }
 
+// «Your fields» reads the environment — every preview carries a store so
+// navigating there from a preview works (review, PR #42).
 #Preview("Signed out") {
     @Previewable @State var token = ""
     @Previewable @State var city = ""
@@ -74,6 +79,7 @@ extension SettingsView {
         signIn: {},
         signOut: {}
     )
+    .environment(StoreController(database: nil))
 }
 
 #Preview("Signed in") {
@@ -88,6 +94,7 @@ extension SettingsView {
         signIn: {},
         signOut: {}
     )
+    .environment(StoreController(database: nil))
 }
 
 #Preview("Failed sign-in") {
@@ -102,4 +109,5 @@ extension SettingsView {
         signIn: {},
         signOut: {}
     )
+    .environment(StoreController(database: nil))
 }

@@ -88,6 +88,20 @@ extension NewDeliveryView {
         private(set) var items: [ParcelItem] = []
         var options = DeliveryOptions()
 
+        /// «Ваши поля» — the sender's field schema (board `4b`), loaded from the
+        /// store by the view. The draft holds *values*, keyed by definition id;
+        /// definitions live in settings, not in the draft.
+        var fieldDefinitions: [CustomFieldDefinition] = []
+        /// Whether the schema could not be read at all — distinct from *empty*:
+        /// an unread schema hides required fields rather than waiving them, so the
+        /// draft must not treat it as "nothing configured" (review, PR #42).
+        var fieldsUnavailable = false
+        var fieldValues: [UUID: String] = [:]
+        /// The «Add field» disclosure — definitions not shown by default stay
+        /// behind the menu until asked for; a required one is never hidden (the
+        /// store normalizes `!isOptional ⇒ isShownByDefault` on write).
+        var revealedFieldIDs: Set<UUID> = []
+
         /// The card the order button will spend — auto-selected to the first offer when
         /// prices land, switchable by tapping the strip. Changing class renormalizes the
         /// options that are bound to one (§4): a thermal bag cannot leave with anything
@@ -138,6 +152,7 @@ extension NewDeliveryView {
         /// same honest read `RouteLine` makes. Items, options and the schedule were
         /// never stored on `Order`; the repeat prices and packs fresh.
         convenience init(repeating order: Order, reversed: Bool = false,
+                         fields: [OrderCustomField] = [],
                          estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
             self.init(estimateRoute: estimateRoute)
             let route = reversed ? order.route.reversed() : order.route
@@ -154,6 +169,16 @@ extension NewDeliveryView {
                 }
             }
             chosenTariff = order.tariff.map(TariffClass.init(wireSpelling:))
+            // Field values ride the repeat too — the sender's «Заказ 4417» was as
+            // much a part of that order as its route. Keyed by `fieldRef` —
+            // definition id — so a schema reload matches them to today's labels.
+            // And a carried answer must be *seen*: revealing every answered field
+            // keeps a hidden one from sending a value the sender never looked at
+            // (review, PR #42).
+            for field in fields {
+                fieldValues[field.fieldRef] = field.value
+                revealedFieldIDs.insert(field.fieldRef)
+            }
         }
 
         /// Every stop chosen, nothing pending — the gate for everything downstream
@@ -525,6 +550,10 @@ extension NewDeliveryView {
         private(set) var ordering: Ordering = .idle
         /// The order as recorded once accepted — what history remembers.
         private(set) var placedOrder: Order?
+        /// The field answers the sent claim actually carried — frozen the moment
+        /// the provider holds it, so a schema refresh mid-run cannot rewrite what
+        /// history records (review, PR #42). `nil` until a create has landed.
+        private var placedFieldEntries: [OrderRequest.FieldEntry]?
         /// «Placed but not remembered» — the store refused after money moved; the sheet
         /// says so instead of pretending either way.
         private(set) var recordWarning: String?
@@ -585,10 +614,72 @@ extension NewDeliveryView {
             if items.contains(where: { $0.quantity < 1 }) {
                 blockers.append(String(localized: "Every item needs a count of at least one."))
             }
+            if fieldsUnavailable && fieldDefinitions.isEmpty {
+                // An unread schema is not an empty one — required fields may exist
+                // that nobody is being asked about (review, PR #42).
+                blockers.append(String(localized:
+                    "Your fields couldn't load — the order waits until the schema is readable."))
+            }
+            for field in fieldDefinitions where !field.isOptional {
+                if (fieldValues[field.id]?.trimmingCharacters(in: .whitespaces) ?? "").isEmpty {
+                    blockers.append(String(
+                        localized: "«\(field.name)» is required — the order doesn't leave without it."
+                    ))
+                }
+            }
             if selectedOffer == nil {
                 blockers.append(String(localized: "Pick a delivery class once prices arrive."))
             }
             return blockers
+        }
+
+        /// The fields the draft draws now — shown-by-default plus any the «Add
+        /// field» menu pulled in, in schema order.
+        var visibleFieldDefinitions: [CustomFieldDefinition] {
+            fieldDefinitions.filter { $0.isShownByDefault || revealedFieldIDs.contains($0.id) }
+        }
+
+        /// What still waits behind «Add field» — the menu's entries.
+        var hiddenFieldDefinitions: [CustomFieldDefinition] {
+            fieldDefinitions.filter { !$0.isShownByDefault && !revealedFieldIDs.contains($0.id) }
+        }
+
+        func setFieldValue(_ value: String, for fieldID: CustomFieldDefinition.ID) {
+            fieldValues[fieldID] = value
+        }
+
+        func revealField(_ id: CustomFieldDefinition.ID) {
+            revealedFieldIDs.insert(id)
+        }
+
+        /// What a choice field's picker offers — the authored choices, plus the
+        /// carried answer when a repeated order holds one the schema has since
+        /// dropped. Without it the picker would look unanswered while the value
+        /// still rode the request unseen (review, PR #42).
+        func fieldChoices(for definition: CustomFieldDefinition) -> [String] {
+            let value = fieldValues[definition.id] ?? ""
+            return definition.choices.contains(value) || value.isEmpty
+                ? definition.choices : definition.choices + [value]
+        }
+
+        /// The values as they'd persist on a placed order — `name` snapshots the
+        /// label so a later schema edit doesn't rewrite history. Empty values drop:
+        /// a placeholder row is not a value. Once a claim exists the snapshot is
+        /// what the wire carried, not today's schema (review, PR #42).
+        func customFields(for orderID: Order.ID) -> [OrderCustomField] {
+            if let placedFieldEntries {
+                return placedFieldEntries.map { entry in
+                    OrderCustomField(
+                        orderID: orderID, fieldRef: entry.definition.id,
+                        name: entry.definition.name, value: entry.value)
+                }
+            }
+            return fieldDefinitions.compactMap { def in
+                let value = fieldValues[def.id]?.trimmingCharacters(in: .whitespaces) ?? ""
+                guard !value.isEmpty else { return nil }
+                return OrderCustomField(
+                    orderID: orderID, fieldRef: def.id, name: def.name, value: value)
+            }
         }
 
         /// The create call's payload — assembled only when nothing blocks it.
@@ -609,6 +700,10 @@ extension NewDeliveryView {
             return OrderRequest(
                 points: requestPoints,
                 items: items,
+                fieldEntries: fieldDefinitions.compactMap { def in
+                    let value = fieldValues[def.id]?.trimmingCharacters(in: .whitespaces) ?? ""
+                    return value.isEmpty ? nil : OrderRequest.FieldEntry(definition: def, value: value)
+                },
                 // The same options the quote was built from. Pricing normalised a lapsed
                 // schedule and this did not, so the sheet showed a price for an immediate
                 // run while the create carried the expired time — a quote that could not
@@ -685,6 +780,10 @@ extension NewDeliveryView {
                 ordering = .creating
                 var claim = try await create(request, orderRequestID)
                 createdClaimID = claim.id
+                // From here the provider holds these exact answers — freeze them
+                // so a schema edit during estimation can't change what history
+                // says the order carried (review, PR #42).
+                placedFieldEntries = request.fieldEntries
 
                 ordering = .estimating
                 let deadline = clock.now.advanced(by: Self.estimatingPatience)

@@ -201,6 +201,54 @@ struct StoreControllerTests {
         #expect(controller.placesError == nil)
     }
 
+    /// «Ваши поля» end to end through the controller: the schema saves and
+    /// republishes, values record with the order, and `fields(for:)` filters the
+    /// one published list the detail view and repeat path share.
+    @Test("Field schema and values publish through the store")
+    func fieldsPublish() async throws {
+        let controller = controller
+        let def = CustomFieldDefinition(name: "Заказ", carrier: .orderNumber, position: 0)
+        try await controller.saveField(def)
+        #expect(controller.fieldDefinitions.map(\.name) == ["Заказ"])
+
+        let order = order(created: .now, addresses: ["Москворечье, 6"])
+        try await controller.record(order, customFields: [
+            OrderCustomField(orderID: order.id, fieldRef: def.id, name: "Заказ", value: "4417"),
+        ])
+
+        #expect(controller.fields(for: order.id).map(\.value) == ["4417"])
+
+        // A status-only update leaves the values standing.
+        var cancelled = order
+        cancelled.status = .cancelled
+        try await controller.record(cancelled, providerObservedAt: .now)
+        #expect(controller.fields(for: order.id).map(\.value) == ["4417"])
+
+        await controller.deleteField(def.id)
+        #expect(controller.fieldDefinitions.isEmpty)
+        // …while the order's snapshot survives — deleting the schema cannot
+        // rewrite history.
+        #expect(controller.fields(for: order.id).map(\.name) == ["Заказ"])
+    }
+
+    /// A reorder is one serialized write of the whole arrangement, positions
+    /// renormalized by array order — the gesture's caller never rewrites them
+    /// row-by-row where a second gesture could interleave (review, PR #42).
+    @Test("A reorder persists the arrangement whole, positions renumbered")
+    func reorderPersistsWhole() async throws {
+        let controller = controller
+        let a = CustomFieldDefinition(name: "А", position: 0)
+        let b = CustomFieldDefinition(name: "Б", position: 1)
+        let c = CustomFieldDefinition(name: "В", position: 2)
+        for field in [a, b, c] { try await controller.saveField(field) }
+
+        await controller.saveFields([c, a, b])
+
+        #expect(controller.fieldDefinitions.map(\.name) == ["В", "А", "Б"])
+        #expect(controller.fieldDefinitions.map(\.position) == [0, 1, 2])
+        #expect(controller.fieldsError == nil)
+    }
+
     @Test("An unread store is not an empty one — first-run surfaces wait for the read")
     func emptinessIsNotKnownBeforeTheRead() async throws {
         let controller = controller

@@ -217,6 +217,30 @@ tag vocabulary to denormalize per-order (the package's own prescribed refactor),
 chat stream covers the collaborative need tags were standing in for. If a real tagging
 feature ever lands it starts private, not shared.
 
+### `OrderCustomField` — the sender's own fields on the order
+
+Board `4b`: an org names its own fields («Заказ», «Накладная», «SKU») and answers them
+per order. The **value** is shared — a collaborator sees «Заказ 4417» on the order
+detail; the **schema** that named it is the sender's private config (below). The row
+denormalizes `name` alongside `fieldRef` for exactly the reason `OrderAttachment` keeps
+`authorHint`: deleting a field definition must not rewrite history — the order's
+snapshot keeps the label it was placed under.
+
+| Column | Type | Note |
+|---|---|---|
+| `id` | UUID PK | **Derived** — `UUIDv5(orderCustomField ‖ orderID ‖ fieldRef)`: one value per field per order by construction, and a copied `OrderCustomField` re-derives against the target order, so a repeat can never collide with the source row (review, Kit PR #5) |
+| `orderID` | UUID FK → `Order` | The one FK |
+| `fieldRef` | UUID | **Value** → `CustomFieldDefinition.id` — a deleted definition leaves an orphaned ref that renders via `name` |
+| `name` | TEXT | The label the order was placed under |
+| `value` | TEXT | The sender's answer |
+
+`recordOrder` treats `customFields` as tri-state in effect: `nil` means *leave the
+values standing* (a status-only sync update must not erase the sender's answers);
+non-nil replaces wholesale (a repeat's corrected set). Carrier mapping happens at the
+controller boundary — `shipping_document` (claim), `external_order_id` (destination
+stop, also a `claims/search` filter), `extra_id` (item) — verified against generated
+`Types.swift`, board `4b`'s three slots.
+
 ## The private tier — synced, never shared
 
 | Table | Key | Columns of note | FKs |
@@ -224,6 +248,16 @@ feature ever lands it starts private, not shared.
 | `ProviderAccount` | `key` TEXT PK (`"yandex:<corpClientID>"`) | `provider`, `corpClientID`, `displayLabel`, `firstSeenAt`, `lastSeenAt` | none needed — orders reference it by value |
 | `OrderPrivateState` | `orderID` PK + FK → `Order` | `personalNote`, `pinned`, `lastSeenActivityAt` (unread bookkeeping) | 1 — legal: private tables aren't shared, the no-FK rule doesn't apply |
 | `SavedPlace` | `id` UUID PK | `name`, `kind`, + the RouteStop column set minus `orderID`/`position`/`role` | 0 (it's never a share root — sharing is per-order) |
+| `CustomFieldDefinition` | `id` UUID PK | `name`, `kind` (`text`/`choice`), `choicesJSON`, `isOptional`, `isShownByDefault` (required ⇒ shown, enforced on write), `carrier`, `position` | 0 — the schema is the sender's vocabulary; the *values* ride shared on `OrderCustomField` |
+
+`carrier` is exclusive by write transaction — one field may claim each wire slot, and the
+check runs inside the same `queue.write` as the upsert so concurrent saves can't split
+it (review, Kit PR #5). The residual is cross-device: two devices could each author a
+different field onto the same carrier and CloudKit would keep both rows. The schema
+cannot express the exclusion (a secondary UNIQUE is the banned shape), so the draft
+resolves it at read: the first field in `position` order owns the carrier, later ones
+render as local-only until the sender reassigns one. Documented rather than invented —
+this is a joint decision pending the author's eye.
 
 `ProviderAccount` stores **identity, never secrets** — the OAuth token stays in the
 Keychain, keyed by `key` (repo rule 8). `Order.providerAccountRef` points here *by value*:

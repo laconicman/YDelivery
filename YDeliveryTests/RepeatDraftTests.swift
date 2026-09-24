@@ -91,4 +91,56 @@ struct RepeatDraftTests {
         }
         #expect(TariffClass(wireSpelling: "whatever-next") == .other("whatever-next"))
     }
+
+    /// «Заказ 4417» was part of that order — the repeat carries the field values
+    /// too, keyed by `fieldRef` so a schema reload matches them to today's labels.
+    @Test("Repeating refills the sender's field values")
+    func repeatRefillsFields() {
+        let order = rememberedOrder()
+        let defID = UUID()
+        let model = NewDeliveryView.Model(
+            repeating: order,
+            fields: [OrderCustomField(
+                orderID: order.id, fieldRef: defID, name: "Заказ", value: "4417")])
+
+        #expect(model.fieldValues[defID] == "4417")
+    }
+
+    /// A field that hides behind «Add field» but carries a value on the repeated
+    /// order comes back *visible* — a carried answer must be seen, not sent
+    /// invisibly (review, PR #42).
+    @Test("A carried answer reveals its hidden field")
+    func repeatRevealsAnsweredHiddenField() {
+        let order = rememberedOrder()
+        let def = CustomFieldDefinition(
+            name: "Накладная", isOptional: true, isShownByDefault: false)
+        let model = NewDeliveryView.Model(
+            repeating: order,
+            fields: [OrderCustomField(
+                orderID: order.id, fieldRef: def.id, name: def.name, value: "T-12")])
+        model.fieldDefinitions = [def]
+
+        #expect(model.visibleFieldDefinitions.map(\.id) == [def.id])
+        #expect(model.hiddenFieldDefinitions.isEmpty)
+    }
+
+    /// A repeated order can carry a choice the schema has since dropped — the
+    /// picker must still show it, or the value rides the request unseen
+    /// (review, PR #42). The legacy answer is offered as an extra option rather
+    /// than silently cleared: dropping data is never the view's call.
+    @Test("A carried answer the schema dropped is still offered")
+    func repeatOffersDroppedChoice() {
+        let order = rememberedOrder()
+        let def = CustomFieldDefinition(
+            name: "Тип груза", kind: .choice, choices: ["Коробка"], isOptional: true)
+        let model = NewDeliveryView.Model(
+            repeating: order,
+            fields: [OrderCustomField(
+                orderID: order.id, fieldRef: def.id, name: def.name, value: "Документы")])
+        model.fieldDefinitions = [def]
+
+        #expect(model.fieldChoices(for: def) == ["Коробка", "Документы"],
+                "the historic answer stays visible and selectable")
+        #expect(model.fieldValues[def.id] == "Документы")
+    }
 }

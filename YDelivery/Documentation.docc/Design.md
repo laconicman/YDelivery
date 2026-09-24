@@ -302,6 +302,54 @@ sees the same `Authorization` — the exposure the reviewer flagged — while ad
 seam the middleware slot already provides); OSLog-only (no relaunch survival, the engaged-
 user scenario's core case).
 
+## Sender-defined fields ride the wire's own slots (2026-09-24)
+
+Board `4b` asks for org-defined fields — «Заказ», «Накладная», «SKU» — answered per
+order. The wire offers exactly three carriers and they live at three *different* levels:
+`shipping_document` on the claim, `external_order_id` on each destination route point
+(doubling as a `claims/search` filter — the sender's own number is queryable
+server-side), `extra_id` on each cargo item. So a field's `carrier` picks a slot, not a
+transport, and each slot admits one claimant — exclusivity enforced inside the
+definition's write transaction, since a check-then-write across two statements races
+(Kit review, PR #5).
+
+Values ride the **shared** tier (`OrderCustomField`) — a collaborator sees «Заказ 4417»
+on the order they were invited to; the **schema** stays private (`CustomFieldDefinition`)
+because the org's field vocabulary is the sender's config, not part of the shared truth.
+Values denormalize `name` so deleting a definition leaves the order's snapshot legible —
+history outlives vocabulary.
+
+`recordOrder`'s `customFields` is deliberately nullable-semanticked: `nil` preserves
+(sync updates must not erase sender answers), non-nil replaces (a repeat's corrected
+set). Row identity derives `UUIDv5(order ‖ fieldRef)` *at write*, so a copied field can
+never carry the source order's key into a new row (same review).
+
+**Joint decisions, made unaided overnight — flagged for the author's eye:**
+
+- **Cross-device carrier conflicts resolve at read, silently.** Two devices can author
+  different fields onto one carrier; CloudKit keeps both (the banning of secondary
+  UNIQUEs is why the schema can't forbid it). The draft resolves first-in-`position`
+  at wire time; losers still render locally. The alternative — surfacing a conflict
+  chip — was judged UI weight for a state a single user nearly never creates.
+- **A deleted definition keeps its values' names** (denormalized `name` above) rather
+  than rendering «field b13f…» or hiding the row. Cost: renaming a field does not
+  retro-relabel placed orders — arguably correct, as history reflects what was asked.
+- **Spotlight indexes by `fieldRef`, not name** — a rename must not orphan the index.
+- **Draft values stay in memory** (YD-16) — `orderDrafts` remains skeletal and field
+  answers die with the process until the draft tier is real.
+- **Best-effort side effects never sit on the awaited path.** `StoreController`'s
+  reads and writes publish, then queue Spotlight reindexing as a serialized
+  side task. Found the hard way overnight: a cold simulator's `searchd` takes on
+  the order of a minute to answer `CSSearchableIndex`'s first XPC, and while the
+  `await` sat inside `refresh()`'s tail it gated everything downstream of it —
+  the same would stall `record()`'s return on any device whose index service
+  wedges. The invariant generalizes: an effect whose failure is only ever
+  logged has no business holding a caller's `await`.
+
+**Rejected:** a per-order free-form key/value bag (unfindable in Settings, no wire
+mapping, no required gate — the schema is what makes the feature *organizational*);
+carrier slots as a join table (the one-FK rule, and three slots don't need it).
+
 ## See Also
 
 - <doc:Vision>

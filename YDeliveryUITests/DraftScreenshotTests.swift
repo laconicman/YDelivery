@@ -7,6 +7,9 @@ final class DraftScreenshotTests: XCTestCase {
     @MainActor
     func testItemJourneyAndChooserShots() throws {
         continueAfterFailure = false
+        // The launch suite leaves the device rotated — a landscape draft squeezes
+        // the card into a strip where swipes land on the map and rows never draw.
+        XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-three-stop-draft"]
         app.launch()
@@ -32,9 +35,13 @@ final class DraftScreenshotTests: XCTestCase {
         snap("1-draft-three-stops")
 
         // The item row lives below the fold; List realizes rows lazily, so scroll
-        // until its Button (children combined into one label) exists.
-        let anyNoutbuk = NSPredicate(format: "label CONTAINS %@", "Ноутбук")
-        let itemRow = app.buttons.containing(anyNoutbuk).firstMatch
+        // until its Button (children combined into one label) exists. The point
+        // rows' combined labels also name the item ("picks up Ноутбук…"), so the
+        // anchor is the row that *starts* with it — anything looser can resolve
+        // to a route row and open the wrong editor entirely.
+        let itemRow = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Ноутбук")
+        ).firstMatch
         for _ in 0..<5 where !itemRow.waitForExistence(timeout: 1) { app.swipeUp() }
         XCTAssertTrue(itemRow.waitForExistence(timeout: 3))
         // The row states its own journey in the stops' words (YD-6) — capture it
@@ -42,13 +49,17 @@ final class DraftScreenshotTests: XCTestCase {
         snap("1b-draft-item-row-journey")
 
         // The item editor: journey rows must show whole addresses. The journey row
-        // is a NavigationLink — one button, children's labels combined.
+        // is a NavigationLink — one button, children's labels combined — at the
+        // editor's end, so it may need a scroll before it exists at all.
         itemRow.tap()
         let pickupRow = app.buttons.containing(
             NSPredicate(format: "label CONTAINS %@", "Picked up at")
         ).firstMatch
-        XCTAssertTrue(pickupRow.waitForExistence(timeout: 5))
-        app.swipeUp() // the journey section sits at the editor's end
+        let editorList = app.collectionViews.firstMatch
+        for _ in 0..<6 where !pickupRow.waitForExistence(timeout: 1) {
+            (editorList.exists ? editorList : app).swipeUp()
+        }
+        XCTAssertTrue(pickupRow.waitForExistence(timeout: 3))
         snap("2-item-journey-rows")
 
         // The chooser: full-width rows, the impossible stop disabled with its reason.

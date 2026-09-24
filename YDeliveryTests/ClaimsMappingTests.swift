@@ -85,6 +85,42 @@ struct ClaimsMappingTests {
         #expect(request.offerPayload == "offer-token")
     }
 
+    @Test("Custom fields ride their carriers — document, order number, item tag")
+    func fieldCarriersMapToTheWire() throws {
+        let request = ClientController.createRequest(for: OrderRequest(
+            points: [
+                .init(
+                    pointID: UUID(), latitude: 55.64, longitude: 37.66,
+                    address: "А", parts: nil,
+                    contact: Contact(givenName: "Иван", phone: "+79123456789"),
+                    role: .pickup),
+                .init(
+                    pointID: UUID(), latitude: 55.75, longitude: 37.61,
+                    address: "Б", parts: nil,
+                    contact: Contact(givenName: "Анна", phone: "+79987654321"),
+                    role: .dropoff),
+            ],
+            items: [ParcelItem()],
+            fieldEntries: [
+                .init(definition: .init(name: "Накладная", carrier: .claimDocument),
+                      value: "НД-77"),
+                .init(definition: .init(name: "Заказ", carrier: .orderNumber),
+                      value: "4417"),
+                .init(definition: .init(name: "SKU", carrier: .itemTag),
+                      value: "БП-208"),
+                .init(definition: .init(name: "Заметка"), value: "stays local"),
+            ],
+            options: DeliveryOptions()
+        ))
+
+        #expect(request.shippingDocument == "НД-77", "claim-level carrier")
+        #expect(request.routePoints[0].externalOrderId == nil,
+                "the spec: external_order_id rides destinations, not the pickup")
+        #expect(request.routePoints[1].externalOrderId == "4417")
+        #expect(request.items.first?.extraId == "БП-208")
+        // `.none` never leaves the device — there is simply no wire slot for it.
+    }
+
     @Test("The wire's status zoo collapses to what the flow decides on")
     func statusZooCollapses() {
         #expect(PlacedClaim.Progress(.new) == .estimating)

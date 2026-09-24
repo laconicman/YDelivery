@@ -69,6 +69,62 @@ struct NewDeliveryOrderingTests {
         #expect(model.orderRequest == nil)
     }
 
+    /// Board `4b`: a required field the sender hasn't answered blocks the order —
+    /// named in the blockers, and the request refuses to assemble without it.
+    @Test("A required custom field blocks until filled — and then rides the request")
+    func requiredFieldBlocks() async {
+        let model = readyDraft()
+        await priced(model)
+        let field = CustomFieldDefinition(
+            name: "Заказ", isOptional: false, carrier: .orderNumber)
+        model.fieldDefinitions = [field]
+
+        #expect(model.orderBlockers == [
+            String(localized: "«Заказ» is required — the order doesn't leave without it.")
+        ])
+        #expect(model.orderRequest == nil)
+
+        model.setFieldValue("4417", for: field.id)
+        #expect(model.orderBlockers.isEmpty)
+        #expect(model.orderRequest?.fieldEntries.first?.value == "4417")
+        #expect(model.orderRequest?.fieldEntries.first?.definition.carrier == .orderNumber)
+    }
+
+    /// The optional counterpart: an unanswered optional field blocks nothing and
+    /// simply doesn't ride — empty is a state, not a value.
+    @Test("An optional field unanswered sends nothing")
+    func optionalFieldEmpty() async {
+        let model = readyDraft()
+        await priced(model)
+        model.fieldDefinitions = [
+            CustomFieldDefinition(name: "Накладная", isOptional: true),
+        ]
+
+        #expect(model.orderBlockers.isEmpty)
+        #expect(model.orderRequest?.fieldEntries.isEmpty == true)
+        #expect(model.customFields(for: UUID()).isEmpty)
+    }
+
+    /// «Add field» mechanics: hidden fields stay behind the menu until named in,
+    /// and a required one can never hide — the store and editor both enforce it.
+    @Test("Hidden fields wait behind Add field; required ones never hide")
+    func fieldVisibility() {
+        let model = NewDeliveryView.Model()
+        let shown = CustomFieldDefinition(name: "Заказ", isShownByDefault: true)
+        let hidden = CustomFieldDefinition(name: "Накладная", isShownByDefault: false)
+        let required = CustomFieldDefinition(
+            name: "Платёж", isOptional: false, isShownByDefault: true)
+        model.fieldDefinitions = [shown, hidden, required]
+
+        #expect(model.visibleFieldDefinitions.map(\.name) == ["Заказ", "Платёж"])
+        #expect(model.hiddenFieldDefinitions.map(\.name) == ["Накладная"])
+
+        model.revealField(hidden.id)
+        #expect(model.visibleFieldDefinitions.map(\.name) == ["Заказ", "Накладная", "Платёж"],
+                "revealed, it takes its authored place — schema order, not append order")
+        #expect(model.hiddenFieldDefinitions.isEmpty)
+    }
+
     @Test("Create → watch → accept lands placed, with the order history remembers")
     func happyPathPlaces() async {
         let model = readyDraft()
@@ -100,6 +156,38 @@ struct NewDeliveryOrderingTests {
         #expect(order?.price == "1190")
         #expect(order?.tariff == "express")
         #expect(order?.route.first?.contactGivenName == "Иван")
+    }
+
+    /// The answers a claim carries are fixed when the provider takes it — a
+    /// schema sync landing during estimation (a definition deleted or renamed
+    /// on another device) must not rewrite what history records (review, PR #42).
+    @Test("Recording keeps what the claim carried, not the schema that arrived later")
+    func placedFieldsFreezeAtCreate() async throws {
+        let model = readyDraft()
+        await priced(model)
+        let field = CustomFieldDefinition(name: "Заказ", carrier: .orderNumber)
+        model.fieldDefinitions = [field]
+        model.setFieldValue("4417", for: field.id)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { _ in Issue.record("never estimating"); return PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { id, version in
+                // The schema refresh lands mid-run: «Заказ» is gone by the time
+                // acceptance returns.
+                model.fieldDefinitions = []
+                return PlacedClaim(id: id, version: version, status: .searching, failureText: nil)
+            },
+            clock: TestClock()
+        )
+
+        let order = try #require(model.placedOrder)
+        let recorded = model.customFields(for: order.id)
+        #expect(recorded.count == 1, "the sent answer survives the schema's departure")
+        #expect(recorded.first?.name == "Заказ")
+        #expect(recorded.first?.value == "4417")
+        #expect(recorded.first?.fieldRef == field.id)
     }
 
     @Test("A claim already searching is placed, not accepted a second time")
