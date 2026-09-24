@@ -11,6 +11,9 @@ struct AppGroupTests {
     /// (`AppDatabase.inAppGroup(id:)`) and the one group ID both sides must agree on.
     @Test("The store's container resolves inside the entitled app")
     func containerResolves() {
-        #expect(AppDatabase.inAppGroup(id: AppGroup.id) != nil)
+        #expect(AppDatabase.inAppGroup(
+            id: AppGroup.id,
+            providerAccountRef: SyncIdentity.providerAccountRef,
+            containerIdentifier: SyncIdentity.cloudKitContainer) != nil)
     }
 }

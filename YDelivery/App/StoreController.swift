@@ -30,7 +30,10 @@ final class StoreController {
 
     private let database: AppDatabase?
 
-    init(database: AppDatabase? = .inAppGroup(id: AppGroup.id)) {
+    init(database: AppDatabase? = .inAppGroup(
+        id: AppGroup.id,
+        providerAccountRef: SyncIdentity.providerAccountRef,
+        containerIdentifier: SyncIdentity.cloudKitContainer)) {
         self.database = database
     }
 

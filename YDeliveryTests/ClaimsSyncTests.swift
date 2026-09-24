@@ -371,7 +371,9 @@ struct ClaimsSyncTests {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let database = AppDatabase(directory: directory)
+        let database = AppDatabase(
+            directory: directory, providerAccountRef: "test:unattributed",
+            containerIdentifier: "iCloud.test")
 
         #expect(database.readSyncState() == .init(cursor: nil, historyBackfilled: false),
                 "absent reads as first sync, never a crash")

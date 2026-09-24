@@ -84,7 +84,10 @@ final class ClaimsSyncController {
     init(
         session: ClientController,
         store: StoreController,
-        database: AppDatabase? = .inAppGroup(id: AppGroup.id)
+        database: AppDatabase? = .inAppGroup(
+            id: AppGroup.id,
+            providerAccountRef: SyncIdentity.providerAccountRef,
+            containerIdentifier: SyncIdentity.cloudKitContainer)
     ) {
         self.session = session
         self.store = store
