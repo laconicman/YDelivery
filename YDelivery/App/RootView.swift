@@ -98,8 +98,11 @@ struct RootView: View {
             }
         }
         // A tapped banner is the same ask as a Spotlight result: find the row
-        // once the store can confirm it's still in history.
-        .onChange(of: notifications.requestedOrderID) {
+        // once the store can confirm it's still in history. `initial: true`
+        // because the delegate can answer before this view exists — a banner
+        // tapped on a terminated app has already set the request by the time
+        // the observer mounts (review, PR #43).
+        .onChange(of: notifications.requestedOrderID, initial: true) {
             if let id = notifications.consumeRequest() {
                 pendingOrderID = id
                 selectedTab = .deliveries

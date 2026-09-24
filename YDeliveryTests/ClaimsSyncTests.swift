@@ -281,6 +281,24 @@ struct ClaimsSyncTests {
         #expect(merged[0].status == .active, "the later card wins")
     }
 
+    @Test("A repeated claim folds to its newest card — the stamp and the content agree")
+    func mergeKeepsNewestDuplicate() {
+        // The provider answering one claim twice with nonmonotonic order is
+        // legal enough to defend: the row must store the card `stamps` calls
+        // freshest, or a later correct update reads as stale (review, PR #43).
+        let newer = claim(id: "claim-9", status: .delivered,
+                          createdTs: Date(timeIntervalSince1970: 1_790_001_000))
+        let older = claim(id: "claim-9", status: .performerFound,
+                          createdTs: Date(timeIntervalSince1970: 1_790_000_000))
+        let merged = ClaimsSync.merging([newer, older], into: [])
+
+        #expect(merged.count == 1)
+        #expect(merged[0].status == .done, "the newest card wins regardless of array order")
+        #expect(ClaimsSync.stamps(of: [newer, older])["claim-9"]
+                == newer.updatedTs,
+                "the stamp names the card the merge kept — not a time it never saw")
+    }
+
     @Test("A thin card still becomes a row — no route, no price, no crash")
     func thinClaimBecomesOrder() {
         let thin = Components.Schemas.ClaimResponse(

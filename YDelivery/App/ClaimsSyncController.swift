@@ -128,11 +128,15 @@ final class ClaimsSyncController {
     /// The delta pass: journal events applied to known claims, whole cards fetched
     /// for claims history never recorded. The cursor persists only *after* the
     /// page's events land — a crash mid-page replays, and replay is safe because
-    /// every event sets an absolute state.
-    func syncJournal() async {
+    /// every event sets an absolute state. Returns whether the pass completed —
+    /// the background-refresh handler reports it to `BGTask` so a failed pass
+    /// doesn't read as success to the scheduler; a skipped pass (signed out,
+    /// already running) is vacuously true.
+    @discardableResult
+    func syncJournal() async -> Bool {
         // One pass at a time — a manual pull landing on a running tick is a no-op,
         // not a doubled feed. Idempotency makes the skip free.
-        guard session.isSignedIn, !isSyncing else { return }
+        guard session.isSignedIn, !isSyncing else { return true }
         isSyncing = true
         defer { isSyncing = false }
         let identity = identityGeneration
@@ -142,6 +146,7 @@ final class ClaimsSyncController {
             try await journalPasses(from: syncState().cursor, identity: identity)
             lastSyncedAt = .now
             journalError = nil
+            return true
         } catch is JournalCursorInvalid {
             // The position rotted — restart it and nothing else: the pending
             // queue and the backfill flag are the account's, not the cursor's,
@@ -153,15 +158,20 @@ final class ClaimsSyncController {
                 try await journalPasses(from: nil, identity: identity)
                 lastSyncedAt = .now
                 journalError = nil
+                return true
             } catch is SyncSuperseded {
+                return true
             } catch {
                 journalError = (error, .now)
+                return false
             }
         } catch is SyncSuperseded {
             // The identity moved mid-pass — its writes were dropped at the
             // guards, and the new account's own passes start fresh.
+            return true
         } catch {
             journalError = (error, .now)
+            return false
         }
     }
 
@@ -325,7 +335,10 @@ final class ClaimsSyncController {
     /// The feed's own history rows — one `ProviderEvent` per journal entry.
     /// `statusAdvanced` is the announce gate: only a genuinely new provider
     /// word banners, so a replayed page, a stale arrival, or a status the
-    /// mirror already holds stays silent (Kit PR #7).
+    /// mirror already holds stays silent (Kit PR #7). A write failure throws
+    /// the whole page: the cursor has not moved yet, so the next pass replays
+    /// and the dedupe key makes the retry a merge, never a second row
+    /// (review, PR #43 — a swallowed failure would lose the event for good).
     private func recordJournal(_ events: [Components.Schemas.JournalEvent],
                                among orders: [Order], identity: Int) async throws {
         for event in events {
@@ -334,7 +347,7 @@ final class ClaimsSyncController {
                 continue
             }
             let providerEvent = ClaimsSync.providerEvent(event, orderID: order.id)
-            guard (try? database?.recordProviderEvent(providerEvent))?.statusAdvanced == true
+            guard (try database?.recordProviderEvent(providerEvent))?.statusAdvanced == true
             else { continue }
             await notifications?.announce(providerEvent, for: order)
         }
@@ -344,7 +357,9 @@ final class ClaimsSyncController {
     /// `ProviderEvent` keyed `orderID ‖ status ‖ source`. The hundredth
     /// sighting of the same status merges into its first row yet still
     /// freshens the mirror's stamp — and a status the journal never reported
-    /// (a feed gap) still announces through this backstop.
+    /// (a feed gap) still announces through this backstop. Failures throw like
+    /// `recordJournal`'s: the pass fails and replays rather than losing the
+    /// sighting permanently (review, PR #43).
     private func recordSightings(_ claims: [Components.Schemas.ClaimResponse],
                                  among orders: [Order],
                                  source: String, identity: Int) async throws {
@@ -354,7 +369,7 @@ final class ClaimsSyncController {
                 continue
             }
             let sighting = ClaimsSync.sighting(of: claim, orderID: order.id, source: source)
-            guard (try? database?.recordProviderEvent(sighting))?.statusAdvanced == true
+            guard (try database?.recordProviderEvent(sighting))?.statusAdvanced == true
             else { continue }
             await notifications?.announce(sighting, for: order)
         }
@@ -374,8 +389,8 @@ final class ClaimsSyncController {
         // delivers it on), so the unchecked marker is honest, not a workaround.
         nonisolated(unsafe) let task = task
         let work = Task { @MainActor [weak self] in
-            await self?.syncJournal()
-            task.setTaskCompleted(success: !Task.isCancelled)
+            let completed = await self?.syncJournal() ?? true
+            task.setTaskCompleted(success: completed && !Task.isCancelled)
         }
         task.expirationHandler = { work.cancel() }
     }

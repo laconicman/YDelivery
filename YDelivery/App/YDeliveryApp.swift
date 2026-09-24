@@ -37,9 +37,14 @@ struct YDeliveryApp: App {
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: ClaimsSyncController.refreshTaskIdentifier,
             using: nil
-        ) { task in
+        ) { [weak sync] task in
             guard let refresh = task as? BGAppRefreshTask else { return }
-            sync.handleAppRefresh(refresh)
+            // The scheduler retains this closure for the app's lifetime —
+            // a weak capture keeps the registration from pinning the
+            // controller should this init ever run more than once (review,
+            // PR #43).
+            if let sync { sync.handleAppRefresh(refresh) }
+            else { task.setTaskCompleted(success: false) }
         }
         // CloudKit sync starts at launch, entitlement or not — `startSync` probes and
         // degrades to a logged, stored failure rather than a CKContainer trap.

@@ -69,14 +69,22 @@ nonisolated enum ClaimsSync {
 
     /// Searched claims merged into history by `claimID`: a known claim updates in
     /// place — keeping its local id, so a row's identity never moves under the
-    /// sender — while an unknown claim becomes a new order. The result stays
-    /// newest-first, the store's standing order.
+    /// sender — while an unknown claim becomes a new order. A page that repeats
+    /// a claim keeps its *newest* card — the same winner `stamps` reports, or
+    /// the row would carry a freshness its content never earned and refuse its
+    /// own correction (review, PR #43); equal stamps keep the last arrival.
+    /// The result stays newest-first, the store's standing order.
     static func merging(
         _ claims: [Components.Schemas.ClaimResponse],
         into orders: [Order]
     ) -> [Order] {
+        var newest: [String: Components.Schemas.ClaimResponse] = [:]
+        for claim in claims
+        where newest[claim.id].map({ $0.updatedTs > claim.updatedTs }) != true {
+            newest[claim.id] = claim
+        }
         var orders = orders
-        for claim in claims {
+        for claim in newest.values {
             let order = Order(
                 claim: claim,
                 adoptingID: orders.first(where: { $0.claimID == claim.id })?.id ?? UUID()
