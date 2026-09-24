@@ -158,6 +158,38 @@ struct NewDeliveryOrderingTests {
         #expect(order?.route.first?.contactGivenName == "Иван")
     }
 
+    /// The answers a claim carries are fixed when the provider takes it — a
+    /// schema sync landing during estimation (a definition deleted or renamed
+    /// on another device) must not rewrite what history records (review, PR #42).
+    @Test("Recording keeps what the claim carried, not the schema that arrived later")
+    func placedFieldsFreezeAtCreate() async throws {
+        let model = readyDraft()
+        await priced(model)
+        let field = CustomFieldDefinition(name: "Заказ", carrier: .orderNumber)
+        model.fieldDefinitions = [field]
+        model.setFieldValue("4417", for: field.id)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { _ in Issue.record("never estimating"); return PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { id, version in
+                // The schema refresh lands mid-run: «Заказ» is gone by the time
+                // acceptance returns.
+                model.fieldDefinitions = []
+                return PlacedClaim(id: id, version: version, status: .searching, failureText: nil)
+            },
+            clock: TestClock()
+        )
+
+        let order = try #require(model.placedOrder)
+        let recorded = model.customFields(for: order.id)
+        #expect(recorded.count == 1, "the sent answer survives the schema's departure")
+        #expect(recorded.first?.name == "Заказ")
+        #expect(recorded.first?.value == "4417")
+        #expect(recorded.first?.fieldRef == field.id)
+    }
+
     @Test("A claim already searching is placed, not accepted a second time")
     func alreadyAcceptedIsNotAcceptedAgain() async {
         let model = readyDraft()

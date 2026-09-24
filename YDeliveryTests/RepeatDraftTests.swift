@@ -123,4 +123,24 @@ struct RepeatDraftTests {
         #expect(model.visibleFieldDefinitions.map(\.id) == [def.id])
         #expect(model.hiddenFieldDefinitions.isEmpty)
     }
+
+    /// A repeated order can carry a choice the schema has since dropped — the
+    /// picker must still show it, or the value rides the request unseen
+    /// (review, PR #42). The legacy answer is offered as an extra option rather
+    /// than silently cleared: dropping data is never the view's call.
+    @Test("A carried answer the schema dropped is still offered")
+    func repeatOffersDroppedChoice() {
+        let order = rememberedOrder()
+        let def = CustomFieldDefinition(
+            name: "Тип груза", kind: .choice, choices: ["Коробка"], isOptional: true)
+        let model = NewDeliveryView.Model(
+            repeating: order,
+            fields: [OrderCustomField(
+                orderID: order.id, fieldRef: def.id, name: def.name, value: "Документы")])
+        model.fieldDefinitions = [def]
+
+        #expect(model.fieldChoices(for: def) == ["Коробка", "Документы"],
+                "the historic answer stays visible and selectable")
+        #expect(model.fieldValues[def.id] == "Документы")
+    }
 }

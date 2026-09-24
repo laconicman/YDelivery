@@ -550,6 +550,10 @@ extension NewDeliveryView {
         private(set) var ordering: Ordering = .idle
         /// The order as recorded once accepted — what history remembers.
         private(set) var placedOrder: Order?
+        /// The field answers the sent claim actually carried — frozen the moment
+        /// the provider holds it, so a schema refresh mid-run cannot rewrite what
+        /// history records (review, PR #42). `nil` until a create has landed.
+        private var placedFieldEntries: [OrderRequest.FieldEntry]?
         /// «Placed but not remembered» — the store refused after money moved; the sheet
         /// says so instead of pretending either way.
         private(set) var recordWarning: String?
@@ -648,11 +652,29 @@ extension NewDeliveryView {
             revealedFieldIDs.insert(id)
         }
 
+        /// What a choice field's picker offers — the authored choices, plus the
+        /// carried answer when a repeated order holds one the schema has since
+        /// dropped. Without it the picker would look unanswered while the value
+        /// still rode the request unseen (review, PR #42).
+        func fieldChoices(for definition: CustomFieldDefinition) -> [String] {
+            let value = fieldValues[definition.id] ?? ""
+            return definition.choices.contains(value) || value.isEmpty
+                ? definition.choices : definition.choices + [value]
+        }
+
         /// The values as they'd persist on a placed order — `name` snapshots the
         /// label so a later schema edit doesn't rewrite history. Empty values drop:
-        /// a placeholder row is not a value.
+        /// a placeholder row is not a value. Once a claim exists the snapshot is
+        /// what the wire carried, not today's schema (review, PR #42).
         func customFields(for orderID: Order.ID) -> [OrderCustomField] {
-            fieldDefinitions.compactMap { def in
+            if let placedFieldEntries {
+                return placedFieldEntries.map { entry in
+                    OrderCustomField(
+                        orderID: orderID, fieldRef: entry.definition.id,
+                        name: entry.definition.name, value: entry.value)
+                }
+            }
+            return fieldDefinitions.compactMap { def in
                 let value = fieldValues[def.id]?.trimmingCharacters(in: .whitespaces) ?? ""
                 guard !value.isEmpty else { return nil }
                 return OrderCustomField(
@@ -758,6 +780,10 @@ extension NewDeliveryView {
                 ordering = .creating
                 var claim = try await create(request, orderRequestID)
                 createdClaimID = claim.id
+                // From here the provider holds these exact answers — freeze them
+                // so a schema edit during estimation can't change what history
+                // says the order carried (review, PR #42).
+                placedFieldEntries = request.fieldEntries
 
                 ordering = .estimating
                 let deadline = clock.now.advanced(by: Self.estimatingPatience)

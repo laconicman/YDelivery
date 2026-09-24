@@ -311,7 +311,7 @@ private extension NewDeliveryView {
                 id: def.id,
                 name: def.name,
                 kind: def.kind,
-                choices: def.choices,
+                choices: draft.fieldChoices(for: def),
                 isOptional: def.isOptional,
                 value: draft.fieldValues[def.id] ?? ""
             )
