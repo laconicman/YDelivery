@@ -35,9 +35,13 @@ final class DraftScreenshotTests: XCTestCase {
         snap("1-draft-three-stops")
 
         // The item row lives below the fold; List realizes rows lazily, so scroll
-        // until its Button (children combined into one label) exists.
-        let anyNoutbuk = NSPredicate(format: "label CONTAINS %@", "Ноутбук")
-        let itemRow = app.buttons.containing(anyNoutbuk).firstMatch
+        // until its Button (children combined into one label) exists. The point
+        // rows' combined labels also name the item ("picks up Ноутбук…"), so the
+        // anchor is the row that *starts* with it — anything looser can resolve
+        // to a route row and open the wrong editor entirely.
+        let itemRow = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Ноутбук")
+        ).firstMatch
         for _ in 0..<5 where !itemRow.waitForExistence(timeout: 1) { app.swipeUp() }
         XCTAssertTrue(itemRow.waitForExistence(timeout: 3))
         // The row states its own journey in the stops' words (YD-6) — capture it
