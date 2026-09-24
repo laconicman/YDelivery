@@ -1,4 +1,5 @@
 import SwiftUI
+import YDeliveryKit
 
 /// The composition root, and nothing else: shared controllers are created here once and
 /// injected into the tree (`swiftui-app-structure`). The sync engine is wired to the two
@@ -16,7 +17,10 @@ struct YDeliveryApp: App {
         let session = ClientController()
         // One database, both consumers — orders/places on one side, the sync cursor
         // on the other. Sharing the instance shares the queue, not just the file.
-        let database = AppDatabase.inAppGroup(id: AppGroup.id)
+        let database = AppDatabase.inAppGroup(
+            id: AppGroup.id,
+            providerAccountRef: SyncIdentity.providerAccountRef,
+            containerIdentifier: SyncIdentity.cloudKitContainer)
         let store = StoreController(database: database)
         let sync = ClaimsSyncController(session: session, store: store, database: database)
         // The identity boundary, wired at composition: a sign-out + sign-in inside

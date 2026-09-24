@@ -63,7 +63,9 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    minorVersion: 0.1.2
+    # 0.2.1 is the floor: 0.2.0 lacks the direct StructuredQueriesSQLite link its
+    # dynamic framework needs — a clean resolve at 0.2.0 fails at link time.
+    minorVersion: 0.2.1
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
@@ -78,23 +80,22 @@ packages:
     url: https://github.com/PhoneNumberKit/PhoneNumberKitUI
     from: 1.1.0
   # The persistence substrate (Design → the reopened store decision; Schema.md is the
-  # contract it implements). Exact pin: the schema was verified against 1.12.0's
-  # SyncEngine validation in the spike — an upgrade re-verifies deliberately.
+  # contract it implements) lives in YDeliveryKit since 0.2.0 — the app keeps these
+  # pins for the *test* target, which drives the queue and SyncEngine directly. Exact
+  # pin: the schema was verified against 1.12.0's SyncEngine validation in the spike —
+  # an upgrade re-verifies deliberately.
   SQLiteData:
     url: https://github.com/pointfreeco/sqlite-data
     exactVersion: 1.12.0
-  # Pulled transitively by sqlite-data; declared because the app imports it directly
-  # (DatabaseQueue, db.write, raw DDL) — never rely on a transitive module.
+  # Pulled transitively by sqlite-data; declared because the tests import it directly
+  # (Row.fetchOne, db.write, raw SQL against the metadata sidecar).
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: 7.11.0
-  # The @Table macro expands to StructuredQueriesCore calls — a *direct* product link,
-  # or the app target's debug dylib has undefined symbols despite the transitive import.
-  # StructuredQueriesSQLite specifically: it builds as a shared framework (SQLiteData
-  # needs it) that re-exports StructuredQueriesCore's symbols, so the app, SQLiteData,
-  # and the framework all resolve ONE `Table` protocol descriptor. A statically-linked
-  # product would embed a second copy in the app binary, and SyncEngine.init crashes
-  # resolving OrderRow's Table conformance against the other descriptor.
+  # The @Table macro now expands inside YDeliveryKit — the conformance descriptors
+  # live in its framework, and SyncEngine resolves them against the one shared
+  # StructuredQueriesSQLite copy. The test target links the product directly for the
+  # same reason it did before: SyncEngine.init reads Table conformances.
   swift-structured-queries:
     url: https://github.com/pointfreeco/swift-structured-queries
     from: 0.39.2
@@ -124,12 +125,6 @@ targets:
         product: PhoneNumberKitUI
       - package: SFSafeSymbols
         product: SFSafeSymbols
-      - package: SQLiteData
-        product: SQLiteData
-      - package: GRDB
-        product: GRDB
-      - package: swift-structured-queries
-        product: StructuredQueriesSQLite
     settings:
       groups: [signing]
       base:

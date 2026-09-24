@@ -267,8 +267,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/YDeliveryKit",
       "state" : {
-        "revision" : "c639f546b2d1b5822a81a1d77ba8bd9f5b463388",
-        "version" : "0.1.2"
+        "revision" : "ce4e49445ccdba35aaeaf6b2e4a398d21df074d3",
+        "version" : "0.2.1"
       }
     }
   ],

@@ -16,7 +16,7 @@ struct StoreControllerTests {
     }
 
     private var controller: StoreController {
-        StoreController(database: AppDatabase(directory: directory))
+        StoreController(database: AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test"))
     }
 
     private func order(created: Date, addresses: [String]) -> Order {
@@ -124,18 +124,23 @@ struct StoreControllerTests {
         #expect(picked?.contactName == "Анна")
     }
 
-    @Test("A draft is not an order — the explainer runs until one is actually placed")
+    @Test("A draft is not an order — the store refuses it and the explainer runs on")
     func onlyPlacedOrdersRetireTheExplainer() async throws {
         let controller = controller
         #expect(!controller.hasPlacedAnOrder)
 
-        try AppDatabase(directory: directory).recordOrder(
-            Order(created: .now, status: .draft, route: [])
-        )
+        let database = AppDatabase(
+            directory: directory, providerAccountRef: "test:unattributed",
+            containerIdentifier: "iCloud.test")
+        // Since the substrate moved into the Kit, the refusal is structural — a
+        // draft cannot enter the shared `orders` tier at all.
+        #expect(throws: AppDatabase.WriteError.draftHasNoProviderExistence) {
+            try database.recordOrder(Order(created: .now, status: .draft, route: []))
+        }
         await controller.refresh()
-        #expect(!controller.hasPlacedAnOrder, "a started-and-abandoned draft teaches nobody anything")
+        #expect(!controller.hasPlacedAnOrder, "a refused draft teaches nobody anything")
 
-        try AppDatabase(directory: directory).recordOrder(
+        try database.recordOrder(
             Order(created: .now, status: .cancelled, route: [])
         )
         await controller.refresh()
@@ -162,7 +167,7 @@ struct StoreControllerTests {
 
     @Test("Recording the same order twice keeps one row")
     func recordingIsIdempotent() throws {
-        let store = AppDatabase(directory: directory)
+        let store = AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test")
         let order = Order(created: .now, status: .searching, route: [], claimID: "claim-1")
 
         try store.recordOrder(order)
@@ -183,8 +188,8 @@ struct StoreControllerTests {
     @Test("Refresh publishes both files; an empty container reads as empty")
     func refreshReadsBoth() async throws {
         let controller = controller
-        try AppDatabase(directory: directory).recordOrder(order(created: .now, addresses: ["Москворечье, 6"]))
-        try AppDatabase(directory: directory).savePlace(
+        try AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test").recordOrder(order(created: .now, addresses: ["Москворечье, 6"]))
+        try AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test").savePlace(
             SavedPlace(name: "Дом", kind: .home, point: RoutePoint(latitude: 55, longitude: 37, address: "Дом"))
         )
 
@@ -214,7 +219,7 @@ struct StoreControllerTests {
         )
 
         #expect(controller.savedPlaces.map(\.name) == ["Склад"])
-        #expect(try AppDatabase(directory: directory).readPlaces().count == 1)
+        #expect(try AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test").readPlaces().count == 1)
     }
 
     @Test("A retried save is one chip — dedupe consults the file, not memory")
@@ -226,7 +231,7 @@ struct StoreControllerTests {
         try await controller.save(SavedPlace(name: "Склад", kind: .warehouse, point: point))
         try await controller.save(SavedPlace(name: "Склад (уточнил)", kind: .warehouse, point: point))
 
-        let stored = try AppDatabase(directory: directory).readPlaces()
+        let stored = try AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test").readPlaces()
         #expect(stored.count == 1, "same destination key — one memory, updated")
         #expect(stored.first?.name == "Склад (уточнил)")
     }
@@ -241,7 +246,7 @@ struct StoreControllerTests {
         // The chip editor's write: same point, new name and kind, the row's id.
         try await controller.save(SavedPlace(id: id, name: "Дом", kind: .home, point: point))
 
-        let stored = try AppDatabase(directory: directory).readPlaces()
+        let stored = try AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test").readPlaces()
         #expect(stored.count == 1)
         #expect(stored.first?.id == id)
         #expect(stored.first?.name == "Дом")
@@ -259,7 +264,7 @@ struct StoreControllerTests {
         await controller.deletePlace(id)
 
         #expect(controller.savedPlaces.isEmpty)
-        #expect(try AppDatabase(directory: directory).readPlaces().isEmpty)
+        #expect(try AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test").readPlaces().isEmpty)
         #expect(controller.placesError == nil)
 
         // Forgetting twice is forgetting — an unknown id is not an error to render.
@@ -276,7 +281,7 @@ struct StoreControllerTests {
         let id = try #require(controller.savedPlaces.first?.id)
         // The table goes missing between the save and the ask — the context menu has
         // already dismissed, so the failure lands on the channel the picker renders.
-        let database = AppDatabase(directory: directory)
+        let database = AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test")
         try await database.queue.write { try $0.execute(sql: "DROP TABLE \"savedPlaces\"") }
 
         await controller.deletePlace(id)
@@ -290,7 +295,7 @@ struct StoreControllerTests {
         // An orders table that cannot be read at all — dropped after the database
         // opened. One store means one failure point now; the channels still separate
         // which side failed.
-        let database = AppDatabase(directory: directory)
+        let database = AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test")
         try await database.queue.write { try $0.execute(sql: "DROP TABLE \"orders\"") }
         let controller = StoreController(database: database)
         await controller.refresh()
@@ -308,7 +313,7 @@ struct StoreControllerTests {
     @Test("The picker's memory speaks when either file fails; deliveries only for orders")
     func pickerMemorySpeaksForBothChannels() async throws {
         // A places table that cannot be read; orders healthy.
-        let database = AppDatabase(directory: directory)
+        let database = AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test")
         try await database.queue.write { try $0.execute(sql: "DROP TABLE \"savedPlaces\"") }
         let controller = StoreController(database: database)
         await controller.refresh()

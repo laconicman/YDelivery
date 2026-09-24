@@ -1,12 +1,14 @@
-import Dependencies
 import Foundation
-import GRDB
-import SQLiteData
 import Testing
 import YDeliveryKit
 @testable import YDelivery
 
-@Suite("Persistence")
+/// What remains app-side after the substrate moved to YDeliveryKit: the checks that
+/// only the app's own identity can exercise — the entitlement probe reads
+/// `Bundle.main`'s real profile, and the profile fixture asserts *this* app's
+/// container constant. Substrate behavior (schema, tiers, migration, round-trips)
+/// is covered by the Kit's own suite at the module boundary.
+@Suite("Persistence — app identity")
 struct PersistenceTests {
     private let directory: URL
 
@@ -16,370 +18,34 @@ struct PersistenceTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
-    // MARK: Schema validation — the contract's DDL against SyncEngine.init
-
-    /// `.test` context swaps the engine's CloudKit state for a mock — no container
-    /// (which would trap without iCloud entitlements) — while `validateSchema()` still
-    /// runs on the real DDL: FK graph, uniqueness, and PK rules exercised for real.
-    /// The engine comes from `AppDatabase.syncEngine` itself, so the production tier
-    /// lists are what get validated — no second copy to drift.
-    @Test("SyncEngine accepts the production schema")
-    func syncEngineAcceptsTheSchema() throws {
-        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
-        try withDependencies {
-            $0.context = .test
-        } operation: {
-            _ = try database.syncEngine
-        }
-    }
-
-    /// The review's central finding, pinned: a secondary UNIQUE on a synchronized
-    /// table is a `SyncEngine.init` rejection — dedup is derived identity, never a
-    /// constraint. If a future schema edit adds one, this fails loudly.
-    @Test("A non-PK unique index on a synchronized table is rejected")
-    func secondaryUniqueIsRejected() throws {
-        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
-        try database.queue.write { db in
-            try db.execute(sql: """
-                CREATE UNIQUE INDEX "eventDedup" ON "providerEvents"
-                  ("orderID", "providerEventID")
-                """)
-        }
-        withDependencies {
-            $0.context = .test
-        } operation: {
-            #expect(throws: (any Error).self) {
-                _ = try database.syncEngine
-            }
-        }
-    }
-
-    // MARK: Sync tiers — what the engine leaves a footprint for
-
-    /// The metadatabase ATTACHes to our queue as `sqlitedata_icloud`; writes through
-    /// that same connection fire the triggers `setUpSyncEngine` installed, leaving one
-    /// `sqlitedata_icloud_metadata` row per synchronized record. This is the tier
-    /// split made observable: shared + private rows appear, device rows never do.
-    private func syncedRecordNames(_ database: AppDatabase) throws -> [String] {
-        try database.queue.read { db in
-            try String.fetchAll(db, sql: """
-                SELECT "recordName" FROM "sqlitedata_icloud"."sqlitedata_icloud_metadata"
-                """)
-        }
-    }
-
-    private func parentRecordNames(_ database: AppDatabase) throws -> [String?] {
-        try database.queue.read { db in
-            try Optional<String>.fetchAll(db, sql: """
-                SELECT "parentRecordName"
-                FROM "sqlitedata_icloud"."sqlitedata_icloud_metadata"
-                ORDER BY "recordName"
-                """)
-        }
-    }
-
-    @Test("An order write leaves a share-tree footprint — root and children tagged")
-    func sharedWritesLeaveMetadata() throws {
-        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
-        try withDependencies {
-            $0.context = .test
-        } operation: {
-            _ = try database.syncEngine  // triggers install at construction
-        }
-        let order = Order(
-            created: .now, status: .active,
-            route: [RoutePoint(latitude: 55, longitude: 37, address: "А")],
-            claimID: "claim-1")
-        try database.recordOrder(order)
-
-        let names = try syncedRecordNames(database)
-        #expect(names.contains { $0.hasSuffix(":orders") })
-        #expect(names.contains { $0.hasSuffix(":routeStops") })
-        #expect(names.contains { $0.hasSuffix(":orderProviderStates") })
-        let parents = try parentRecordNames(database)
-        #expect(parents.contains { $0?.hasSuffix(":orders") == true },
-                "children name the order record as parent — the share edge is real")
-    }
-
-    @Test("A saved place syncs privately — footprint exists, never shared")
-    func privateTierLeavesMetadata() throws {
-        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
-        try withDependencies {
-            $0.context = .test
-        } operation: {
-            _ = try database.syncEngine
-        }
-        try database.savePlace(SavedPlace(
-            name: "Склад", kind: .warehouse,
-            point: RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100")))
-
-        #expect(try syncedRecordNames(database).contains { $0.hasSuffix(":savedPlaces") })
-    }
-
-    @Test("Device-tier writes leave no CloudKit footprint at all")
-    func deviceTierLeavesNoMetadata() throws {
-        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
-        try withDependencies {
-            $0.context = .test
-        } operation: {
-            _ = try database.syncEngine
-        }
-        try database.writeSyncState(.init(
-            cursor: "eyJ-opaque", historyBackfilled: true,
-            pendingClaimIDs: ["claim-missed"]))
-
-        let names = try syncedRecordNames(database)
-        #expect(!names.contains { $0.hasSuffix(":syncStates") })
-        #expect(!names.contains { $0.hasSuffix(":pendingDiscoveries") },
-                "the journal cursor and retry queue are per-device by correctness")
-    }
-
-    // MARK: Engine start — entitlement gate and failure surfacing
-
     /// The gate must pass on every host we ship or test on — on the simulator there
     /// is no embedded profile, which reads as *proceed* (the xcent is generated from
     /// YDelivery.entitlements, so it cannot drift inside this repo).
     @Test("The entitlement gate passes on this host")
     func iCloudEntitlementGatePasses() {
-        #expect(AppDatabase.iCloudEntitled)
+        let database = AppDatabase(
+            directory: directory,
+            providerAccountRef: SyncIdentity.providerAccountRef,
+            containerIdentifier: SyncIdentity.cloudKitContainer)
+        #expect(database.iCloudEntitled)
     }
 
+    /// The profile check with the app's own container — the consumer supplies the
+    /// identifier; this pins that `SyncIdentity` names the entitled one.
     @Test("The provisioning-profile check reads CloudKit service and container")
     func profileCheckReadsCloudKit() {
+        let container = SyncIdentity.cloudKitContainer
         let good: [String: Any] = ["Entitlements": [
             "com.apple.developer.icloud-services": ["CloudKit", "CloudDocuments"],
-            "com.apple.developer.icloud-container-identifiers":
-                ["iCloud.com.learnable.YDelivery"],
+            "com.apple.developer.icloud-container-identifiers": [container],
         ]]
-        #expect(AppDatabase.profileAllowsCloudKit(good))
-        #expect(!AppDatabase.profileAllowsCloudKit(["Entitlements": [:]]),
+        #expect(AppDatabase.profileAllowsCloudKit(good, containerIdentifier: container))
+        #expect(!AppDatabase.profileAllowsCloudKit(
+            ["Entitlements": [:]], containerIdentifier: container),
                 "a profile without iCloud must fail the gate")
         #expect(!AppDatabase.profileAllowsCloudKit(["Entitlements": [
             "com.apple.developer.icloud-services": ["CloudKit"],
             "com.apple.developer.icloud-container-identifiers": ["iCloud.other.App"],
-        ]]), "a foreign container must fail the gate")
-    }
-
-    @Test("startSync runs the engine against the mock container")
-    func startSyncStartsTheEngine() async throws {
-        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
-        await withDependencies {
-            $0.context = .test
-        } operation: {
-            await database.startSync()
-            let engine = try? database.syncEngine
-            #expect(engine?.isRunning == true)
-            #expect(database.syncStartFailure == nil)
-        }
-    }
-
-    @Test("A schema the engine rejects surfaces as a stored failure, not a crash")
-    func failedEngineStartIsStored() async throws {
-        let database = AppDatabase(directory: directory, containerIdentifier: "iCloud.test")
-        try await database.queue.write { db in
-            try db.execute(sql: """
-                CREATE UNIQUE INDEX "eventDedup" ON "providerEvents"
-                  ("orderID", "providerEventID")
-                """)
-        }
-        await withDependencies {
-            $0.context = .test
-        } operation: {
-            await database.startSync()
-            #expect(database.syncStartFailure != nil,
-                    "rejection is a rendered state, never a silent no-op")
-        }
-    }
-
-    // MARK: Derived identity
-
-    @Test("Derived ids are stable and distinct per input")
-    func derivedIDsAreDeterministic() {
-        let a = UUID.derived(
-            namespace: UUID.DerivedNamespace.providerEvent, "order-1", "42")
-        let b = UUID.derived(
-            namespace: UUID.DerivedNamespace.providerEvent, "order-1", "42")
-        let c = UUID.derived(
-            namespace: UUID.DerivedNamespace.providerEvent, "order-1", "43")
-        #expect(a == b, "same inputs, same id — replay re-produces the key")
-        #expect(a != c)
-    }
-
-    // MARK: Store round-trips
-
-    @Test("An order round-trips with its route, contacts, and mirror fields")
-    func orderRoundTrips() throws {
-        let database = AppDatabase(directory: directory)
-        var point = RoutePoint(
-            latitude: 55.75, longitude: 37.61, address: "Тверская, 6",
-            contactName: "Иван Петров", contactPhone: "+79123456789")
-        point.addressParts = AddressParts(entrance: "2", apartment: "12")
-        let order = Order(
-            created: .now, status: .active,
-            route: [point, RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100")],
-            price: "850.00", currency: "RUB", tariff: "express", claimID: "claim-9")
-
-        try database.recordOrder(order)
-        let stored = try #require(database.readOrders().first)
-
-        #expect(stored.id == order.id)
-        #expect(stored.status == .active)
-        #expect(stored.claimID == "claim-9")
-        #expect(stored.price == "850.00")
-        #expect(stored.route.count == 2)
-        #expect(stored.route[0].addressParts?.apartment == "12")
-        #expect(stored.route[0].contactPhone == "+79123456789")
-        #expect(stored.route[1].address == "Невский, 100")
-    }
-
-    @Test("A re-recorded order keeps one row and one set of stops")
-    func recordIsIdempotent() throws {
-        let database = AppDatabase(directory: directory)
-        let order = Order(
-            created: .now, status: .searching,
-            route: [RoutePoint(latitude: 55, longitude: 37, address: "А")],
-            claimID: "claim-1")
-
-        try database.recordOrder(order)
-        var updated = order
-        updated.status = .cancelled
-        try database.recordOrder(updated)
-
-        let stored = try database.readOrders()
-        #expect(stored.count == 1)
-        #expect(stored.first?.status == .cancelled)
-        let stopCount = try database.queue.read {
-            try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM \"routeStops\"")!
-        }
-        #expect(stopCount == 1, "derived stop ids replace in place, never duplicate")
-    }
-
-    @Test("A UI rewrite preserves a sync-stamped providerObservedAt")
-    func uiRewritePreservesObservedAt() throws {
-        let database = AppDatabase(directory: directory)
-        let order = Order(created: .now, status: .active, route: [], claimID: "claim-7")
-
-        try database.recordOrder(order, providerObservedAt: .now)
-        var updated = order
-        updated.price = "900.00"
-        try database.recordOrder(updated)  // no sighting — a local write
-
-        let observed: Double? = try database.queue.read {
-            let row = try Row.fetchOne($0, sql: """
-                SELECT "providerObservedAt" FROM "orderProviderStates" WHERE "orderID" = ?
-                """, arguments: AppDatabase.args([order.id]))
-            return row?["providerObservedAt"]
-        }
-        #expect(observed != nil, "a sighting survives the local write — freshness is never erased")
-    }
-
-    // MARK: Migration — the JSON stores into tables
-
-    private func write(_ data: Data, named name: String) throws {
-        try data.write(to: directory.appendingPathComponent(name))
-    }
-
-    private func legacyOrdersJSON() throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode([
-            Order(
-                created: .init(timeIntervalSince1970: 1_700_000_000), status: .done,
-                route: [RoutePoint(latitude: 55, longitude: 37, address: "Старый заказ")],
-                price: "500.00", currency: "RUB", claimID: "legacy-1")
-        ])
-    }
-
-    @Test("orders.json migrates: rows land, source renamed, freshness stays NULL")
-    func ordersMigrate() throws {
-        try write(legacyOrdersJSON(), named: "orders.json")
-        let database = AppDatabase(directory: directory)
-
-        let stored = try #require(database.readOrders().first)
-        #expect(stored.claimID == "legacy-1")
-        #expect(stored.route.map(\.address) == ["Старый заказ"])
-
-        // Honest freshness: the file's one mtime is not a per-order sighting.
-        let mirror = try #require(database.queue.read {
-            try Row.fetchOne($0, sql: """
-                SELECT "providerObservedAt" FROM "orderProviderStates"
-                """)
-        })
-        let observed: Double? = mirror["providerObservedAt"]
-        #expect(observed == nil,
-                "migrated rows are unattributed history — NULL until a provider sighting")
-        let orderAccountRef: String? = try database.queue.read {
-            let row = try Row.fetchOne($0, sql: "SELECT \"providerAccountRef\" FROM \"orders\"")
-            return row?["providerAccountRef"]
-        }
-        #expect(orderAccountRef == nil, "legacy rows seed NULL — never invent an owner")
-
-        #expect(!FileManager.default.fileExists(
-            atPath: directory.appendingPathComponent("orders.json").path))
-        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path)
-            .contains { $0.hasPrefix("orders.migrated-") },
-                "the source is renamed in place — kept, not deleted")
-    }
-
-    @Test("A retried migration writes nothing twice — derived keys absorb it")
-    func migrationRetryIsIdempotent() throws {
-        let json = try legacyOrdersJSON()
-        try write(json, named: "orders.json")
-        _ = try AppDatabase(directory: directory).queue
-
-        // Crash-in-the-window replay: the file is still there (rename never ran).
-        try write(json, named: "orders.json")
-        _ = try AppDatabase(directory: directory).queue
-
-        let database = AppDatabase(directory: directory)
-        #expect(try database.readOrders().count == 1)
-        let stopCount = try database.queue.read {
-            try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM \"routeStops\"")!
-        }
-        #expect(stopCount == 1, "a second pass reproduces identical keys and writes nothing")
-    }
-
-    @Test("A corrupt orders.json is rescued, not destroyed and not blocking")
-    func corruptSourceIsRescued() throws {
-        try write(Data("not json".utf8), named: "orders.json")
-        let database = AppDatabase(directory: directory)
-
-        #expect(try database.readOrders().isEmpty,
-                "a corrupt file reads as empty — the store still opens")
-        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path)
-            .contains { $0.hasPrefix("orders.corrupted-") },
-                "bytes are rescued to a sidecar, never destroyed")
-    }
-
-    @Test("claims-sync.json migrates into syncStates + pendingDiscoveries")
-    func syncStateMigrates() throws {
-        let json = """
-            {"cursor": "eyJ-opaque", "historyBackfilled": true,
-             "pendingClaimIDs": ["claim-a", "claim-b"]}
-            """
-        try write(Data(json.utf8), named: "claims-sync.json")
-        let database = AppDatabase(directory: directory)
-
-        let state = database.readSyncState()
-        #expect(state.cursor == "eyJ-opaque")
-        #expect(state.historyBackfilled)
-        #expect(state.pendingClaimIDs == ["claim-a", "claim-b"])
-    }
-
-    @Test("places.json migrates into savedPlaces")
-    func placesMigrate() throws {
-        let place = SavedPlace(
-            name: "Склад", kind: .warehouse,
-            point: RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100",
-                              contactName: "Иван", contactPhone: "+7912"))
-        let encoder = JSONEncoder()
-        try write(encoder.encode([place]), named: "places.json")
-        let database = AppDatabase(directory: directory)
-
-        let stored = try #require(database.readPlaces().first)
-        #expect(stored.name == "Склад")
-        #expect(stored.kind == .warehouse)
-        #expect(stored.point.contactName == "Иван")
-        #expect(stored.point.contactPhone == "+7912")
+        ]], containerIdentifier: container), "a foreign container must fail the gate")
     }
 }
