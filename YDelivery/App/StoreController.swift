@@ -59,6 +59,11 @@ final class StoreController {
     /// runs on the actor that owns the published state.
     private var snapshotWrites: Task<Void, Never>?
 
+    /// The saved-places tail — the share extension's «Откуда» row reads
+    /// `saved-places.json`, never the database (Schema → the widget contract).
+    /// Same discipline as ``snapshotWrites``.
+    private var placesWrites: Task<Void, Never>?
+
     /// How many recent orders the snapshot carries — the live set plus a repeat
     /// window, not history at scale: the file is a rendering, small on purpose
     /// (doc:Schema — "the widget contract").
@@ -173,6 +178,7 @@ final class StoreController {
             }
             reindexSpotlightIfHealthy()
             renderWidgetSnapshotIfHealthy()
+            publishSavedPlacesIfHealthy()
         } else {
             hasLoaded = true
             hasLoadedPlaces = true
@@ -217,6 +223,25 @@ final class StoreController {
             } catch {
                 Self.logger.error(
                     "Widget snapshot render failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// The share extension's places file — the «Откуда» row's whole input,
+    /// rendered after each healthy places read so the extension never opens
+    /// the database. A failed read must not overwrite good bytes the last
+    /// read published: same gate as the index, narrowed to its own channel.
+    private func publishSavedPlacesIfHealthy() {
+        guard placesError == nil else { return }
+        let places = savedPlaces
+        let prior = placesWrites
+        placesWrites = Task.detached {
+            await prior?.value
+            do {
+                try SavedPlacesFile.write(places, inAppGroup: AppGroup.id)
+            } catch {
+                Self.logger.error(
+                    "Saved-places publish failed: \(error.localizedDescription)")
             }
         }
     }
@@ -334,6 +359,7 @@ final class StoreController {
             // stands — a successful bookmark must not dress an unreadable history as
             // an empty one (review, PR #18 post-merge).
             placesError = nil
+            publishSavedPlacesIfHealthy()
         } catch {
             // The write held but the confirming read did not: the sheet gets the
             // thrown error to render, and the channel records it — otherwise closing
@@ -354,6 +380,7 @@ final class StoreController {
             try await Self.deletePlace(id, from: database)
             savedPlaces = try await Self.readPlaces(database)
             placesError = nil
+            publishSavedPlacesIfHealthy()
         } catch {
             placesError = error
         }

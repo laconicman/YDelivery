@@ -115,9 +115,20 @@ struct RootView: View {
             }
         }
         // Leaving the foreground is when the refresh chain gets armed — the
-        // system decides when it actually wakes the journal pass.
-        .onChange(of: scenePhase) { _, phase in
+        // system decides when it actually wakes the journal pass. Coming back
+        // is when a parked share gets applied: the extension's `open` is
+        // best-effort, so the activation sweep is the half that always runs.
+        .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .background { sync.scheduleAppRefresh() }
+            // `initial: true` because a launch is already `.active` — a share
+            // parked while the app was terminated must not wait a full
+            // background cycle to surface (review, PR #46).
+            if phase == .active { applySharedDraftIfPending() }
+        }
+        // A share that arrived while the sheet was up waited in its slot —
+        // closing the draft is the moment it stops waiting.
+        .onChange(of: isComposing) { _, composing in
+            if !composing { applySharedDraftIfPending() }
         }
         // Every order write — sync merge, placement, cancel — republishes this
         // list through the one funnel, so this is the one hook the Live
@@ -199,7 +210,29 @@ struct RootView: View {
             model.setContact(Contact(at: place.point), for: destination)
             draft = model
             isComposing = true
+        case .sharedDraft:
+            // The payload is self-contained — the extension resolved the
+            // point and joined the other end's place already, so nothing here
+            // waits on the store's first read. An open sheet keeps editing:
+            // the file waits in its slot instead of swapping fields under the
+            // sender's fingers, and the activation sweep applies it next.
+            guard !isComposing,
+                  let shared = SharedDraftStore.consume(inAppGroup: AppGroup.id)
+            else { return }
+            draft = NewDeliveryView.Model(sharing: shared)
+            isComposing = true
         }
+    }
+
+    /// The activation sweep half of the share handoff: when the extension's
+    /// `open` didn't run — share extensions' `open` is honoured only
+    /// sometimes — the parked file surfaces on the next activation anyway.
+    /// Costs one stat when nothing waits, and never interrupts an open draft.
+    private func applySharedDraftIfPending() {
+        guard !isComposing,
+              SharedDraftStore.hasPending(inAppGroup: AppGroup.id)
+        else { return }
+        apply(.sharedDraft)
     }
 }
 

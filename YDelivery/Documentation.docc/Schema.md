@@ -413,6 +413,10 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   `WidgetCenter.reloadTimelines`.
 - Widgets and future extensions read only the snapshot — versioned, small, rebuildable.
   The snapshot is a rendering, so its shape may change freely behind `snapshotVersion`.
+- The share extension rides the same contract (board `5d`, landed): `saved-places.json`
+  exports the «Откуда» row's input after each healthy places read, and `shared-draft.json`
+  is the one-shot slot the extension writes and the app consumes — claimed by rename, so
+  a share arriving mid-consume can never be removed by the read it raced (Kit PR #11).
 
 ## What this discharges
 

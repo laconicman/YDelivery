@@ -12,6 +12,9 @@ extension OrderDetailView {
         /// «Ваши поля» values as stored — name snapshots, in schema order.
         /// Absent means none were written, and the section stays away.
         var fields: [OrderCustomField] = []
+        /// The recipient-facing share text, composed upstream — empty hides
+        /// the row rather than offering a blank share (board `5d`).
+        var shareText: String = ""
         let cancellation: Model.Cancellation
         /// Post-answer work is in flight — the retry stays visible but refuses a
         /// second tap, so the button says so rather than swallowing it (PR #32).
@@ -65,6 +68,17 @@ extension OrderDetailView {
                         }
                     } header: {
                         Text("Your fields")
+                    }
+                }
+
+                // The one way out (board `5d`): the recipient-facing text, not
+                // an app link — the sheet's Copy covers "send it in chat".
+                if !shareText.isEmpty {
+                    Section {
+                        ShareLink(item: shareText) {
+                            Label("Share with the recipient",
+                                  systemSymbol: .squareAndArrowUp)
+                        }
                     }
                 }
 
@@ -334,6 +348,8 @@ nonisolated extension Order {
     NavigationStack {
         OrderDetailView.Content(
             order: .previewEnRoute,
+            shareText: RecipientShareText.text(
+                for: .previewEnRoute, orderNumber: "4417"),
             cancellation: .ready(.init(status: .other("pickuped"), version: 9, terms: .unavailable)),
             reconciling: false,
             retry: {},

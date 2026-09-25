@@ -16,6 +16,8 @@ struct OrderDetailView: View {
         Content(
             order: order,
             fields: store.fields(for: order.id),
+            shareText: RecipientShareText.text(
+                for: order, orderNumber: store.orderNumber(for: order.id)),
             cancellation: model.cancellation,
             reconciling: model.isReconciling,
             retry: retryCancellation,

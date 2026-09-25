@@ -62,8 +62,15 @@ field stating its bound.
 - Custom fields: settings schema, two flags, own draft section, Spotlight indexing.
 - Live Activity (seven states, failures never auto-dismiss), started locally on order
   creation, updated by polling — the push relay stays a Later item.
-- Two widgets (waiting · working), three App Intents, notification thread rules with
-  parcel-photo attachments, share-in extension.
+- Two widgets (waiting · working), three App Intents, notification thread rules —
+  landed (PRs #43–44). Parcel-photo attachments stay open.
+- **Share-in / share-out — landed:** the share extension (board `5d`) turns a chat
+  address or a Maps place into a parked draft through `shared-draft.json` — a
+  one-shot App Group slot, claimed by rename on consume, with the extension never
+  opening the database. Its «Откуда» row reads `saved-places.json`, published
+  after each healthy places read. Outbound, the order detail's ShareLink hands
+  the recipient-facing *text* — status, order №, destination and contact, the
+  ETA under the callout's own rule — not an app link.
 - **The `4a` map callout — landed:** both maps open the one card — the draft's
   carries the door chips, the contact, and «Изменить точку»/«Сохранить как место»
   (both reusing the flows they name); the live order's carries the courier's

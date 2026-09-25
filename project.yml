@@ -63,10 +63,9 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.3.3 carries the per-stop provider visit record (RoutePoint.Visit on
-    # routeStops) and RouteLine's selection axis — the callout's map and row
-    # halves (board `4a`).
-    minorVersion: 0.3.3
+    # 0.3.4 carries the share-handoff contract — SharedDraft's one-shot slot,
+    # SavedPlacesFile for the «Откуда» row, SharedAddress extraction (board `5d`).
+    minorVersion: 0.3.4
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
@@ -129,6 +128,8 @@ targets:
       # The widget extension — embeds into the app's PlugIns; the surfaces
       # inside read the shared App Group store and never the app itself.
       - target: YDeliveryWidgets
+      # The share extension (board `5d`) — same rule: App Group files only.
+      - target: YDeliveryShare
     settings:
       groups: [signing]
       base:
@@ -191,6 +192,37 @@ targets:
         # NSExtension + NSSupportsLiveActivities ride a partial plist — the same
         # merge pattern as the app's INFOPLIST_FILE.
         INFOPLIST_FILE: YDeliveryWidgets-Info.plist
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+        SKIP_INSTALL: YES
+        STRING_CATALOG_GENERATE_SYMBOLS: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
+
+  # The share extension (board `5d`, "ways in"): an address shared from a chat
+  # or a place shared from Maps becomes a draft. The extension resolves text
+  # to a point, offers the end-picker and the «Откуда» saved-places row, and
+  # hands the app a SharedDraft file — the database stays the app's alone.
+  YDeliveryShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - YDeliveryShare
+    dependencies:
+      - package: YDeliveryKit
+        product: YDeliveryKit
+      - package: SFSafeSymbols
+        product: SFSafeSymbols
+    settings:
+      groups: [signing]
+      base:
+        CODE_SIGN_ENTITLEMENTS: YDeliveryShare.entitlements
+        # An extension's bundle id must extend its host's.
+        PRODUCT_BUNDLE_IDENTIFIER: com.learnable.YDelivery.Share
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: YDeliveryShare-Info.plist
+        # The share sheet lists the extension under this name — and installd
+        # refuses an appex without one.
+        INFOPLIST_KEY_CFBundleDisplayName: YDelivery
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
         SKIP_INSTALL: YES
         STRING_CATALOG_GENERATE_SYMBOLS: NO

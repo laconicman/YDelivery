@@ -181,6 +181,30 @@ extension NewDeliveryView {
             }
         }
 
+        /// The share extension's handoff (board `5d`): the shared point fills the
+        /// end the sender picked in the sheet — «Это точка доставки» lands on the
+        /// destination — and the saved place that rode along fills the other.
+        /// Both arrive resolved (`RoutePoint`s, contacts aboard), so consuming
+        /// needs no join against the places table.
+        convenience init(sharing draft: SharedDraft,
+                         estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
+            self.init(estimateRoute: estimateRoute)
+            let sharedIndex = draft.end == .pickup ? 0 : points.count - 1
+            let otherIndex = draft.end == .pickup ? points.count - 1 : 0
+            points[sharedIndex] = Point(
+                role: points[sharedIndex].role,
+                place: PickedPlace(draft.point),
+                contact: Contact(at: draft.point)
+            )
+            if let other = draft.otherEnd {
+                points[otherIndex] = Point(
+                    role: points[otherIndex].role,
+                    place: PickedPlace(other),
+                    contact: Contact(at: other)
+                )
+            }
+        }
+
         /// Every stop chosen, nothing pending — the gate for everything downstream
         /// (estimate, offers, creation). An added-but-empty stop is a hole in the
         /// route, not an extra.
