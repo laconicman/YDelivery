@@ -28,12 +28,27 @@ extension NewDeliveryView {
             let isMovable: Bool
         }
 
-        /// A chosen point on the map, reduced to what the marker renders.
+        /// A chosen point on the map — what the marker renders, and what its callout
+        /// card reads (board `4a`): the pin carries the card's fields so tapping it
+        /// needs no second lookup.
         struct Pin: Identifiable, Hashable {
             let id: UUID
             let latitude: Double
             let longitude: Double
             let badge: PointBadge.Role
+            /// The card's verb («забрать») — the sender's role word, not the badge's.
+            let role: Model.Role
+            /// One-based position in the route — «первая точка».
+            let visitOrdinal: Int
+            let address: String
+            let parts: AddressParts?
+            let contactSummary: String?
+            let contactPhone: String?
+            /// Pieces leaving at / arriving at this stop — the callout's parcel
+            /// line (board `4a`). Zero means nothing moves here and the card
+            /// draws no line.
+            let parcelsLeaving: Int
+            let parcelsArriving: Int
         }
 
         /// One «Ваши поля» row, reduced to what it renders (board `4b`).
@@ -88,6 +103,11 @@ extension NewDeliveryView {
         let canReorder: Bool
         let pick: (UUID) -> Void
         let editContact: (UUID) -> Void
+        /// The callout's «Сохранить как место» — nil-offered when the store can't
+        /// take one, so the card never shows a button that cannot run (board `4a`:
+        /// an action that exists nowhere else never lives on the callout anyway).
+        let savePlace: (UUID) -> Void
+        let canSavePlace: Bool
         let setRole: (UUID, NewDeliveryView.Model.Role) -> Void
         let swapEnds: () -> Void
         let addStop: () -> Void
@@ -108,12 +128,23 @@ extension NewDeliveryView {
         @State private var editMode: EditMode = .inactive
         /// The «Add field» chooser — presentation state only, like `editMode`.
         @State private var pickingField = false
+        /// The open callout's pin — the pin↔row agreement (board `4a`): the card,
+        /// the mark, and the highlighted row all read this one id.
+        @State private var calloutPin: UUID?
 
         let openReview: () -> Void
 
         var body: some View {
             VStack(spacing: 0) {
-                RouteMap(pins: pins, legs: estimateLegs, camera: $camera)
+                RouteMap(
+                    pins: pins,
+                    legs: estimateLegs,
+                    camera: $camera,
+                    selection: $calloutPin,
+                    canSavePlace: canSavePlace,
+                    pick: pick,
+                    savePlace: savePlace
+                )
                     // An inset, not an overlay: the map's automatic framing then keeps
                     // every mark clear of the bar instead of hiding the end pin under it.
                     .safeAreaInset(edge: .bottom) {
@@ -194,6 +225,13 @@ extension NewDeliveryView {
                             pick: { pick(row.id) },
                             editContact: { editContact(row.id) },
                             setRole: { setRole(row.id, $0) }
+                        )
+                        // The open callout's row stays highlighted — «строка в
+                        // списке подсвечена, пока открыта выноска» (board `4a`).
+                        .listRowBackground(
+                            Color.accentColor.opacity(
+                                calloutPin == row.id ? RouteLine.selectionTint : 0
+                            )
                         )
                         .deleteDisabled(!row.isDeletable)
                         .moveDisabled(!row.isMovable)
@@ -399,15 +437,23 @@ extension NewDeliveryView {
 extension NewDeliveryView.Content {
     /// The map above the card: chosen points as `2c` marks, the estimated path between
     /// them. An accelerator, never the only route — everything on it is reachable
-    /// through the rows below (handoff §8).
+    /// through the rows below (handoff §8). Tapping a mark opens its callout card
+    /// over the map's top edge; the same selection keeps the row highlighted below.
     struct RouteMap: View {
         let pins: [Pin]
         let legs: [[RouteEstimate.Coordinate]]
         @Binding var camera: MapCameraPosition
+        /// The open callout — shared with the route rows so pin and row agree.
+        @Binding var selection: UUID?
+        let canSavePlace: Bool
+        let pick: (UUID) -> Void
+        let savePlace: (UUID) -> Void
 
         private static let routeLineWidth: CGFloat = 5
         private static let markShadowRadius: CGFloat = 1.5
         private static let markShadowDrop: CGFloat = 1
+        /// A selected mark grows, anchored at its tip — the coordinate stays put.
+        private static let selectedScale: CGFloat = 1.3
 
         var body: some View {
             Map(position: $camera) {
@@ -426,22 +472,82 @@ extension NewDeliveryView.Content {
                         // The teardrop's tip is the coordinate; round marks sit on it.
                         anchor: pin.badge.mapAnchor
                     ) {
-                        PointBadge(role: pin.badge)
-                            .shadow(radius: Self.markShadowRadius, y: Self.markShadowDrop)
+                        Button {
+                            selection = selection == pin.id ? nil : pin.id
+                        } label: {
+                            PointBadge(role: pin.badge)
+                                .shadow(radius: Self.markShadowRadius, y: Self.markShadowDrop)
+                                .scaleEffect(
+                                    selection == pin.id ? Self.selectedScale : 1,
+                                    anchor: pin.badge.mapAnchor
+                                )
+                        }
+                        .accessibilityLabel(Text(pin.badge.words))
                     } label: {
                         EmptyView()
                     }
                 }
             }
+            .safeAreaInset(edge: .top) {
+                if let selection, let pin = pins.first(where: { $0.id == selection }) {
+                    callout(for: pin)
+                }
+            }
             .onAppear {
                 if pins.isEmpty { camera = .region(.moscow) }
             }
-            .onChange(of: pins) {
+            .onChange(of: pins) { _, pins in
                 // A route edit reframes the map to the new route — search results and
                 // added stops arrive from off-screen and deserve the camera.
                 camera = .automatic
+                // The deleted or un-placed point keeps no callout — a card for a pin
+                // that no longer exists is a ghost.
+                if let selection, !pins.contains(where: { $0.id == selection }) {
+                    self.selection = nil
+                }
             }
         }
+
+        /// The draft's card (board `4a`): the door chips, the person, and the two
+        /// point actions — edit and save-as-place. Tapping the card body is the
+        /// same edit the button spells out (the board's tap rule); it opens the
+        /// picker and lets the callout go.
+        private func callout(for pin: Pin) -> some View {
+            PointCallout.Card(
+                title: pin.address,
+                subtitle: Text(pin.role.calloutVerb) + Text(" · ") + Text("stop \(pin.visitOrdinal)"),
+                close: { selection = nil },
+                open: {
+                    selection = nil
+                    pick(pin.id)
+                }
+            ) {
+                PointCallout.DoorChips(parts: pin.parts)
+                PointCallout.ContactRow(
+                    summary: pin.contactSummary,
+                    phone: pin.contactPhone
+                )
+                PointCallout.ParcelRow(
+                    leaving: pin.parcelsLeaving,
+                    arriving: pin.parcelsArriving
+                )
+                HStack(spacing: Self.actionSpacing) {
+                    Button("Edit point") {
+                        selection = nil
+                        pick(pin.id)
+                    }
+                    if canSavePlace {
+                        Button("Save as place") { savePlace(pin.id) }
+                    }
+                }
+                .buttonStyle(.borderless)
+                .font(.subheadline)
+            }
+        }
+
+        /// The card's two actions sit apart so a thumb cannot confuse them — the
+        /// same spacing the route card's action row uses.
+        private static let actionSpacing: CGFloat = 24
     }
 }
 
@@ -756,6 +862,16 @@ extension NewDeliveryView.Content {
 }
 
 extension NewDeliveryView.Model.Role {
+    /// The callout header's verb — what the courier does at this door (board `4a`'s
+    /// «забрать · первая точка»).
+    var calloutVerb: LocalizedStringKey {
+        switch self {
+        case .pickup: "Pick up"
+        case .dropoff: "Deliver"
+        case .return: "Return"
+        }
+    }
+
     /// The context-menu verb for switching a stop to this role.
     var menuLabel: LocalizedStringKey {
         switch self {
@@ -851,6 +967,8 @@ private extension MKCoordinateRegion {
         canReorder: false,
         pick: { _ in },
         editContact: { _ in },
+        savePlace: { _ in },
+        canSavePlace: true,
         setRole: { _, _ in },
         swapEnds: {},
         addStop: {},
@@ -901,8 +1019,18 @@ private extension MKCoordinateRegion {
             ),
         ],
         pins: [
-            .init(id: start, latitude: 55.646068, longitude: 37.668176, badge: .start),
-            .init(id: end, latitude: 55.652212, longitude: 37.648210, badge: .end),
+            .init(id: start, latitude: 55.646068, longitude: 37.668176, badge: .start,
+                  role: .pickup, visitOrdinal: 1,
+                  address: "Москва, ул Москворечье, 6",
+                  parts: .init(entrance: "А", floor: "3", apartment: "301", intercom: "301К"),
+                  contactSummary: "Иван Петров · +7 912 345-67-89",
+                  contactPhone: "+79123456789",
+                  parcelsLeaving: 2, parcelsArriving: 0),
+            .init(id: end, latitude: 55.652212, longitude: 37.648210, badge: .end,
+                  role: .dropoff, visitOrdinal: 2,
+                  address: "Москва, Каширское шоссе, 52",
+                  parts: nil, contactSummary: nil, contactPhone: nil,
+                  parcelsLeaving: 0, parcelsArriving: 2),
         ],
         estimate: .ready(RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])),
         offers: .ready([
@@ -939,6 +1067,8 @@ private extension MKCoordinateRegion {
         canReorder: false,
         pick: { _ in },
         editContact: { _ in },
+        savePlace: { _ in },
+        canSavePlace: true,
         setRole: { _, _ in },
         swapEnds: {},
         addStop: {},
@@ -996,18 +1126,39 @@ private extension MKCoordinateRegion {
 
 #Preview("Route map: pins framed") {
     @Previewable @State var camera = MapCameraPosition.automatic
+    @Previewable @State var selection: UUID?
     NewDeliveryView.Content.RouteMap(
         pins: [
-            .init(id: UUID(), latitude: 55.646068, longitude: 37.668176, badge: .start),
-            .init(id: UUID(), latitude: 55.749917, longitude: 37.593450, badge: .stop(number: 2)),
-            .init(id: UUID(), latitude: 55.652212, longitude: 37.648210, badge: .end),
+            .init(id: UUID(), latitude: 55.646068, longitude: 37.668176, badge: .start,
+                  role: .pickup, visitOrdinal: 1,
+                  address: "Москва, ул Москворечье, 6",
+                  parts: .init(entrance: "А", floor: "3", apartment: "301", intercom: "301К"),
+                  contactSummary: "Иван Петров · +7 912 345-67-89",
+                  contactPhone: "+79123456789",
+                  parcelsLeaving: 3, parcelsArriving: 0),
+            .init(id: UUID(), latitude: 55.749917, longitude: 37.593450, badge: .stop(number: 2),
+                  role: .dropoff, visitOrdinal: 2,
+                  address: "Москва, Арбат, 10",
+                  parts: nil, contactSummary: nil, contactPhone: nil,
+                  parcelsLeaving: 0, parcelsArriving: 1),
+            .init(id: UUID(), latitude: 55.652212, longitude: 37.648210, badge: .end,
+                  role: .dropoff, visitOrdinal: 3,
+                  address: "Москва, Каширское шоссе, 52",
+                  parts: .init(entrance: "2", apartment: "15"),
+                  contactSummary: "Анна Сидорова · +7 998 765-43-21",
+                  contactPhone: "+79987654321",
+                  parcelsLeaving: 0, parcelsArriving: 2),
         ],
         legs: [[
             .init(latitude: 55.646068, longitude: 37.668176),
             .init(latitude: 55.700000, longitude: 37.630000),
             .init(latitude: 55.749917, longitude: 37.593450),
         ]],
-        camera: $camera
+        camera: $camera,
+        selection: $selection,
+        canSavePlace: true,
+        pick: { _ in },
+        savePlace: { _ in }
     )
 }
 

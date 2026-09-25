@@ -208,6 +208,21 @@ extension NewDeliveryView {
             points.first { $0.id == id }
         }
 
+        /// The parcel flow at one stop — the callout's «здесь отдают 2, получают 1»
+        /// line (board `4a`). It counts pieces, not rows, honouring the route-default
+        /// rule the wire write uses: an item with no boarding point leaves at the
+        /// first stop, one with no handover arrives at the last (§9.3).
+        func parcelFlow(at pointID: Point.ID) -> (leaving: Int, arriving: Int) {
+            let first = points.first?.id
+            let last = points.last?.id
+            return (
+                items.filter { ($0.pickupPointID ?? first) == pointID }
+                    .reduce(0) { $0 + $1.quantity },
+                items.filter { ($0.dropoffPointID ?? last) == pointID }
+                    .reduce(0) { $0 + $1.quantity }
+            )
+        }
+
         /// Roles a stop may switch to. The first row is the route's start and never
         /// changes; the return role is offered while no return point exists — and never
         /// to the route's only delivery, because a route that delivers nothing is not a

@@ -1,3 +1,4 @@
+import MapKit
 import SFSafeSymbols
 import SwiftUI
 import YDeliveryKit
@@ -19,11 +20,23 @@ extension OrderDetailView {
         let confirm: () -> Void
 
         @State private var showsConfirmation = false
+        /// The pin↔row agreement (board `4a`): the map's pin, the callout's card,
+        /// and the route row all read this one index.
+        @State private var selectedStop: Int?
 
         var body: some View {
             List {
                 Section {
-                    RouteLine(points: order.route)
+                    RouteMap(
+                        points: order.route,
+                        etaMinutes: order.etaMinutes,
+                        providerObservedAt: order.providerObservedAt,
+                        selection: $selectedStop
+                    )
+                    .frame(height: Self.mapHeight)
+                    .listRowInsets(EdgeInsets())
+
+                    RouteLine(points: order.route, selection: $selectedStop)
                         .font(.subheadline)
                 }
 
@@ -111,6 +124,117 @@ extension OrderDetailView {
             }
         }
 
+        /// A map section's height — enough to read the route's shape, short enough
+        /// that the list beneath it never waits.
+        private static let mapHeight: CGFloat = 200
+
+    }
+
+    /// The order's route as a map: the `2c` marks on a straight-line polyline (the
+    /// wire carries no driven legs for a placed order — the drawn path is the route
+    /// order, honestly). Tapping a mark opens its callout; the card floats over the
+    /// map's top edge so the list below never jumps.
+    struct RouteMap: View {
+        let points: [RoutePoint]
+        /// The provider's whole-route estimate — the end stop's card speaks it.
+        let etaMinutes: Int?
+        /// The provider's own as-of stamp — the card's timeline claims are this
+        /// fresh, and the card says so rather than pose as live.
+        let providerObservedAt: Date?
+        @Binding var selection: Int?
+        @State private var camera: MapCameraPosition = .automatic
+
+        private static let routeLineWidth: CGFloat = 4
+        private static let markShadowRadius: CGFloat = 1.5
+        private static let markShadowDrop: CGFloat = 1
+        /// A selected mark grows, anchored at its tip — the coordinate stays put.
+        private static let selectedScale: CGFloat = 1.3
+
+        /// The same `2c` mapping the route list draws — pin and row agree because
+        /// they come from the one function.
+        private var stops: [RouteLine.Stop] { RouteLine.stops(from: points) }
+
+        var body: some View {
+            Map(position: $camera) {
+                if points.count > 1 {
+                    MapPolyline(coordinates: points.map(\.coordinate))
+                        .stroke(.tint, style: StrokeStyle(
+                            lineWidth: Self.routeLineWidth, lineCap: .round
+                        ))
+                }
+                ForEach(Array(stops.enumerated()), id: \.offset) { index, stop in
+                    Annotation(
+                        coordinate: points[index].coordinate,
+                        anchor: stop.role.mapAnchor
+                    ) {
+                        Button {
+                            selection = selection == index ? nil : index
+                        } label: {
+                            PointBadge(role: stop.role)
+                                .shadow(
+                                    radius: Self.markShadowRadius,
+                                    y: Self.markShadowDrop
+                                )
+                                .scaleEffect(
+                                    selection == index ? Self.selectedScale : 1,
+                                    anchor: stop.role.mapAnchor
+                                )
+                        }
+                        .accessibilityLabel(Text(stop.role.words))
+                    } label: {
+                        EmptyView()
+                    }
+                }
+            }
+            .safeAreaInset(edge: .top) {
+                if let selection, points.indices.contains(selection) {
+                    callout(for: points[selection], at: selection)
+                }
+            }
+        }
+
+        /// The live stop's card: the courier's account of the point first (the
+        /// mini-timeline), then the door and the person. A live order has no
+        /// point editor, so no card-tap navigation — its action is the call.
+        private func callout(for point: RoutePoint, at index: Int) -> some View {
+            PointCallout.Card(
+                title: point.compactAddress,
+                subtitle: subtitle(for: index),
+                close: { selection = nil }
+            ) {
+                PointCallout.Timeline(
+                    entries: VisitTimeline.entries(route: points, selected: index)
+                )
+                PointCallout.DoorChips(parts: point.addressParts)
+                PointCallout.ContactRow(
+                    summary: point.contactSummary,
+                    phone: point.contactPhone
+                )
+                if let providerObservedAt {
+                    Text("Provider data as of \(providerObservedAt.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+
+        /// «Drop-off · ~14 min left» — the role word every mark already speaks, and
+        /// the provider's ETA where it is meaningful: on the stop still ahead.
+        private func subtitle(for index: Int) -> Text {
+            let role = Text(stops[index].role.words)
+            guard index == points.count - 1,
+                  let etaMinutes,
+                  points[index].visit?.status == .pending || points[index].visit?.status == .arrived
+            else { return role }
+            return role + Text(" · ~\(etaMinutes) min left")
+        }
+    }
+}
+
+nonisolated extension RoutePoint {
+    /// MapKit stays at the view edge — the model keeps plain doubles.
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 }
 
@@ -206,6 +330,18 @@ nonisolated extension Order {
     }
 }
 
+#Preview("En route — courier mid-run") {
+    NavigationStack {
+        OrderDetailView.Content(
+            order: .previewEnRoute,
+            cancellation: .ready(.init(status: .other("pickuped"), version: 9, terms: .unavailable)),
+            reconciling: false,
+            retry: {},
+            confirm: {}
+        )
+    }
+}
+
 #if DEBUG
 extension Order {
     /// Preview fixtures — a claim still being worked, and one long done.
@@ -236,6 +372,44 @@ extension Order {
             currency: "RUB",
             tariff: "courier",
             claimID: "claim-preview-2"
+        )
+    }
+
+    /// A courier mid-route: the pickup visited, the destination waiting on its
+    /// estimate — the callout's mini-timeline has something to say.
+    static var previewEnRoute: Order {
+        Order(
+            created: .init(timeIntervalSince1970: 1_800_000_000),
+            status: .active,
+            route: [
+                RoutePoint(
+                    latitude: 55.646068, longitude: 37.668176,
+                    address: "Москва, ул Москворечье, 6",
+                    contactName: "Иван Петров",
+                    visit: .init(
+                        status: .visited,
+                        visitedAt: .init(timeIntervalSince1970: 1_800_001_200)
+                    )
+                ),
+                RoutePoint(
+                    latitude: 55.652212, longitude: 37.648210,
+                    address: "Москва, Каширское шоссе, 52",
+                    addressParts: .init(entrance: "2", apartment: "15"),
+                    contactName: "Анна Сидорова",
+                    contactPhone: "+79987654321",
+                    visit: .init(
+                        status: .pending,
+                        expectedAt: .init(timeIntervalSince1970: 1_800_002_400)
+                    )
+                ),
+            ],
+            price: "1767.78",
+            currency: "RUB",
+            tariff: "express",
+            claimID: "claim-preview-live",
+            courierName: "Сергей",
+            etaMinutes: 14,
+            providerStatus: "pickuped"
         )
     }
 }

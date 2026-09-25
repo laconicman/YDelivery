@@ -20,6 +20,9 @@ struct NewDeliveryView: View {
     /// Bumped by «Save it again» when history refused a placed order.
     @State private var recordAttempt = 0
     @State private var pickingPoint: Model.Point?
+    /// The point being saved as a place — the callout's «Сохранить как место»
+    /// (board `4a`). Its own slot, like `pickingPoint`'s.
+    @State private var savingPoint: Model.Point?
     /// Bumped by the two Retry buttons. Each is part of its task's id, which is what
     /// makes a retry cancellable by the next edit instead of outliving it.
     @State private var estimateAttempt = 0
@@ -73,6 +76,10 @@ struct NewDeliveryView: View {
                 // its editor answers both questions (Round 5, decision #40; author,
                 // 2026-09-14). With a place set it opens on Describe.
                 editContact: { pickingPoint = draft.point(withID: $0) },
+                // The callout's «Сохранить как место» — same sheet the picker's
+                // bookmark flow uses (board `4a`; the save itself is the store's).
+                savePlace: { savingPoint = draft.point(withID: $0) },
+                canSavePlace: store.canSavePlaces,
                 setRole: { draft.setRole($1, for: $0) },
                 swapEnds: { draft.swapEnds() },
                 addStop: { pickingPoint = draft.point(withID: draft.addStop()) },
@@ -187,6 +194,21 @@ struct NewDeliveryView: View {
                     fillEnds: { draft.fillEnds(from: $0, to: $1) }
                 )
             }
+            .sheet(item: $savingPoint) { point in
+                // Same sheet as the picker's bookmark — one save flow, two doors.
+                PointPickerView.SavePlaceSheet(
+                    address: point.place?.displayAddress ?? ""
+                ) { name, kind in
+                    if let place = point.place {
+                        try await store.save(
+                            SavedPlace(
+                                name: name, kind: kind,
+                                point: RoutePoint(place, contact: point.contact)
+                            )
+                        )
+                    }
+                }
+            }
             .sheet(item: $editingItem) { item in
                 ItemEditor(
                     item: item,
@@ -281,7 +303,15 @@ private extension NewDeliveryView {
                         role: point.role,
                         index: index,
                         isLast: index == draft.points.count - 1
-                    )
+                    ),
+                    role: point.role,
+                    visitOrdinal: index + 1,
+                    address: place.displayAddress,
+                    parts: place.parts,
+                    contactSummary: point.contact?.summary,
+                    contactPhone: point.contact?.phone,
+                    parcelsLeaving: draft.parcelFlow(at: point.id).leaving,
+                    parcelsArriving: draft.parcelFlow(at: point.id).arriving
                 )
             }
         }
