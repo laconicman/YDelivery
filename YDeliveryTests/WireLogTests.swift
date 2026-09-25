@@ -27,7 +27,8 @@ struct WireLogTests {
 
         await store.append(.init(at: .now, operation: "claims/cancel", method: "POST",
                                  path: "/claims/42/cancel", status: 200,
-                                 responseBody: #"{"status":"cancelled"}"#))
+                                 responseBody: #"{"status":"cancelled"}"#),
+                           epoch: store.writeEpoch)
 
         let lines = try lines(url)
         #expect(lines.count == 1)
@@ -44,7 +45,8 @@ struct WireLogTests {
 
         for i in 0..<8 {
             await store.append(.init(at: .now, operation: "op-\(i)", method: "GET",
-                                     path: "/x", status: 200))
+                                     path: "/x", status: 200),
+                               epoch: store.writeEpoch)
         }
 
         let kept = try lines(store.fileURL)
@@ -151,7 +153,8 @@ struct WireLogTests {
 
         // A subsequent good append repairs the tail — the log is shareable again.
         await store.append(.init(at: .now, operation: "op", method: "GET",
-                                 path: "/x", status: 200))
+                                 path: "/x", status: 200),
+                           epoch: store.writeEpoch)
         #expect(store.exportURL == url)
     }
 
@@ -164,7 +167,7 @@ struct WireLogTests {
         await store.append(.init(
             at: .now, operation: "op", method: "POST", path: "/x",
             responseBody: String(repeating: "x", count: 500)
-        ))
+        ), epoch: store.writeEpoch)
 
         let size = try FileManager.default
             .attributesOfItem(atPath: store.fileURL.path)[.size] as? Int
@@ -172,5 +175,66 @@ struct WireLogTests {
         let line = try #require(try lines(store.fileURL).first)
         #expect(line.hasPrefix("{"), "the stub is still a whole JSON line")
         #expect(line.contains("exceeded the log bound"))
+    }
+
+    @Test("A request in flight at the wipe writes nothing into the new identity's log")
+    func inFlightAppendDropsAfterWipe() async throws {
+        let (store, url) = try store()
+        let middleware = WireLogMiddleware(store: store)
+        let request = HTTPRequest(method: .get, scheme: "https", authority: "x", path: "/x")
+        let (inside, markInside) = AsyncStream.makeStream(of: Void.self)
+        let (gate, openGate) = AsyncStream.makeStream(of: Void.self)
+
+        // The exchange parks mid-flight; the wipe lands while `next` is suspended —
+        // the cancelled-session append reaches the store behind `clear()` (YD-18).
+        let flight = Task {
+            try? await middleware.intercept(
+                request, body: nil, baseURL: URL(string: "https://x")!, operationID: "op"
+            ) { _, _, _ in
+                markInside.yield()
+                for await _ in gate { break }
+                return (HTTPResponse(status: .ok), HTTPBody(Data(#"{"late":true}"#.utf8)))
+            }
+        }
+        for await _ in inside { break }
+        await store.clear()
+        openGate.yield()
+        _ = await flight.value
+
+        #expect(store.exportURL == nil,
+                "the old identity's late record must not open the new log")
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test("An error append stamped before the wipe drops the same way")
+    func staleErrorAppendDrops() async throws {
+        let (store, url) = try store()
+        let middleware = WireLogMiddleware(store: store)
+        let request = HTTPRequest(method: .get, scheme: "https", authority: "x", path: "/x")
+
+        await store.clear()
+        await #expect(throws: CancellationError.self) {
+            try await middleware.intercept(
+                request, body: nil, baseURL: URL(string: "https://x")!, operationID: "op"
+            ) { _, _, _ in throw CancellationError() }
+        }
+
+        #expect(!FileManager.default.fileExists(atPath: url.path),
+                "the cancelled task's error line was minted under the wiped epoch")
+    }
+
+    @Test("The identity signed in after the wipe logs normally")
+    func postWipeEpochAppends() async throws {
+        let (store, url) = try store()
+        await store.clear()
+        let middleware = WireLogMiddleware(store: store)
+
+        _ = try await middleware.intercept(
+            HTTPRequest(method: .get, scheme: "https", authority: "x", path: "/x"),
+            body: nil, baseURL: URL(string: "https://x")!, operationID: "op"
+        ) { _, _, _ in (HTTPResponse(status: .ok), nil) }
+
+        #expect(try lines(url).count == 1,
+                "the new epoch mints at middleware init — its writes pass the gate")
     }
 }

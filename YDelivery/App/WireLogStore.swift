@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// The on-device capture an engaged user can share — one JSON object per HTTP exchange,
 /// bounded, in Application Support.
@@ -51,6 +52,18 @@ actor WireLogStore {
     /// Beyond this, the oldest half is dropped at a line boundary — newest evidence wins.
     private let byteLimit: Int
 
+    /// The write epoch — which identity generation owns the file. `clear()` bumps it
+    /// *inside* the lock before removing anything, so an append stamped under the old
+    /// epoch cannot slip between the bump and the wipe: it fails the gate whenever the
+    /// actor gets to it (YD-18). Behind a lock rather than actor state because the
+    /// middleware mints its stamp synchronously at session birth — `establishSession`
+    /// is not async.
+    private nonisolated let epochGate = OSAllocatedUnfairLock(initialState: UInt64(0))
+
+    /// The epoch an append must stamp to be admitted — minted by the middleware at
+    /// init, so it names the session that produced the exchange.
+    nonisolated var writeEpoch: UInt64 { epochGate.withLock { $0 } }
+
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -87,7 +100,11 @@ actor WireLogStore {
         return fileURL
     }
 
-    func append(_ entry: Entry) {
+    /// Admits the entry only if `epoch` is still the store's — a record stamped under
+    /// an epoch a `clear()` has since superseded belonged to the wiped identity, and
+    /// dropping it is the whole point of the gate.
+    func append(_ entry: Entry, epoch: UInt64) {
+        guard epochGate.withLock({ $0 == epoch }) else { return }
         guard var line = try? encoder.encode(entry) else { return }
         // An entry bigger than the whole bound would defeat it: swap in a stub —
         // the line says the exchange happened, the bound stays true (review, PR #33).
@@ -156,7 +173,10 @@ actor WireLogStore {
         exportContinuation.yield(exportURL)
     }
 
+    /// The bump precedes the removal in one actor hop — nothing can run between them —
+    /// so every append that follows finds the new epoch already in force (YD-18).
     func clear() {
+        epochGate.withLock { $0 &+= 1 }
         try? FileManager.default.removeItem(at: fileURL)
         exportContinuation.yield(exportURL)
     }
