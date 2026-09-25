@@ -23,5 +23,22 @@
 		<!-- ClaimsSyncController.refreshTaskIdentifier — keep in sync. -->
 		<string>com.learnable.YDelivery.claims-refresh</string>
 	</array>
+	<!-- The widget and App Intents' channel back into the app — DeepLink.swift
+	     is the grammar. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.learnable.YDelivery</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ydelivery</string>
+			</array>
+		</dict>
+	</array>
+	<!-- The app may start and update Live Activities — the widget extension
+	     declares the same key to render them. -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 </dict>
 </plist>

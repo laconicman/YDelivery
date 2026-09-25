@@ -249,6 +249,29 @@ struct StoreControllerTests {
         #expect(controller.fieldsError == nil)
     }
 
+    /// The widget snapshot's cap windows history, never liveness: a delivery
+    /// started before the newest fifty still reaches the waiting widget —
+    /// without the tail pass it would vanish from the surface built to show it
+    /// (review, PR #44).
+    @Test("The snapshot cap windows history — a live order rides past it")
+    func snapshotKeepsLiveOrdersPastTheCap() {
+        let recent = (0..<55).map { index in
+            order(created: .init(timeIntervalSince1970: 10_000 - Double(index)),
+                  addresses: ["Офис \(index)"])
+        }
+        var ancient = order(created: .init(timeIntervalSince1970: 1),
+                            addresses: ["Склад"])
+        ancient.status = .active
+        ancient.claimID = "claim-ancient"
+
+        let entries = StoreController.snapshotEntries(
+            of: recent + [ancient], orderNumber: { _ in nil })
+
+        #expect(entries.count == 51)
+        #expect(entries.last?.id == ancient.id)
+        #expect(entries.last?.isLive == true)
+    }
+
     @Test("An unread store is not an empty one — first-run surfaces wait for the read")
     func emptinessIsNotKnownBeforeTheRead() async throws {
         let controller = controller
