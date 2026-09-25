@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import OSLog
 import OSLogLoggingMiddleware
+import OpenAPIURLSession
 import YandexDeliveryExpressAPI
 
 /// The app's session: owns the OAuth token and the API client built from it.
@@ -44,6 +45,12 @@ final class ClientController {
     /// Mirrors the store's shareability stream into ``diagnosticsURL``.
     private var logObservation: Task<Void, Never>?
 
+    /// The `URLSession` the current client's transport rides on. Owned so a rebuild
+    /// or sign-out can invalidate it — unlike `client`, nil-ing it wouldn't cancel a
+    /// connection pool the previous identity opened (YD-14's session is the app's
+    /// second per-identity resource).
+    private var providerURLSession: URLSession?
+
     /// Restores the previous session, if a token was stored.
     init(tokenStore: TokenStore = TokenStore(), wireLog: WireLogStore = WireLogStore()) {
         self.tokenStore = tokenStore
@@ -75,12 +82,19 @@ final class ClientController {
         signInError = nil
         let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else {
-            client = nil
+            dropSession()
             signInError = EmptyTokenError()
             return
         }
         do {
             try tokenStore.write(token)
+            // Kill the old session before the wipe — a task in flight can still
+            // append its (body-carrying) record through the wiped point
+            // afterwards; invalidating first turns every pending response into
+            // an error so nothing old-identity can arrive behind the new log
+            // (review, PR #49). A cancelled task's error append can still race
+            // the wipe — closing that needs a write epoch, see YD-18.
+            providerURLSession?.invalidateAndCancel()
             // A new credential means a new identity — the wipe completes before
             // the client exists, so the new session's first exchange can neither
             // land beside the previous identity's data nor be erased by its
@@ -90,7 +104,7 @@ final class ClientController {
             onIdentityChange?()
             establishSession(token: token)
         } catch {
-            client = nil
+            dropSession()
             signInError = error
         }
     }
@@ -99,7 +113,7 @@ final class ClientController {
     /// out, but surfaces as ``signInError`` — a credential the user asked to remove and
     /// could not be is worth rendering.
     func signOut() {
-        client = nil
+        dropSession()
         signInError = nil
         // The share affordance goes dark now — the file itself is erased a hop
         // later, and the `isSignedIn` gate on ``diagnosticsURL`` keeps a late
@@ -111,7 +125,38 @@ final class ClientController {
         do { try tokenStore.delete() } catch { signInError = error }
     }
 
+    /// The provider's burst-load failure is a silent stall — no status, no
+    /// `Retry-After`, connections held for 25+ minutes (YD-14) — so the request
+    /// timeout is the whole budget a stalled request spends. Half the URLSession
+    /// default, generous against the small JSON bodies these calls exchange.
+    static let providerRequestTimeout: TimeInterval = 30
+
+    /// `.default` rather than `.ephemeral` — the transport's own default session
+    /// carries the same disk cache and credential semantics; only the timeouts change.
+    static func providerSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = providerRequestTimeout
+        // The request timeout bounds *idle* time — each arriving byte resets it.
+        // The resource timeout is the wall-clock ceiling a drip-feeding stall
+        // cannot reset (review, PR #49).
+        configuration.timeoutIntervalForResource = 2 * providerRequestTimeout
+        return URLSession(configuration: configuration)
+    }
+
+    /// Both per-identity resources die together — a `client = nil` that leaves the
+    /// session open lets a previous identity's in-flight requests run out the clock.
+    private func dropSession() {
+        providerURLSession?.invalidateAndCancel()
+        providerURLSession = nil
+        client = nil
+    }
+
     private func establishSession(token: String) {
+        // Rebuild means re-own: the old session closes before the new one exists, so
+        // no request or connection pool outlives the identity that opened it.
+        providerURLSession?.invalidateAndCancel()
+        let session = Self.providerSession()
+        providerURLSession = session
         do {
             client = try Client(
                 credentials: Credentials(authToken: token),
@@ -123,10 +168,11 @@ final class ClientController {
                         bodyLoggingConfiguration: .upTo(maxBytes: 32 * 1024)
                     ),
                     WireLogMiddleware(store: wireLog),
-                ]
+                ],
+                transport: URLSessionTransport(configuration: .init(session: session))
             )
         } catch {
-            client = nil
+            dropSession()
             signInError = error
         }
     }

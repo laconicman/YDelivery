@@ -105,4 +105,25 @@ struct ClientControllerTests {
         #expect(controller.diagnosticsURL == nil,
                 "the affordance goes dark synchronously — the wiped file can't be shared")
     }
+
+    @Test("The provider session carries a tighter timeout than the 60 s transport default")
+    func providerSessionTimeout() {
+        // YD-14: under burst load the provider stalls connections silently, so this
+        // timeout is the whole budget such a request spends. If it ever regresses to
+        // the URLSession default the register entry is right back open.
+        let session = ClientController.providerSession()
+
+        #expect(session.configuration.timeoutIntervalForRequest == ClientController.providerRequestTimeout)
+        #expect(ClientController.providerRequestTimeout < 60)
+    }
+
+    @Test("A drip-feed stall cannot outrun the request timeout — the resource bound")
+    func providerSessionResourceTimeout() {
+        // `timeoutIntervalForRequest` resets on every arriving byte; only the
+        // resource timeout is wall-clock. Pin that both exist (review, PR #49).
+        let session = ClientController.providerSession()
+
+        #expect(session.configuration.timeoutIntervalForResource
+                == 2 * ClientController.providerRequestTimeout)
+    }
 }

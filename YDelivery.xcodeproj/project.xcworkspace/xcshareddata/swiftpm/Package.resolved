@@ -1,5 +1,5 @@
 {
-  "originHash" : "b44cf3889f8665a29c4b4d2474c34c476fa7f3e75a4419285434456564ef5396",
+  "originHash" : "cb58881e0b7d1c9ccf689bf58399969e54ce088245df020e638b315d04d05f1f",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mattpolzin/OpenAPIKit",
       "state" : {
-        "revision" : "57b6318128e3f901c93f4fbf98d1c1464ec168d3",
-        "version" : "6.2.0"
+        "revision" : "5b72eb9a6b23b1fec439d9a0bf38f115400421f9",
+        "version" : "6.4.0"
       }
     },
     {
@@ -168,8 +168,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-openapi-generator",
       "state" : {
-        "revision" : "af9a2a1f5dcfb00a278d4bb29c6d75080932e99e",
-        "version" : "1.13.0"
+        "revision" : "39d49cf22abab58a07f02bb76808b5d2839b294a",
+        "version" : "1.13.1"
       }
     },
     {
@@ -258,8 +258,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/YandexDeliveryExpress",
       "state" : {
-        "revision" : "b1885375956c7c3b73c13b9c15f0ed7721471e02",
-        "version" : "0.3.0"
+        "revision" : "c3095117ad6f57fd55905665261f264dd43993a3",
+        "version" : "0.3.1"
       }
     },
     {

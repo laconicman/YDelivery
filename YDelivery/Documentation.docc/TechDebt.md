@@ -193,7 +193,7 @@ the *next* row; the one in flight is unreachable.
   the spike; the store has no delete API today and growing one to fence a one-row edge
   is the chaos the register exists to avoid.
 
-## YD-14 — The provider can black-hole connections under burst load — **open**
+## YD-14 — The provider can black-hole connections under burst load — **discharged**
 
 Field check, 2026-09-23: after ~20 read-only requests in five minutes, every endpoint —
 `claims/journal`, `claims/search`, `claims/info`, `offers/calculate` — hung at the
@@ -206,9 +206,14 @@ under load is a silent stall, not a refusal.
   `URLSessionTransport()` sets nothing tighter — so a throttled pass lingers for
   minutes across pages while `isSyncing` holds the gate. It recovers on the next tick,
   but the stall is invisible.
-- **Discharge:** an explicit per-request timeout on the transport (tens of seconds,
-  not the 60 s default) alongside the page budgeting `maxPages` already gives each
-  pass; revisit when sync moves onto the persistence substrate (<doc:Schema>).
+- **Discharged by:** `ClientController.providerSession`, a `URLSession` with an
+  explicit 30 s `timeoutIntervalForRequest` handed to the transport the API package's
+  `transport:` parameter now accepts (YandexDeliveryExpress 0.3.1) — a stalled request
+  fails in tens of seconds and the page budgeting `maxPages` bounds a pass on top.
+  The transport's own timeout, not a wrapping `Task`: a cancelled task can leave the
+  socket open, and the stall is the thing being bounded. If the stall ever proves
+  adaptive (throttling that answers eventually), revisit *which* timeout before
+  widening it.
 
 ## YD-15 — `routeStops.role` is position-derived, not model-carried — **open**
 
@@ -250,6 +255,25 @@ every reader — `orderNumber(for:)`, `SpotlightIndexer` — resolves off the va
 snapshot. The wider finding review surfaced was worse than the deleted-definition edge:
 the definitions tier is *private*, so a collaborator could never have joined it — the
 denormalized snapshot is what makes the shared tier self-describing (Kit PR #8).
+
+## YD-18 — A cancelled request's wire record can race the identity wipe — **open**
+
+`signIn` invalidates the previous identity's `URLSession` *before* `wireLog.clear()`
+(review, PR #49), so a task in flight can no longer complete a real response into the
+wiped log. `invalidateAndCancel` is synchronous about the socket but not about the
+middleware: a cancelled task still unwinds through `WireLogMiddleware`, which records
+the exchange — *with the request body* — and that append is scheduled on the store's
+own queue. It can land after `clear()` has run, leaving one old-identity record in the
+new identity's shareable log.
+
+- **Cost:** one log line per in-flight task at the instant of a token swap — a request
+  path and body, never a response and never headers. Rare (a sign-in must land inside
+  a request's flight) and small (the new identity's log starts with an older
+  identity's tail call).
+- **Discharge:** a write epoch on `WireLogStore` — `signIn` bumps a generation before
+  the wipe, the middleware stamps its session's epoch, and stale-epoch appends drop.
+  Alternatively a drain step (`finishTasksAndInvalidate` plus settling) before the
+  wipe, which pays latency on every sign-in for a one-line leak.
 
 ## See Also
 
