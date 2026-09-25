@@ -251,21 +251,21 @@ private extension DeliverySnapshot.Entry {
     }
 }
 
-#if DEBUG
-struct WaitingWidget_Previews: PreviewProvider {
-    static var previews: some View {
-        let entry = WaitingWidget.Entry(
-            date: .now, order: .sample, alsoLive: [.sampleSecondary])
-        Group {
-            WaitingView(entry: entry)
-                .previewContext(WidgetPreviewContext(family: .systemSmall))
-            WaitingView(entry: entry)
-                .previewContext(WidgetPreviewContext(family: .systemMedium))
-            WaitingView(entry: entry)
-                .previewContext(WidgetPreviewContext(family: .accessoryRectangular))
-            WaitingView(entry: .init(date: .now, order: nil, alsoLive: []))
-                .previewContext(WidgetPreviewContext(family: .systemSmall))
-        }
-    }
+#Preview("Small", as: .systemSmall) {
+    WaitingWidget()
+} timeline: {
+    WaitingWidget.Entry(date: .now, order: .sample, alsoLive: [.sampleSecondary])
+    WaitingWidget.Entry(date: .now, order: nil, alsoLive: [])
 }
-#endif
+
+#Preview("Medium", as: .systemMedium) {
+    WaitingWidget()
+} timeline: {
+    WaitingWidget.Entry(date: .now, order: .sample, alsoLive: [.sampleSecondary])
+}
+
+#Preview("Lock screen", as: .accessoryRectangular) {
+    WaitingWidget()
+} timeline: {
+    WaitingWidget.Entry(date: .now, order: .sample, alsoLive: [.sampleSecondary])
+}

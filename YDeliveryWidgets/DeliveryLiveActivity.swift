@@ -159,3 +159,25 @@ private struct LockScreenView: View {
         return String(localized: state.status.words)
     }
 }
+
+#if DEBUG
+private extension DeliveryActivityAttributes.ContentState {
+    /// The card at its fullest — courier assigned, ETA known, recipient
+    /// reachable — the state a preview must prove fits.
+    static var previewEnRoute: Self {
+        DeliveryActivityAttributes.ContentState(
+            status: .active, orderNumber: "4417",
+            destinationAddress: "Каширское шоссе, 52",
+            courierName: "Сергей", courierVehicle: "м 234 ор 77",
+            providerStatus: "delivery_arrived",
+            etaAt: .now.addingTimeInterval(14 * 60),
+            providerObservedAt: .now,
+            destinationPhone: "+7 (812) 345-67-89")
+    }
+}
+
+#Preview("Lock screen") {
+    LockScreenView(state: .previewEnRoute)
+        .padding(.vertical)
+}
+#endif

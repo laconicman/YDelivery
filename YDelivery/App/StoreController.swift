@@ -59,7 +59,7 @@ final class StoreController {
     /// How many recent orders the snapshot carries — the live set plus a repeat
     /// window, not history at scale: the file is a rendering, small on purpose
     /// (doc:Schema — "the widget contract").
-    private static let snapshotOrderLimit = 50
+    private nonisolated static let snapshotOrderLimit = 50
 
     private nonisolated static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "widget-snapshot")
@@ -202,9 +202,7 @@ final class StoreController {
         guard ordersError == nil, fieldsError == nil else { return }
         let snapshot = DeliverySnapshot(
             renderedAt: .now,
-            orders: orders.prefix(Self.snapshotOrderLimit).map {
-                DeliverySnapshot.Entry(order: $0, orderNumber: orderNumber(for: $0.id))
-            })
+            orders: Self.snapshotEntries(of: orders, orderNumber: orderNumber(for:)))
         let prior = snapshotWrites
         snapshotWrites = Task.detached {
             await prior?.value
@@ -216,6 +214,19 @@ final class StoreController {
                     "Widget snapshot render failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Which orders the snapshot carries. The cap windows *history*, never
+    /// liveness: a delivery started before the newest fifty is still the card
+    /// the waiting widget exists for, so live orders ride past the limit
+    /// (review, PR #44).
+    nonisolated static func snapshotEntries(
+        of orders: [Order],
+        orderNumber: (Order.ID) -> String?
+    ) -> [DeliverySnapshot.Entry] {
+        let entry = { DeliverySnapshot.Entry(order: $0, orderNumber: orderNumber($0.id)) }
+        return orders.prefix(snapshotOrderLimit).map(entry)
+            + orders.dropFirst(snapshotOrderLimit).map(entry).filter(\.isLive)
     }
 
     /// An order's field values — the detail view and the repeat path read this

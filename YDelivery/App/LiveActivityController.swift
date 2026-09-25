@@ -10,10 +10,13 @@ import YDeliveryKit
 /// becomes its card's `ContentState`.
 ///
 /// The state vocabulary is the board's: `.searching` and `.active` are live and
-/// update; the rest end the activity. Delivered is the ending that dismisses
-/// itself — four minutes on the lock screen, then gone — while every state
-/// parked on the sender's decision (`.attention`, `.cancelled`) keeps its final
-/// card until the sender taps it away (board `5a`).
+/// update; terminal states end the activity. Delivered is the ending that
+/// dismisses itself — four minutes on the lock screen, then gone — while
+/// `.cancelled` keeps its final card until the sender taps it away (board
+/// `5a`). `.attention` stays *live*: a parked decision can recover, and an
+/// ended `.default` card lingers visibly while the recovery starts a second
+/// one — the same card must carry «needs your decision» and whatever answers
+/// it (review, PR #44).
 /// Orders with no claim yet, and activities whose order vanished (an account
 /// switch wiped them), are swept the same way.
 @Observable @MainActor
@@ -33,8 +36,7 @@ final class LiveActivityController {
         case updating
         /// Final — write the last card and end it. `linger` is the board's
         /// delivered-only courtesy: four minutes, then it dismisses itself.
-        /// Everything parked on the sender's decision (failed handover, a
-        /// return, a payment waiting) ends `.default` — it stays until tapped.
+        /// Cancelled ends `.default` — it stays until tapped.
         case ending(linger: Bool)
         /// No card at all — a draft has no provider existence, a claim-less
         /// order none yet.
@@ -43,9 +45,9 @@ final class LiveActivityController {
         init(status: OrderStatus, hasClaim: Bool) {
             guard hasClaim else { self = .none; return }
             switch status {
-            case .searching, .active: self = .updating
+            case .searching, .active, .attention: self = .updating
             case .done: self = .ending(linger: true)
-            case .attention, .cancelled: self = .ending(linger: false)
+            case .cancelled: self = .ending(linger: false)
             case .draft: self = .none
             }
         }

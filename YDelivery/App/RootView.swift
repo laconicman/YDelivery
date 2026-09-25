@@ -17,6 +17,11 @@ struct RootView: View {
     /// read can answer whether it's still in history — a cold start delivers the
     /// activity before `refresh()` lands (review, PR #42).
     @State private var pendingOrderID: UUID?
+    /// A repeat link that arrived before the store's first read — held, not
+    /// dropped: the widget's snapshot outlives the app's memory, so a cold
+    /// start must wait for the truth before saying an order isn't there
+    /// (review, PR #44).
+    @State private var pendingLink: DeepLink?
     @Environment(StoreController.self) private var store
     @Environment(ClaimsSyncController.self) private var sync
     @Environment(NotificationController.self) private var notifications
@@ -116,13 +121,17 @@ struct RootView: View {
         }
         // Every order write — sync merge, placement, cancel — republishes this
         // list through the one funnel, so this is the one hook the Live
-        // Activities need. The widgets' half of a republish — the snapshot
+        // Activities need. `orderFields` rides too: the sender's number is a
+        // card field, and a rename must reach a live card without waiting on
+        // an order change. The widgets' half of a republish — the snapshot
         // render and the timeline reload — lives in the store itself, where
         // the file write can be sequenced before the reload ask.
-        .onChange(of: store.orders, initial: true) {
-            activities.reconcile(orders: store.orders,
-                                 orderNumber: store.orderNumber(for:))
-        }
+        .onChange(of: store.orders, initial: true) { republishSurfaces() }
+        .onChange(of: store.orderFields) { republishSurfaces() }
+        // `hasLoaded` is its own trigger: an unread store reconciles nothing,
+        // and the first read must also fire the pass that applies a parked
+        // deep link and sweeps orphaned cards.
+        .onChange(of: store.hasLoaded, initial: true) { republishSurfaces() }
         // A widget, Live Activity or App Intent asks in URLs — the one channel
         // an extension has into the app's controllers (board `5b`/`5d`).
         .onOpenURL { url in
@@ -141,11 +150,27 @@ struct RootView: View {
         }
     }
 
+    /// Reconcile Live Activities once the store has actually read — an unread
+    /// store is not an empty one, and reconciling against `[]` would sweep
+    /// every restored card as an orphan (review, PR #44). The same gate
+    /// applies a deep link parked waiting on that read.
+    private func republishSurfaces() {
+        guard store.hasLoaded else { return }
+        activities.reconcile(orders: store.orders,
+                             orderNumber: store.orderNumber(for:))
+        if let link = pendingLink {
+            pendingLink = nil
+            apply(link)
+        }
+    }
+
     /// What a `DeepLink` asks the app to do, mapped onto the same seams the
     /// list's own buttons use — a repeat is a fresh draft, never a mutation of
     /// the parked one. A link naming something the store no longer has is
     /// dropped: the widget's snapshot is older than the app's truth, and
-    /// opening an empty draft would only pretend otherwise.
+    /// opening an empty draft would only pretend otherwise. Before the first
+    /// read that rule can't run — a repeat is parked in `pendingLink` until
+    /// the store can answer, rather than being mistaken for a miss.
     private func apply(_ link: DeepLink) {
         switch link {
         case .order(let id):
@@ -155,6 +180,7 @@ struct RootView: View {
             draft = NewDeliveryView.Model()
             isComposing = true
         case .repeatOrder(let id):
+            guard store.hasLoaded else { pendingLink = link; return }
             guard let order = store.orders.first(where: { $0.id == id }) else { return }
             draft = NewDeliveryView.Model(
                 repeating: order, fields: store.fields(for: order.id))
@@ -163,6 +189,7 @@ struct RootView: View {
             // A saved place is a *destination* — the draft's last row takes the
             // point and whoever answers its door; the pickup stays the sender's
             // to fill, because a place remembers no origin.
+            guard store.hasLoaded else { pendingLink = link; return }
             guard let place = store.savedPlaces.first(where: { $0.id == id }) else { return }
             let model = NewDeliveryView.Model()
             guard let destination = model.points.last?.id else { return }

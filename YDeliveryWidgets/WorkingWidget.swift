@@ -121,17 +121,14 @@ private extension DeliverySnapshot.Entry {
     }
 }
 
-#if DEBUG
-struct WorkingWidget_Previews: PreviewProvider {
-    static var previews: some View {
-        let entry = WorkingWidget.Entry(
-            date: .now, routes: [.sampleRoute, .sampleRouteSecond])
-        Group {
-            WorkingView(entry: entry)
-                .previewContext(WidgetPreviewContext(family: .systemSmall))
-            WorkingView(entry: entry)
-                .previewContext(WidgetPreviewContext(family: .systemMedium))
-        }
-    }
+#Preview("Small", as: .systemSmall) {
+    WorkingWidget()
+} timeline: {
+    WorkingWidget.Entry(date: .now, routes: [.sampleRoute, .sampleRouteSecond])
 }
-#endif
+
+#Preview("Medium", as: .systemMedium) {
+    WorkingWidget()
+} timeline: {
+    WorkingWidget.Entry(date: .now, routes: [.sampleRoute, .sampleRouteSecond])
+}
