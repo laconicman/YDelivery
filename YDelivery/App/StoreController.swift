@@ -64,6 +64,11 @@ final class StoreController {
     /// Same discipline as ``snapshotWrites``.
     private var placesWrites: Task<Void, Never>?
 
+    /// The parked draft's write tail — same discipline as ``snapshotWrites``:
+    /// the save-on-edit loop lands writes through here, so a consume queued
+    /// behind an in-flight save can never be resurrected by it.
+    private var draftWrites: Task<Void, Never>?
+
     /// How many recent orders the snapshot carries — the live set plus a repeat
     /// window, not history at scale: the file is a rendering, small on purpose
     /// (doc:Schema — "the widget contract").
@@ -71,6 +76,9 @@ final class StoreController {
 
     private nonisolated static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "widget-snapshot")
+
+    private nonisolated static let draftLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "drafts")
 
     init(database: AppDatabase? = .inAppGroup(
         id: AppGroup.id,
@@ -430,6 +438,55 @@ final class StoreController {
         ([order] + orders.filter { $0.id != order.id }).sorted { $0.created > $1.created }
     }
 
+    /// The save-on-edit sink's other end (YD-16): the flow's whole snapshot
+    /// lands through the serialized tail, so a save can never lose to an older
+    /// in-flight one. Nobody renders a failed draft write — the draft still
+    /// works in-session — so a refusal is logged, not thrown.
+    func persistDraft(_ draft: OrderDraft) {
+        guard let database else { return }
+        let prior = draftWrites
+        draftWrites = Task.detached {
+            await prior?.value
+            do {
+                try database.saveDraft(draft)
+            } catch {
+                Self.draftLogger.error(
+                    "Draft save failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// The parked draft, if the substrate holds one — `nil` also when the store
+    /// is containerless. A corrupt draft throws inside the store and is logged
+    /// here rather than answering "no draft" over bytes it could not read; the
+    /// row itself is left alone for the next launch to try again.
+    func parkedDraft() async -> OrderDraft? {
+        guard let database else { return nil }
+        do {
+            return try await Self.readDraft(database)
+        } catch {
+            Self.draftLogger.error(
+                "Draft restore failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// The draft is consumed — placed, its fate in history's hands. Queued
+    /// through the same tail so it lands after every save the loop scheduled.
+    func consumeParkedDraft() {
+        guard let database else { return }
+        let prior = draftWrites
+        draftWrites = Task.detached {
+            await prior?.value
+            do {
+                try database.deleteDrafts()
+            } catch {
+                Self.draftLogger.error(
+                    "Draft delete failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     struct StoreUnavailable: LocalizedError {
         var errorDescription: String? {
             String(localized: "Shared storage is unavailable on this install.")
@@ -443,6 +500,11 @@ final class StoreController {
     @concurrent
     private static func readPlaces(_ database: AppDatabase) async throws -> [SavedPlace] {
         try database.readPlaces()
+    }
+
+    @concurrent
+    private static func readDraft(_ database: AppDatabase) async throws -> OrderDraft? {
+        try database.currentDraft()
     }
 
     @concurrent

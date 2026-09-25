@@ -271,7 +271,7 @@ account transfer is a re-key, not a migration.
 | `SyncState` | `providerAccountRef` TEXT PK | `journalCursor`, `historyBackfilled`, plus attempt bookkeeping — the journal cursor is per-device by correctness: two devices sharing one cursor would consume each other's events, while the *results* (order rows) already converge through CloudKit |
 | `PendingDiscovery` | `id` UUID PK + `UNIQUE(providerAccountRef, claimID)` | The discovery-retry queue — a feed reported a claim whose card fetch failed; retried until the card lands. Today's `pendingClaimIDs` migrates here. Distinct from acceptance: this device saw the claim exists, it never tried to create it. A secondary UNIQUE is legal *here* precisely because the table is never synchronized — the `uniquenessConstraint` ban governs `tables:`/`privateTables:` only |
 | `PendingAcceptance` | `id` UUID PK | `providerAccountRef`, `claimID?`, `orderRef`?, `createdAt`, `lastCheckedAt`, `state` — the durable home for YD-5's unresolved *acceptance*: we POSTed, the answer was lost, the claim may exist provider-side; reconciled on launch against `claims/search`. Today's store holds no such attempts — it starts empty, which is precisely the gap YD-5 names |
-| `OrderDraft` | `id` UUID PK | Provisional — an un-placed order has no provider existence, so it is *not* an `Order` row. Children (`DraftStop`, `DraftItem`) mirror the shared shape so promoting a draft to an order is a mechanical copy. Named `OrderDraft`, not `Draft`: `@Table` synthesizes a `.Draft` nested type on every model, and a table literally named `Draft` collides inside the macro (spike-verified) |
+| `OrderDraft` | `id` UUID PK | The parked New Delivery draft (YD-16) — an un-placed order has no provider existence, so it is *not* an `Order` row and survives the identity boundary. Carries the options set, `due`, `comment` and the remembered `chosenTariff`; children (`DraftStop`, `DraftItem`, `DraftCustomField`) mirror the shared shape so promoting a draft to an order is a mechanical copy — a `DraftStop` with NULL point columns is an added-but-unfilled hole, which *is* draft state. Named `OrderDraft`, not `Draft`: `@Table` synthesizes a `.Draft` nested type on every model, and a table literally named `Draft` collides inside the macro (spike-verified) |
 
 The wire log stays a **file**, not a table: it is PII-bearing diagnostic output (YD-12)
 with rotation semantics files already give it, and it must never sync.
@@ -454,8 +454,10 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   (<doc:Collaboration>) may make it unnecessary. If it is ever needed, the migration
   path is re-rooting — `Workspace` as root, `Order` demoted to single-FK child — which
   this schema is shaped to permit.
-- **Draft persistence**: `OrderDraft` is specified provisionally; whether parked drafts
-  sync privately or stay device-local is a product call, not yet made.
+- **Draft syncing**: the draft tier is implemented and device-local today
+  (YD-16); whether parked drafts sync privately stays a product call — a draft
+  has no provider existence to share, and the sender's other device restoring
+  mid-draft is convenience, not correctness.
 - **Read-only participants posting messages**: today message-posting = read-write
   grant. A "comment but don't touch attachments" tier doesn't exist in CloudKit; if it
   is ever needed it is app-enforced convention on top of read-write.
