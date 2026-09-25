@@ -64,6 +64,15 @@ field stating its bound.
   creation, updated by polling — the push relay stays a Later item.
 - Two widgets (waiting · working), three App Intents, notification thread rules with
   parcel-photo attachments, share-in extension.
+- **The `4a` map callout — landed:** both maps open the one card — the draft's
+  carries the door chips, the contact, and «Изменить точку»/«Сохранить как место»
+  (both reusing the flows they name); the live order's carries the courier's
+  per-stop account (`visit_status`/`visited_at` mirrored onto `routeStops` in
+  `YDeliveryKit` 0.3.3) plus the provider's as-of stamp. Pin, card and route row
+  share one selection — the row tap is the VoiceOver path to the same content,
+  so the map is never the only route to anything. Per-point comments and the
+  parcel line defer: the app collects neither (`address.comment` stays on the
+  wire unread, `orderItems` has no writer).
 - Local notifications + `BGAppRefreshTask` from journal events; a `BGProcessingTask`
   full replay gated on unmetered Wi-Fi + charger; CloudKit silent notifications as a
   cross-device wake-up once the shared-zone research lands — a trigger for our own

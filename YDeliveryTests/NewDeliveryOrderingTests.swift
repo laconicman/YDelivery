@@ -27,6 +27,39 @@ struct NewDeliveryOrderingTests {
         }
     }
 
+    /// The callout's parcel line counts the same way the wire write does:
+    /// an unassigned item rides the route's ends, quantities sum as pieces.
+    @Test("Parcel flow honours the route's ends and counts pieces")
+    func parcelFlowCounts() {
+        let model = NewDeliveryView.Model()
+        let start = model.points[0].id, end = model.points[1].id
+
+        var defaulted = ParcelItem()          // no stops set — rides A→B
+        defaulted.name = "Коробка"
+        defaulted.quantity = 2
+        var middle = ParcelItem()             // explicitly leaves at the start
+        middle.name = "Пакет"
+        middle.pickupPointID = start
+        model.setItem(defaulted)
+        model.setItem(middle)
+
+        let flow = model.parcelFlow(at: start)
+        #expect(flow.leaving == 3, "two default pieces + the one assigned")
+        #expect(flow.arriving == 0)
+        #expect(model.parcelFlow(at: end) == (0, 3),
+                "both items default their handover to the route's last stop")
+
+        // A third stop joins last — and the route-default rule moves with it.
+        let last = model.addStop()
+        var routed = middle
+        routed.dropoffPointID = end   // the former end, now a middle stop
+        model.setItem(routed)
+        #expect(model.parcelFlow(at: end).arriving == 1,
+                "an assigned handover lands where it names")
+        #expect(model.parcelFlow(at: last).arriving == 2,
+                "the unassigned item's handover followed the route's end")
+    }
+
     @Test("Blocked drafts state every bound; a ready draft states none")
     func blockersStateTheBounds() async {
         let empty = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })

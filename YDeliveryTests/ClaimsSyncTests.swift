@@ -39,7 +39,7 @@ struct ClaimsSyncTests {
                     _type: ._return,
                     visitOrder: 2,
                     visitStatus: .pending,
-                    visitedAt: .init()
+                    visitedAt: .init(expected: Date(timeIntervalSince1970: 1_800_002_400))
                 ),
                 .init(
                     id: 1,
@@ -48,7 +48,7 @@ struct ClaimsSyncTests {
                     _type: .source,
                     visitOrder: 1,
                     visitStatus: .visited,
-                    visitedAt: .init()
+                    visitedAt: .init(actual: Date(timeIntervalSince1970: 1_800_001_200))
                 ),
             ],
             status: status,
@@ -155,6 +155,24 @@ struct ClaimsSyncTests {
         #expect(route[1].contactName == "Анна")
         #expect(route[1].contactPhone == "+7 999 444-55-66")
         #expect(route[1].contactPhoneExtension == "77")
+
+        // The courier's account of each stop rides the point — the callout's
+        // mini-timeline data (board `4a`): actual on the visited stop, the
+        // provider's estimate on the one still waiting.
+        #expect(route[0].visit?.status == .visited)
+        #expect(route[0].visit?.visitedAt == Date(timeIntervalSince1970: 1_800_001_200))
+        #expect(route[1].visit?.status == .pending)
+        #expect(route[1].visit?.expectedAt == Date(timeIntervalSince1970: 1_800_002_400))
+    }
+
+    /// The Kit mirrors the wire's four `visit_status` words verbatim — a new wire
+    /// spelling must not silently decode as "no visit" (the map callout reads it).
+    @Test("Every wire visit status lands in the mirrored vocabulary")
+    func visitStatusVocabulary() {
+        for status in Components.Schemas.PointVisitStatus.allCases {
+            #expect(RoutePoint.PointVisitStatus(rawValue: status.rawValue) != nil,
+                    "\(status.rawValue) has no mirrored case")
+        }
     }
 
     // MARK: Journal events

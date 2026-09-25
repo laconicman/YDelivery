@@ -234,7 +234,9 @@ nonisolated extension RoutePoint {
     /// A wire route point as the store remembers it: `[lon, lat]` back into fields,
     /// door details into `AddressParts`' own names, the extension never folded into
     /// the phone. `contact.name` stays whole — Cyrillic names do not split reliably,
-    /// which is exactly why the name components were made explicit fields.
+    /// which is exactly why the name components were made explicit fields. The visit
+    /// record rides verbatim — `visited_at.actual` is stamped only on visited stops,
+    /// `expected` only while one still waits (the wire's own rule).
     init(claimPoint point: Components.Schemas.RoutePoint) {
         let coordinates = point.address.coordinates ?? []
         let parts = AddressParts(
@@ -250,7 +252,13 @@ nonisolated extension RoutePoint {
             addressParts: parts.isEmpty ? nil : parts,
             contactName: point.contact.name.isEmpty ? nil : point.contact.name,
             contactPhone: point.contact.phone.isEmpty ? nil : point.contact.phone,
-            contactPhoneExtension: point.contact.phoneAdditionalCode
+            contactPhoneExtension: point.contact.phoneAdditionalCode,
+            visit: PointVisitStatus(rawValue: point.visitStatus.rawValue)
+                .map { status in
+                    Visit(status: status,
+                          visitedAt: point.visitedAt.actual,
+                          expectedAt: point.visitedAt.expected)
+                }
         )
     }
 }

@@ -63,10 +63,10 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.3.2 carries the widget surface — courier/ETA mirror fields, the shared
-    # components, the Live Activity attributes, and the snapshot file contract
-    # the extension reads instead of the live database.
-    minorVersion: 0.3.2
+    # 0.3.3 carries the per-stop provider visit record (RoutePoint.Visit on
+    # routeStops) and RouteLine's selection axis — the callout's map and row
+    # halves (board `4a`).
+    minorVersion: 0.3.3
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
