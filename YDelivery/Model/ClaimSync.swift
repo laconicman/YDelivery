@@ -197,7 +197,16 @@ nonisolated extension Order {
     /// does. The wire's `return` point is kept on purpose: this app *sends* its
     /// drop-off as `return` (see `createRequest`), so the wire's last stop is the
     /// sender's destination, not courier bookkeeping.
+    ///
+    /// The courier line and ETA ride the sighting too — `performer_info` and `eta`
+    /// are the widget/Live Activity's «who to call» and «when», and the mirror
+    /// overwrites them with each fresher sighting: a claim reporting no courier
+    /// clears the name a previous one left.
     init(claim: Components.Schemas.ClaimResponse, adoptingID id: UUID) {
+        let performer = claim.performerInfo
+        let vehicle = [performer?.carModel, performer?.carNumber]
+            .compactMap { $0 }
+            .joined(separator: " ")
         self.init(
             id: id,
             created: claim.createdTs,
@@ -208,7 +217,15 @@ nonisolated extension Order {
             price: claim.pricing?.finalPrice ?? claim.pricing?.offer?.priceWithVat,
             currency: claim.pricing?.currency?.rawValue,
             tariff: claim.clientRequirements?.taxiClass.rawValue,
-            claimID: claim.id
+            claimID: claim.id,
+            courierName: performer.flatMap {
+                $0.courierName.isEmpty ? nil : $0.courierName
+            },
+            courierVehicle: vehicle.isEmpty
+                ? performer?.transportType
+                : vehicle,
+            etaMinutes: claim.eta.map(Int.init),
+            providerStatus: claim.status.rawValue
         )
     }
 }

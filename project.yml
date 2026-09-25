@@ -63,9 +63,10 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.3.0 carries the provider-events feed — `recordProviderEvent` and its
-    # `ProviderEventOutcome`, the signal the notification layer announces.
-    minorVersion: 0.3.0
+    # 0.3.2 carries the widget surface — courier/ETA mirror fields, the shared
+    # components, the Live Activity attributes, and the snapshot file contract
+    # the extension reads instead of the live database.
+    minorVersion: 0.3.2
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
@@ -125,6 +126,9 @@ targets:
         product: PhoneNumberKitUI
       - package: SFSafeSymbols
         product: SFSafeSymbols
+      # The widget extension — embeds into the app's PlugIns; the surfaces
+      # inside read the shared App Group store and never the app itself.
+      - target: YDeliveryWidgets
     settings:
       groups: [signing]
       base:
@@ -159,6 +163,38 @@ targets:
       testTargets:
         - YDeliveryTests
         - YDeliveryUITests
+
+  # The widget extension (board `5b`): two Home Screen widgets, the lock-screen
+  # accessories, and the Live Activity's renderer. Its whole world is the Kit —
+  # shared store, shared components — because an extension cannot import the app.
+  YDeliveryWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - YDeliveryWidgets
+    dependencies:
+      - package: YDeliveryKit
+        product: YDeliveryKit
+      - package: SFSafeSymbols
+        product: SFSafeSymbols
+    settings:
+      groups: [signing]
+      base:
+        # The App Group is the extension's only entitlement — the database lives
+        # there; sync stays the app's job, so no iCloud keys.
+        CODE_SIGN_ENTITLEMENTS: YDeliveryWidgets.entitlements
+        # An extension's bundle id must extend its host's — `YDelivery.Widgets`,
+        # not the prefix+name XcodeGen would derive.
+        PRODUCT_BUNDLE_IDENTIFIER: com.learnable.YDelivery.Widgets
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        GENERATE_INFOPLIST_FILE: YES
+        # NSExtension + NSSupportsLiveActivities ride a partial plist — the same
+        # merge pattern as the app's INFOPLIST_FILE.
+        INFOPLIST_FILE: YDeliveryWidgets-Info.plist
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+        SKIP_INSTALL: YES
+        STRING_CATALOG_GENERATE_SYMBOLS: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
 
   YDeliveryTests:
     type: bundle.unit-test

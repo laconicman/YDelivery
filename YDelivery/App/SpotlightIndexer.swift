@@ -23,14 +23,11 @@ nonisolated enum SpotlightIndexer {
     /// Reconciles the index with the store: wipe the domain, re-add the current
     /// set. Called after each orders read; cheap at history scale, and Spotlight is
     /// best-effort — a failure is logged, never surfaced.
-    static func reindex(orders: [Order], fields: [OrderCustomField],
-                        definitions: [CustomFieldDefinition]) async {
+    static func reindex(orders: [Order], fields: [OrderCustomField]) async {
         let index = CSSearchableIndex.default()
-        let orderNumberField = definitions.first { $0.carrier == .orderNumber }?.id
         do {
             try await index.deleteSearchableItems(withDomainIdentifiers: [domain])
-            let items = orders.map { item(for: $0, fields: fields,
-                                          orderNumberField: orderNumberField) }
+            let items = orders.map { item(for: $0, fields: fields) }
             try await index.indexSearchableItems(items)
         } catch {
             logger.error("Spotlight reindex failed: \(error.localizedDescription)")
@@ -40,12 +37,14 @@ nonisolated enum SpotlightIndexer {
     /// One order → one searchable item. The sender's own order number (the field
     /// riding the `orderNumber` carrier, when configured) is the title — it outranks
     /// the provider claim id on every surface, the index included; the rest of the
-    /// values are keywords, matching "searchable by their values" verbatim.
-    private static func item(for order: Order, fields: [OrderCustomField],
-                             orderNumberField: CustomFieldDefinition.ID?) -> CSSearchableItem {
+    /// values are keywords, matching "searchable by their values" verbatim. The
+    /// carrier reads off the value's own snapshot — the definitions are
+    /// private-tier, so a collaborator's index has nothing to join (YD-17).
+    private static func item(for order: Order, fields: [OrderCustomField])
+        -> CSSearchableItem {
         let own = fields.filter { $0.orderID == order.id }
         let attributes = CSSearchableItemAttributeSet(contentType: .content)
-        let orderNumber = own.first { $0.fieldRef == orderNumberField }?.value
+        let orderNumber = own.first { $0.carrier == .orderNumber }?.value
         attributes.title = orderNumber.map { String(localized: "Order \($0)") }
             ?? order.routeSummary
         attributes.contentDescription = order.routeSummary

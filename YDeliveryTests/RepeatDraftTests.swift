@@ -124,6 +124,32 @@ struct RepeatDraftTests {
         #expect(model.hiddenFieldDefinitions.isEmpty)
     }
 
+    /// The widget/intent path (board `5d`): a saved place is a *destination* —
+    /// the draft's last row takes the point and whoever answers its door, and
+    /// the pickup stays the sender's to fill because a place remembers no
+    /// origin. This is the primitive RootView's `repeatPlace` link drives.
+    @Test("A saved place fills the destination and leaves the pickup open")
+    func repeatPlaceFillsDestinationOnly() {
+        let place = SavedPlace(
+            name: "Склад", kind: .warehouse,
+            point: RoutePoint(
+                latitude: 55.7, longitude: 37.6,
+                address: "Москва, Складская, 4",
+                contactName: "Пётр Иванов", contactPhone: "+79990001122"))
+        let model = NewDeliveryView.Model()
+        let destination = model.points.last!.id
+        model.setPlace(PickedPlace(place.point), for: destination)
+        model.setContact(Contact(at: place.point), for: destination)
+
+        #expect(model.points.map(\.role) == [.pickup, .dropoff])
+        #expect(model.points[0].place == nil,
+                "the pickup is the sender's to fill — a place knows no origin")
+        #expect(model.points[1].place?.address == "Москва, Складская, 4")
+        #expect(model.points[1].contact?.fullName == "Пётр Иванов")
+        #expect(!model.isRouteComplete,
+                "half a route is a draft, never something the widget ordered")
+    }
+
     /// A repeated order can carry a choice the schema has since dropped — the
     /// picker must still show it, or the value rides the request unseen
     /// (review, PR #42). The legacy answer is offered as an extra option rather

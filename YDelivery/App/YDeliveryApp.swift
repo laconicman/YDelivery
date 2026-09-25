@@ -11,6 +11,7 @@ struct YDeliveryApp: App {
     @State private var store: StoreController
     @State private var sync: ClaimsSyncController
     @State private var notifications: NotificationController
+    @State private var activities: LiveActivityController
     /// Owned by the composition root for the app's lifetime (rule 6) — a one-shot
     /// start, retained so a future surface can observe or retry it.
     @State private var syncTask: Task<Void, Never>?
@@ -53,6 +54,7 @@ struct YDeliveryApp: App {
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
         _notifications = State(initialValue: notifications)
+        _activities = State(initialValue: LiveActivityController())
         #if DEBUG
         Task { await Self.seedFieldsIfFlagged(store) }
         #endif
@@ -82,6 +84,7 @@ struct YDeliveryApp: App {
                 .environment(store)
                 .environment(sync)
                 .environment(notifications)
+                .environment(activities)
         }
     }
 }

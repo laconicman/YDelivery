@@ -1,5 +1,7 @@
 import Foundation
 import Observation
+import OSLog
+import WidgetKit
 import YDeliveryKit
 
 /// The app's window onto the one substrate — orders and saved places, read three ways
@@ -48,6 +50,19 @@ final class StoreController {
     /// and a second gesture (move, delete, save) starting mid-write would otherwise
     /// interleave positions into an arrangement nobody chose (review, PR #42).
     private var fieldWrites: Task<Void, Error>?
+
+    /// The widget-snapshot tail — same discipline as ``indexing``: serialized so a
+    /// stale render can never land over a fresh one, detached so file I/O never
+    /// runs on the actor that owns the published state.
+    private var snapshotWrites: Task<Void, Never>?
+
+    /// How many recent orders the snapshot carries — the live set plus a repeat
+    /// window, not history at scale: the file is a rendering, small on purpose
+    /// (doc:Schema — "the widget contract").
+    private static let snapshotOrderLimit = 50
+
+    private nonisolated static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "widget-snapshot")
 
     init(database: AppDatabase? = .inAppGroup(
         id: AppGroup.id,
@@ -153,6 +168,7 @@ final class StoreController {
                 fieldsError = error
             }
             reindexSpotlightIfHealthy()
+            renderWidgetSnapshotIfHealthy()
         } else {
             hasLoaded = true
         }
@@ -164,19 +180,41 @@ final class StoreController {
     /// the next refresh where every input read succeeded.
     private func reindexSpotlightIfHealthy() {
         guard ordersError == nil, fieldsError == nil else { return }
-        reindexSpotlight(orders: orders, fields: orderFields,
-                         definitions: fieldDefinitions)
+        reindexSpotlight(orders: orders, fields: orderFields)
     }
 
     /// Queues the index write behind any in-flight one and returns — the caller's
     /// data is already published; the index catches up on its own clock.
-    private func reindexSpotlight(orders: [Order], fields: [OrderCustomField],
-                                  definitions: [CustomFieldDefinition]) {
+    private func reindexSpotlight(orders: [Order], fields: [OrderCustomField]) {
         let prior = indexing
         indexing = Task {
             await prior?.value
-            await SpotlightIndexer.reindex(
-                orders: orders, fields: fields, definitions: definitions)
+            await SpotlightIndexer.reindex(orders: orders, fields: fields)
+        }
+    }
+
+    /// The widget contract's writer half: on material change the app renders
+    /// `deliveries-snapshot.json` into the App Group and reloads timelines —
+    /// the extensions never open the live database (doc:Schema). Same health
+    /// gate as the index: a failed read must not let a partial list masquerade
+    /// as the truth the widget repeats.
+    private func renderWidgetSnapshotIfHealthy() {
+        guard ordersError == nil, fieldsError == nil else { return }
+        let snapshot = DeliverySnapshot(
+            renderedAt: .now,
+            orders: orders.prefix(Self.snapshotOrderLimit).map {
+                DeliverySnapshot.Entry(order: $0, orderNumber: orderNumber(for: $0.id))
+            })
+        let prior = snapshotWrites
+        snapshotWrites = Task.detached {
+            await prior?.value
+            do {
+                try DeliverySnapshotStore.write(snapshot, inAppGroup: AppGroup.id)
+                WidgetCenter.shared.reloadAllTimelines()
+            } catch {
+                Self.logger.error(
+                    "Widget snapshot render failed: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -188,12 +226,12 @@ final class StoreController {
 
     /// The sender's own number for this order — the value the order-number
     /// carrier carried to the provider — for surfaces that name the order
-    /// aloud: a notification title reads «Order №4417», not a UUID.
+    /// aloud: a notification title reads «Order №4417», not a UUID. Reads the
+    /// value's own `carrier` snapshot: the schema is private-tier, so a shared
+    /// order's number must not depend on a definitions join (YD-17).
     func orderNumber(for orderID: Order.ID) -> String? {
-        let numberFields = Set(fieldDefinitions.lazy
-            .filter { $0.carrier == .orderNumber }.map(\.id))
-        return orderFields.first {
-            $0.orderID == orderID && numberFields.contains($0.fieldRef)
+        orderFields.first {
+            $0.orderID == orderID && $0.carrier == .orderNumber
         }?.value
     }
 
@@ -204,6 +242,7 @@ final class StoreController {
         try await enqueueFieldWrite { try $0.saveFieldDefinition(definition) }
         // The carrier slot may have moved — the index's promoted title follows.
         reindexSpotlightIfHealthy()
+        renderWidgetSnapshotIfHealthy()
     }
 
     /// A reorder writes every position. Serialized behind any in-flight schema write
@@ -219,6 +258,7 @@ final class StoreController {
                 }
             }
             reindexSpotlightIfHealthy()
+            renderWidgetSnapshotIfHealthy()
         } catch {
             fieldsError = error
         }
@@ -231,6 +271,7 @@ final class StoreController {
         do {
             try await enqueueFieldWrite { try $0.deleteFieldDefinition(id: id) }
             reindexSpotlightIfHealthy()
+            renderWidgetSnapshotIfHealthy()
         } catch {
             fieldsError = error
         }
@@ -334,6 +375,7 @@ final class StoreController {
             fieldsError = error
         }
         reindexSpotlightIfHealthy()
+        renderWidgetSnapshotIfHealthy()
     }
 
     /// The fallback merge when the confirming read fails: the written order kept,

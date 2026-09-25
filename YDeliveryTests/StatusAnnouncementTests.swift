@@ -128,7 +128,8 @@ struct StatusAnnouncementTests {
         let placed = order()
         try await store.record(placed, customFields: [
             OrderCustomField(orderID: placed.id, fieldRef: definition.id,
-                             name: "Заказ", value: "4417")
+                             name: "Заказ", value: "4417",
+                             carrier: definition.carrier)
         ])
 
         #expect(store.orderNumber(for: placed.id) == "4417")

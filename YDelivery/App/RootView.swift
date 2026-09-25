@@ -20,6 +20,7 @@ struct RootView: View {
     @Environment(StoreController.self) private var store
     @Environment(ClaimsSyncController.self) private var sync
     @Environment(NotificationController.self) private var notifications
+    @Environment(LiveActivityController.self) private var activities
     @Environment(\.scenePhase) private var scenePhase
 
     enum Tab { case deliveries, settings }
@@ -113,6 +114,20 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { sync.scheduleAppRefresh() }
         }
+        // Every order write — sync merge, placement, cancel — republishes this
+        // list through the one funnel, so this is the one hook the Live
+        // Activities need. The widgets' half of a republish — the snapshot
+        // render and the timeline reload — lives in the store itself, where
+        // the file write can be sequenced before the reload ask.
+        .onChange(of: store.orders, initial: true) {
+            activities.reconcile(orders: store.orders,
+                                 orderNumber: store.orderNumber(for:))
+        }
+        // A widget, Live Activity or App Intent asks in URLs — the one channel
+        // an extension has into the app's controllers (board `5b`/`5d`).
+        .onOpenURL { url in
+            if let link = DeepLink(url: url) { apply(link) }
+        }
         .sheet(isPresented: $isComposing) {
             NewDeliveryView(
                 draft: draft,
@@ -125,6 +140,38 @@ struct RootView: View {
             )
         }
     }
+
+    /// What a `DeepLink` asks the app to do, mapped onto the same seams the
+    /// list's own buttons use — a repeat is a fresh draft, never a mutation of
+    /// the parked one. A link naming something the store no longer has is
+    /// dropped: the widget's snapshot is older than the app's truth, and
+    /// opening an empty draft would only pretend otherwise.
+    private func apply(_ link: DeepLink) {
+        switch link {
+        case .order(let id):
+            pendingOrderID = id
+            selectedTab = .deliveries
+        case .compose:
+            draft = NewDeliveryView.Model()
+            isComposing = true
+        case .repeatOrder(let id):
+            guard let order = store.orders.first(where: { $0.id == id }) else { return }
+            draft = NewDeliveryView.Model(
+                repeating: order, fields: store.fields(for: order.id))
+            isComposing = true
+        case .repeatPlace(let id):
+            // A saved place is a *destination* — the draft's last row takes the
+            // point and whoever answers its door; the pickup stays the sender's
+            // to fill, because a place remembers no origin.
+            guard let place = store.savedPlaces.first(where: { $0.id == id }) else { return }
+            let model = NewDeliveryView.Model()
+            guard let destination = model.points.last?.id else { return }
+            model.setPlace(PickedPlace(place.point), for: destination)
+            model.setContact(Contact(at: place.point), for: destination)
+            draft = model
+            isComposing = true
+        }
+    }
 }
 
 #Preview {
@@ -135,4 +182,5 @@ struct RootView: View {
         .environment(store)
         .environment(ClaimsSyncController(session: session, store: store, database: nil))
         .environment(NotificationController(store: store))
+        .environment(LiveActivityController())
 }

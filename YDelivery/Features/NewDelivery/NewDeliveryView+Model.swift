@@ -671,14 +671,16 @@ extension NewDeliveryView {
                 return placedFieldEntries.map { entry in
                     OrderCustomField(
                         orderID: orderID, fieldRef: entry.definition.id,
-                        name: entry.definition.name, value: entry.value)
+                        name: entry.definition.name, value: entry.value,
+                        carrier: entry.definition.carrier)
                 }
             }
             return fieldDefinitions.compactMap { def in
                 let value = fieldValues[def.id]?.trimmingCharacters(in: .whitespaces) ?? ""
                 guard !value.isEmpty else { return nil }
                 return OrderCustomField(
-                    orderID: orderID, fieldRef: def.id, name: def.name, value: value)
+                    orderID: orderID, fieldRef: def.id, name: def.name,
+                    value: value, carrier: def.carrier)
             }
         }
 
