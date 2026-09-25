@@ -1,4 +1,5 @@
 import Foundation
+import RegexBuilder
 
 /// What a pasted string turned out to carry — the outcome of the <doc:LinkGrammars>
 /// contract. The parser keys on host + parameter and **never guesses coordinate order**:
@@ -243,10 +244,12 @@ nonisolated extension MapLink {
 
     /// A bare pair — `55.7558, 37.6173`, hemisphere letters allowed — reads as
     /// **lat,lon**, the universal human convention (matches geo:/Apple/Google).
+    /// DMS strings fall through to ``dmsCoordinatePair`` — the grammar table's
+    /// last raw row (YD-8).
     private static func rawCoordinatePair(_ text: String) -> MapLink? {
         guard let match = text.wholeMatch(
             of: /(-?[0-9]{1,3}(?:\.[0-9]+)?)\s*([NSns])?\s*[,;]\s*(-?[0-9]{1,3}(?:\.[0-9]+)?)\s*([EWew])?/
-        ) else { return nil }
+        ) else { return dmsCoordinatePair(text) }
         guard var latitude = Double(match.1), var longitude = Double(match.3) else { return nil }
         // A hemisphere letter *dictates* the sign — negating an already signed number
         // flipped `-33.8688S` into the northern hemisphere (review, PR #18 post-merge).
@@ -259,6 +262,53 @@ nonisolated extension MapLink {
         let pair = Parsed(latitude: latitude, longitude: longitude)
         guard pair.isPlausible else { return nil }
         return .point(pair, source: .rawCoordinates)
+    }
+
+    // MARK: DMS
+
+    private static func dmsCoordinatePair(_ text: String) -> MapLink? {
+        // One DMS axis: integer degrees, minutes, optional seconds, a *mandatory*
+        // hemisphere letter — `55 45 20.9N`, `55°45′20.9″N`, decimal-minutes
+        // `55°45.348′N`. The letter is what makes a bare number list a coordinate
+        // at all; a letterless `55 45 20.9 37 37 2.8` is unprovable and declines.
+        // Kept local rather than `static` — `Regex` is not `Sendable`, and the
+        // literals compile into the binary either way.
+        let axis = /([0-9]{1,3})[°\s]+([0-9]{1,2}(?:\.[0-9]+)?)(?:['′\s]+([0-9]{1,2}(?:\.[0-9]+)?))?['′\s"″]*([NSnsEWew])/
+        // Two lettered axes — comma or whitespace between. Order is irrelevant:
+        // the letters label each axis (the never-guess-order rule of the rest).
+        let grammar = Regex { axis; /[,;\s]+/; axis }
+        guard let match = text.wholeMatch(of: grammar),
+              let first = Self.dmsComponent(match.1, minutes: match.2, seconds: match.3, hemisphere: match.4),
+              let second = Self.dmsComponent(match.5, minutes: match.6, seconds: match.7, hemisphere: match.8)
+        else { return nil }
+        let latitude = first.isLatitude ? first : second
+        let longitude = first.isLatitude ? second : first
+        guard latitude.isLatitude, !longitude.isLatitude else { return nil }
+        let pair = Parsed(latitude: latitude.value, longitude: longitude.value)
+        guard pair.isPlausible else { return nil }
+        return .point(pair, source: .rawCoordinates)
+    }
+
+    /// One axis → signed decimal degrees and whether it is a latitude. Minutes and
+    /// seconds must stay under 60, degrees inside the hemisphere's bound —
+    /// `91°…N` declines rather than wrapping.
+    private static func dmsComponent(
+        _ degrees: Substring, minutes: Substring, seconds: Substring?, hemisphere: Substring
+    ) -> (value: Double, isLatitude: Bool)? {
+        guard let d = Double(degrees), let m = Double(minutes) else { return nil }
+        let s: Double
+        if let seconds {
+            guard let parsed = Double(seconds) else { return nil }
+            s = parsed
+        } else {
+            s = 0
+        }
+        guard m < 60, s < 60 else { return nil }
+        let letter = hemisphere.lowercased()
+        let isLatitude = letter == "n" || letter == "s"
+        guard isLatitude ? d <= 90 : d <= 180 else { return nil }
+        let magnitude = d + m / 60 + s / 3600
+        return (letter == "s" || letter == "w" ? -magnitude : magnitude, isLatitude)
     }
 }
 

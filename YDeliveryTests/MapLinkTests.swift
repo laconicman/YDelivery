@@ -274,6 +274,67 @@ struct MapLinkTests {
         ))
     }
 
+    // MARK: DMS — the raw row's last form (YD-8)
+
+    /// Expectations spell the parser's own `d + m/60 + s/3600` arithmetic so the
+    /// comparison is exact rather than tolerance-based — hoisted to locals because
+    /// the arithmetic inside `#expect` overran the type-checker once already.
+    private static func moscow() -> MapLink.Parsed {
+        .init(latitude: 55 + 45.0 / 60 + 20.9 / 3600,
+              longitude: 37 + 37.0 / 60 + 2.8 / 3600)
+    }
+
+    @Test("DMS reads degrees, minutes, seconds — the grammar table's raw row")
+    func dmsPair() {
+        #expect(MapLink(pasted: "55 45 20.9N 37 37 2.8E") == .point(
+            Self.moscow(), source: .rawCoordinates
+        ))
+    }
+
+    @Test("DMS with degree/prime symbols and a comma separator reads identically")
+    func dmsSymbolForms() {
+        #expect(MapLink(pasted: "55°45′20.9″N, 37°37′2.8″E") == .point(
+            Self.moscow(), source: .rawCoordinates
+        ))
+        // Decimal minutes, no seconds — the geocaching form.
+        let minutesOnly = MapLink.Parsed(latitude: 55 + 45.348 / 60, longitude: 37 + 37.05 / 60)
+        #expect(MapLink(pasted: "55°45.348′N, 37°37.05′E") == .point(
+            minutesOnly, source: .rawCoordinates
+        ))
+    }
+
+    @Test("Southern and western hemispheres carry the sign")
+    func dmsHemisphereSigns() {
+        let sydney = MapLink.Parsed(latitude: -(33 + 52.0 / 60 + 8.0 / 3600),
+                                    longitude: 151 + 12.0 / 60 + 30.0 / 3600)
+        #expect(MapLink(pasted: "33°52′08″S 151°12′30″E") == .point(
+            sydney, source: .rawCoordinates
+        ))
+    }
+
+    @Test("The letters label the axes — longitude-first reads as correctly")
+    func dmsOrderFree() {
+        #expect(MapLink(pasted: "37°37′2.8″E 55°45′20.9″N") == .point(
+            Self.moscow(), source: .rawCoordinates
+        ))
+    }
+
+    @Test(
+        "A malformed DMS declines — the letterless list was never provable",
+        arguments: [
+            "55 60 20N 37 37E",      // minutes past 59
+            "55 45 20N 37 37 99E",   // seconds past 59
+            "55 45N 37 37N",         // two latitudes, no longitude
+            "55 45 20.9 37 37 2.8",  // no letters — a bare number list
+            "55.75 45N 37.61 37E",   // decimal degrees inside a DMS axis
+            "55.7558,37.6173N",      // decimal pair, hemisphere on the wrong axis
+            "95 45N 37 37E",         // latitude past 90
+        ]
+    )
+    func dmsRejectsTheUnprovable(text: String) {
+        #expect(MapLink(pasted: text) == nil)
+    }
+
     @Test("A pt the grammar cannot read declines — ll is the map's center, not the mark")
     func unreadablePinDeclinesRatherThanRecentering() {
         // The marked place was unreadable; offering ll would look right and point

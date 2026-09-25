@@ -30,8 +30,11 @@ it in a dispute, and record the date.
 | Apple Maps, unified (iOS 18.4+/web) | `https://maps.apple.com/place?coordinate=40.779092,-73.962932&name=…` | `coordinate` = **lat,lng**; `place-id` forms carry no coords | ✅ (`coordinate`) |
 | **Raw string** | `55.7558, 37.6173`, `55.7558N, 37.6173E`, DMS `55 45 20.9N …` | assume **lat,lon** for bare pairs (universal human convention; matches geo:/Apple/Google) | ✅ |
 
-> Note: The DMS raw-string row (`55 45 20.9N …`) is a **documented parse gap** — the
-> shipped parser reads decimal pairs and hemisphere suffixes only (<doc:TechDebt> → YD-8).
+> Note: The DMS raw-string row (`55 45 20.9N …`) parses — YD-8 discharged. The
+> hemisphere letter is mandatory: it is what makes a bare number
+> list a coordinate — and it labels its axis, so `E … N` order reads correctly.
+> Degree/minute/second symbols, spaces, and decimal minutes are all accepted;
+> minutes and seconds must stay under 60.
 
 ## The two traps
 
