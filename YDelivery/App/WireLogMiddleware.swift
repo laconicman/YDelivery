@@ -12,11 +12,17 @@ import OpenAPIRuntime
 struct WireLogMiddleware: ClientMiddleware {
     let store: WireLogStore
 
+    /// The store's write epoch, minted at init — this middleware's session generation.
+    /// A `clear()` since then means a new identity owns the log and every entry stamped
+    /// with this epoch drops at the gate, however late it lands (YD-18).
+    let epoch: UInt64
+
     /// Bodies larger than this record `"<N bytes>"` instead of their contents.
     let bodyByteLimit: Int
 
     init(store: WireLogStore, bodyByteLimit: Int = 32 * 1024) {
         self.store = store
+        self.epoch = store.writeEpoch
         self.bodyByteLimit = bodyByteLimit
     }
 
@@ -43,11 +49,11 @@ struct WireLogMiddleware: ClientMiddleware {
             entry.status = response.status.code
             let (responseNote, bodyForCaller) = try await capture(responseBody)
             entry.responseBody = responseNote
-            await store.append(entry)
+            await store.append(entry, epoch: epoch)
             return (response, bodyForCaller)
         } catch {
             entry.error = error.localizedDescription
-            await store.append(entry)
+            await store.append(entry, epoch: epoch)
             throw error
         }
     }

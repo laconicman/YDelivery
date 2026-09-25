@@ -74,7 +74,8 @@ struct ClientControllerTests {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let log = WireLogStore(directory: directory)
         await log.append(.init(at: .now, operation: "op", method: "GET", path: "/x",
-                               status: 200, responseBody: #"{"of":"another-identity"}"#))
+                               status: 200, responseBody: #"{"of":"another-identity"}"#),
+                         epoch: log.writeEpoch)
         let controller = ClientController(tokenStore: store, wireLog: log)
 
         await controller.signIn(token: "y0_new-identity")
@@ -94,7 +95,8 @@ struct ClientControllerTests {
         await controller.signIn(token: "y0_x")
 
         await log.append(.init(at: .now, operation: "op", method: "GET", path: "/x",
-                               status: 200))
+                               status: 200),
+                         epoch: log.writeEpoch)
         for _ in 0..<100 where controller.diagnosticsURL == nil {
             try await Task.sleep(for: .milliseconds(10))
         }

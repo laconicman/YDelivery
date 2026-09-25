@@ -92,8 +92,8 @@ final class ClientController {
             // append its (body-carrying) record through the wiped point
             // afterwards; invalidating first turns every pending response into
             // an error so nothing old-identity can arrive behind the new log
-            // (review, PR #49). A cancelled task's error append can still race
-            // the wipe — closing that needs a write epoch, see YD-18.
+            // (review, PR #49). A cancelled task's error append can still schedule
+            // after the wipe — the store's write epoch drops it (YD-18).
             providerURLSession?.invalidateAndCancel()
             // A new credential means a new identity — the wipe completes before
             // the client exists, so the new session's first exchange can neither
