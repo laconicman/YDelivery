@@ -60,6 +60,31 @@ struct VisitTimelineTests {
         #expect(entries.map(\.fact) == [.pending, .expected])
     }
 
+    @Test("A stop behind an unvisited one waits — the courier is heading there first")
+    func pendingBehindPendingIsNotEnRoute() {
+        // The pickup is done, but stop Б still waits: the courier's next call
+        // is Б, so В reads «not visited yet», never «heading here» (PR #45).
+        let route = [
+            point(.visited, visitedAt: visitedAt),
+            point(.pending, address: "Москва, Б"),
+            point(.pending, expectedAt: expectedAt, address: "Москва, В"),
+        ]
+        let entries = VisitTimeline.entries(route: route, selected: 2)
+        #expect(entries.map(\.fact) == [
+            .priorVisit(pickup: true, address: "ул Москворечье, 6"),
+            .pending,
+            .expected,
+        ])
+    }
+
+    @Test("A skipped upstream stop still counts as progress")
+    func skippedUpstreamStillEnRoutes() {
+        // The courier passed stop 0 — the next call is the selected one.
+        let route = [point(.skipped), point(.pending, expectedAt: expectedAt)]
+        let entries = VisitTimeline.entries(route: route, selected: 1)
+        #expect(entries.map(\.fact) == [.enRoute, .expected])
+    }
+
     @Test("A courier at the door reads arrived, not done")
     func arrivedIsCurrentNotPast() {
         let route = [point(.visited, visitedAt: visitedAt), point(.arrived, expectedAt: expectedAt)]

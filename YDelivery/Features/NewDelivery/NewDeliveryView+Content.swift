@@ -224,7 +224,14 @@ extension NewDeliveryView {
                             row: row,
                             pick: { pick(row.id) },
                             editContact: { editContact(row.id) },
-                            setRole: { setRole(row.id, $0) }
+                            setRole: { setRole(row.id, $0) },
+                            // The pin↔row agreement in reverse: the row opens the
+                            // same card the pin does, so list and VoiceOver users
+                            // reach everything the callout holds (board `4a`).
+                            showCallout: pins.contains(where: { $0.id == row.id })
+                                ? { calloutPin = row.id } : nil,
+                            savePlace: canSavePlace && pins.contains(where: { $0.id == row.id })
+                                ? { savePlace(row.id) } : nil
                         )
                         // The open callout's row stays highlighted — «строка в
                         // списке подсвечена, пока открыта выноска» (board `4a`).
@@ -496,10 +503,16 @@ extension NewDeliveryView.Content {
             .onAppear {
                 if pins.isEmpty { camera = .region(.moscow) }
             }
-            .onChange(of: pins) { _, pins in
-                // A route edit reframes the map to the new route — search results and
-                // added stops arrive from off-screen and deserve the camera.
-                camera = .automatic
+            .onChange(of: pins) { old, pins in
+                // A *geographic* edit reframes the map to the new route — search
+                // results and added stops arrive from off-screen and deserve the
+                // camera. A contact or parcel edit changes the payload without
+                // moving a mark; stealing the sender's zoom for it is rude
+                // (review, PR #45).
+                let moved = !old.elementsEqual(pins) {
+                    $0.id == $1.id && $0.latitude == $1.latitude && $0.longitude == $1.longitude
+                }
+                if moved { camera = .automatic }
                 // The deleted or un-placed point keeps no callout — a card for a pin
                 // that no longer exists is a ghost.
                 if let selection, !pins.contains(where: { $0.id == selection }) {
@@ -791,6 +804,14 @@ extension NewDeliveryView.Content {
         let pick: () -> Void
         let editContact: () -> Void
         let setRole: (NewDeliveryView.Model.Role) -> Void
+        /// The pin's card, opened from the row — the callout is never a
+        /// touch-only surface, so a placed row carries a rotor action to it
+        /// (board `4a`; review, PR #45). `nil` while the point has no pin.
+        var showCallout: (() -> Void)? = nil
+        /// «Сохранить как место» on the list's side — a callout action that
+        /// exists nowhere else is a bug, so the long-press menu repeats it
+        /// (board `4a`). `nil` when the point isn't placed or places can't take it.
+        var savePlace: (() -> Void)? = nil
 
         var body: some View {
             HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
@@ -855,6 +876,18 @@ extension NewDeliveryView.Content {
                     } label: {
                         Label(role.menuLabel, systemSymbol: role.menuSymbol)
                     }
+                }
+                if let savePlace {
+                    Button {
+                        savePlace()
+                    } label: {
+                        Label("Save as place", systemSymbol: .bookmark)
+                    }
+                }
+            }
+            .accessibilityActions {
+                if let showCallout {
+                    Button("Show on map", action: showCallout)
                 }
             }
         }

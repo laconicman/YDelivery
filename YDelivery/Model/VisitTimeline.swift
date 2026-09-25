@@ -83,9 +83,17 @@ nonisolated enum VisitTimeline {
                 time: point.visit?.visitedAt
             ))
         case .pending, nil:
+            // «Едет сюда» only when this stop is the courier's next call — every
+            // earlier stop settled (visited or passed). A stop behind an
+            // unvisited one waits: the courier is heading *there*, not here
+            // (review, PR #45).
+            let upstream = route[..<index]
+            let nextCall = !upstream.isEmpty && upstream.allSatisfy {
+                $0.visit?.status == .visited || $0.visit?.status == .skipped
+            }
             entries.append(Entry(
                 mark: .current,
-                fact: entries.isEmpty ? .pending : .enRoute,
+                fact: nextCall ? .enRoute : .pending,
                 time: nil
             ))
         }
