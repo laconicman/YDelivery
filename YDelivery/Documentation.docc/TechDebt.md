@@ -193,7 +193,7 @@ the *next* row; the one in flight is unreachable.
   the spike; the store has no delete API today and growing one to fence a one-row edge
   is the chaos the register exists to avoid.
 
-## YD-14 — The provider can black-hole connections under burst load — **open**
+## YD-14 — The provider can black-hole connections under burst load — **discharged**
 
 Field check, 2026-09-23: after ~20 read-only requests in five minutes, every endpoint —
 `claims/journal`, `claims/search`, `claims/info`, `offers/calculate` — hung at the
@@ -206,9 +206,14 @@ under load is a silent stall, not a refusal.
   `URLSessionTransport()` sets nothing tighter — so a throttled pass lingers for
   minutes across pages while `isSyncing` holds the gate. It recovers on the next tick,
   but the stall is invisible.
-- **Discharge:** an explicit per-request timeout on the transport (tens of seconds,
-  not the 60 s default) alongside the page budgeting `maxPages` already gives each
-  pass; revisit when sync moves onto the persistence substrate (<doc:Schema>).
+- **Discharged by:** `ClientController.providerSession`, a `URLSession` with an
+  explicit 30 s `timeoutIntervalForRequest` handed to the transport the API package's
+  `transport:` parameter now accepts (YandexDeliveryExpress 0.3.1) — a stalled request
+  fails in tens of seconds and the page budgeting `maxPages` bounds a pass on top.
+  The transport's own timeout, not a wrapping `Task`: a cancelled task can leave the
+  socket open, and the stall is the thing being bounded. If the stall ever proves
+  adaptive (throttling that answers eventually), revisit *which* timeout before
+  widening it.
 
 ## YD-15 — `routeStops.role` is position-derived, not model-carried — **open**
 
