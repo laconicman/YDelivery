@@ -136,12 +136,15 @@ struct ClaimsSyncTests {
         #expect(order.tariff == "express")
 
         // Route: visit_order wins over the wire's array order, and the wire's
-        // `return` stays — this app *sends* its drop-off as `return`, so the last
-        // stop is the sender's destination, not courier bookkeeping.
+        // `type` rides home as the stop's role (YD-15) — source is the pickup,
+        // return is the courier's leg back, a real role now rather than a
+        // positional guess.
         let route = order.route
         #expect(route.count == 2)
         #expect(route[0].address == "Москва, ул Москворечье, 6")
         #expect(route[1].address == "Москва, Каширское шоссе, 52")
+        #expect(route[0].role == .pickup)
+        #expect(route[1].role == .return)
 
         // Coordinates read [lon, lat] — the same trap the create request answers.
         #expect(route[0].latitude == 55.646068)
@@ -166,6 +169,16 @@ struct ClaimsSyncTests {
         #expect(route[0].visit?.visitedAt == Date(timeIntervalSince1970: 1_800_001_200))
         #expect(route[1].visit?.status == .pending)
         #expect(route[1].visit?.expectedAt == Date(timeIntervalSince1970: 1_800_002_400))
+    }
+
+    /// The wire's `point.type` is the role's whole vocabulary — one-to-one with
+    /// `RoutePoint.Role`, so the mapping is a pinned fact, not a lookup that can
+    /// drift (YD-15).
+    @Test("Every wire point type lands in the role vocabulary")
+    func pointTypeVocabulary() {
+        #expect(RoutePoint.Role(.source) == .pickup)
+        #expect(RoutePoint.Role(.destination) == .dropoff)
+        #expect(RoutePoint.Role(._return) == .return)
     }
 
     /// The Kit mirrors the wire's four `visit_status` words verbatim — a new wire

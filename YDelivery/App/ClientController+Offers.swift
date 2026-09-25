@@ -88,13 +88,13 @@ extension ClientController {
                 ? [.init(
                     quantity: 1,
                     pickupPoint: 1,
-                    dropoffPoint: Int64(request.waypoints.count)
+                    dropoffPoint: Int64(request.destinationPoint)
                 )]
                 : request.items.map { item in
                     .init(
                         quantity: item.quantity,
                         pickupPoint: pointID(item.pickupPointID, 1),
-                        dropoffPoint: pointID(item.dropoffPointID, request.waypoints.count),
+                        dropoffPoint: pointID(item.dropoffPointID, request.destinationPoint),
                         size: item.size.map {
                             .init(
                                 length: $0.lengthCm / 100,
@@ -164,12 +164,25 @@ nonisolated struct OfferRequest: Hashable, Sendable {
     }
 
     /// A waypoint that remembers which draft point it was, so items can name their
-    /// boarding and leaving stops.
+    /// boarding and leaving stops. The role rides too — the delivery's end is the
+    /// last drop-off, not the last seat, and a return leg must never answer a
+    /// `nil` journey (YD-15). The default keeps a bare fixture legible: a waypoint
+    /// that does not say is a delivery stop, which is all the destination rule
+    /// asks of it.
     nonisolated struct RequestWaypoint: Hashable, Sendable {
         var pointID: UUID
         var latitude: Double
         var longitude: Double
         var address: String
+        var role: NewDeliveryView.Model.Role = .dropoff
+    }
+
+    /// The destination's one-based index — where an unmarked item leaves the
+    /// route. The last waypoint can be the courier's return leg, so "the end"
+    /// means the last non-return; roleless historical callers never had that
+    /// seat either, so the count is still the floor.
+    var destinationPoint: Int {
+        waypoints.lastIndex { $0.role != .return }.map { $0 + 1 } ?? waypoints.count
     }
 }
 

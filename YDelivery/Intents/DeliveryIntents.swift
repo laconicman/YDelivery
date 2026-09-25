@@ -102,7 +102,7 @@ struct WhereIsMyDeliveryIntent: AppIntent {
         if let place {
             let point = try await placePoint(place)
             live = live.filter { order in
-                guard let destination = order.route.last else { return false }
+                guard let destination = order.destinationPoint else { return false }
                 return abs(destination.latitude - point.latitude)
                         < Self.sameDoorwayDegrees
                     && abs(destination.longitude - point.longitude)
@@ -221,7 +221,7 @@ struct SendOrderIntent: AppIntent {
         if let eta = order.etaAt {
             tail.append("курьер будет у вас к \(eta.formatted(date: .omitted, time: .shortened))")
         }
-        if let destination = order.route.last?.compactAddress {
+        if let destination = order.destinationPoint?.compactAddress {
             tail.append(destination)
         }
         if let courier = order.courierName {

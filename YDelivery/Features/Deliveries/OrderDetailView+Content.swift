@@ -233,10 +233,12 @@ extension OrderDetailView {
         }
 
         /// «Drop-off · ~14 min left» — the role word every mark already speaks, and
-        /// the provider's ETA where it is meaningful: on the stop still ahead.
+        /// the provider's ETA where it is meaningful: on the destination still
+        /// ahead. A return leg rides the route's last seat, but the ETA is the
+        /// promise to the recipient — it belongs to the drop-off (YD-15).
         private func subtitle(for index: Int) -> Text {
             let role = Text(stops[index].role.words)
-            guard index == points.count - 1,
+            guard index == points.destinationIndex,
                   let etaMinutes,
                   points[index].visit?.status == .pending || points[index].visit?.status == .arrived
             else { return role }

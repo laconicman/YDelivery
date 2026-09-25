@@ -156,10 +156,10 @@ extension NewDeliveryView {
         /// the strip re-offers when prices land. `reversed` runs the route backwards —
         /// the delivery back home — with each contact still answering its own door.
         ///
-        /// What does *not* come back: the stored order carries no roles (TechDebt
-        /// YD-15), so position derives them — first pickup, the rest deliveries, the
-        /// same honest read `RouteLine` makes. Items, options and the schedule were
-        /// never stored on `Order`; the repeat prices and packs fresh.
+        /// What does *not* come back: items, options and the schedule were never
+        /// stored on `Order`; the repeat prices and packs fresh. Roles ride where
+        /// the store kept them — pre-YD-15 rows are roleless and derive from
+        /// position, the same honest read `RouteLine` makes.
         convenience init(repeating order: Order, reversed: Bool = false,
                          fields: [OrderCustomField] = [],
                          estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
@@ -170,8 +170,15 @@ extension NewDeliveryView {
             // a route with a hole (or no route at all) for `fillEnds` to trip on.
             if route.count >= 2 {
                 points = route.enumerated().map { index, point in
-                    Point(
-                        role: index == 0 ? .pickup : .dropoff,
+                    // A reversed route recasts every stop — the old pickup is
+                    // the new destination — so direction, not the stored role,
+                    // names it there. Same-direction repeats keep what the
+                    // store carried (the return leg survives the repeat, YD-15),
+                    // position filling only the pre-role rows.
+                    let carried = reversed ? nil : point.role
+                    return Point(
+                        role: carried.map(Role.init)
+                            ?? (index == 0 ? .pickup : .dropoff),
                         place: PickedPlace(point),
                         contact: Contact(at: point)
                     )
@@ -417,14 +424,15 @@ extension NewDeliveryView {
         /// The parcel flow at one stop — the callout's «здесь отдают 2, получают 1»
         /// line (board `4a`). It counts pieces, not rows, honouring the route-default
         /// rule the wire write uses: an item with no boarding point leaves at the
-        /// first stop, one with no handover arrives at the last (§9.3).
+        /// first stop, one with no handover arrives at the delivery's end — the
+        /// last drop-off, where a return leg rides last (§9.3, YD-15).
         func parcelFlow(at pointID: Point.ID) -> (leaving: Int, arriving: Int) {
             let first = points.first?.id
-            let last = points.last?.id
+            let end = points.isEmpty ? nil : points[defaultHandoverIndex].id
             return (
                 items.filter { ($0.pickupPointID ?? first) == pointID }
                     .reduce(0) { $0 + $1.quantity },
-                items.filter { ($0.dropoffPointID ?? last) == pointID }
+                items.filter { ($0.dropoffPointID ?? end) == pointID }
                     .reduce(0) { $0 + $1.quantity }
             )
         }
@@ -514,10 +522,12 @@ extension NewDeliveryView {
                 let handover = handoverIndex(of: items[index])
                 if handover <= pickup {
                     items[index].dropoffPointID = nil
-                    // Clearing the handover restores the route's end; if the pickup is
-                    // itself the last stop, the pair is still impossible and the pickup
-                    // is what has to give.
-                    if pickup >= max(points.count - 1, 0) {
+                    // Clearing the handover restores the delivery's end; if the
+                    // pickup sits there itself, the pair is still impossible and
+                    // the pickup is what has to give. `defaultHandoverIndex`, not
+                    // the last seat — a return leg ends the route without making
+                    // room for a handover.
+                    if pickup >= defaultHandoverIndex {
                         items[index].pickupPointID = nil
                     }
                 }
@@ -633,7 +643,9 @@ extension NewDeliveryView {
         // MARK: What happens at each stop
 
         /// The index a journey end resolves to: a named stop, or the route's end —
-        /// `nil` pickup is the start, `nil` handover the last stop. The same
+        /// `nil` pickup is the start, `nil` handover the *delivery* end. A return
+        /// leg rides last but is the way back, not where the parcel is going —
+        /// so the handover default is the last non-return (YD-15). The same
         /// default ``repairItemJourneys`` and the editor's chooser already speak.
         private func pickupIndex(of item: ParcelItem) -> Int {
             item.pickupPointID.flatMap { id in points.firstIndex { $0.id == id } } ?? 0
@@ -641,7 +653,14 @@ extension NewDeliveryView {
 
         private func handoverIndex(of item: ParcelItem) -> Int {
             item.dropoffPointID.flatMap { id in points.firstIndex { $0.id == id } }
-                ?? max(points.count - 1, 0)
+                ?? defaultHandoverIndex
+        }
+
+        /// Where an item with no named handover leaves — the last drop-off.
+        /// Pickup-first invariants keep a return from ever being index 0, so the
+        /// start stays `0` either way; the end is what needed teaching.
+        private var defaultHandoverIndex: Int {
+            points.lastIndex { $0.role != .return } ?? max(points.count - 1, 0)
         }
 
         /// What the parcel does at one stop, as the counted sentence the point row
@@ -688,7 +707,8 @@ extension NewDeliveryView {
                         pointID: point.id,
                         latitude: $0.latitude,
                         longitude: $0.longitude,
-                        address: $0.address
+                        address: $0.address,
+                        role: point.role
                     )
                 }
             }
@@ -1058,7 +1078,9 @@ extension NewDeliveryView {
                     created: .now,
                     status: .searching,
                     route: points.compactMap { point in
-                        point.place.map { RoutePoint($0, contact: point.contact) }
+                        point.place.map {
+                            RoutePoint($0, contact: point.contact, role: RoutePoint.Role(point.role))
+                        }
                     },
                     price: ClientController.wireDecimal(offer.price),
                     currency: offer.currency,
@@ -1121,7 +1143,9 @@ extension NewDeliveryView {
                     created: .now,
                     status: .searching,
                     route: points.compactMap { point in
-                        point.place.map { RoutePoint($0, contact: point.contact) }
+                        point.place.map {
+                            RoutePoint($0, contact: point.contact, role: RoutePoint.Role(point.role))
+                        }
                     },
                     price: ClientController.wireDecimal(offer.price),
                     currency: offer.currency,
@@ -1269,6 +1293,28 @@ nonisolated extension NewDeliveryView.Model.Role {
         case "pickup": .pickup
         case "return": .return
         default: .dropoff
+        }
+    }
+
+    /// The store's route-stop role as the editor's vocabulary — the spellings
+    /// are the same set, so the mapping is total on both sides.
+    init(_ role: RoutePoint.Role) {
+        self = switch role {
+        case .pickup: .pickup
+        case .dropoff: .dropoff
+        case .return: .return
+        }
+    }
+}
+
+nonisolated extension RoutePoint.Role {
+    /// The draft's role back into the store's vocabulary — the optimistic order
+    /// keeps the return leg honest rather than waiting for the journal to say so.
+    init(_ role: NewDeliveryView.Model.Role) {
+        self = switch role {
+        case .pickup: .pickup
+        case .dropoff: .dropoff
+        case .return: .return
         }
     }
 }

@@ -377,7 +377,7 @@ private extension NewDeliveryView {
     /// The stops an item can board or leave at — labels for the editor's pickers.
     var itemStops: [ItemEditor.Stop] {
         draft.points.compactMap { point in
-            point.place.map { ItemEditor.Stop(id: point.id, label: $0.displayAddress) }
+            point.place.map { ItemEditor.Stop(id: point.id, label: $0.displayAddress, role: point.role) }
         }
     }
 

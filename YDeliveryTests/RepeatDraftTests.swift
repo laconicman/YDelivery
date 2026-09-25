@@ -7,7 +7,8 @@ import YDeliveryKit
 @MainActor
 struct RepeatDraftTests {
     /// A three-stop order as the store remembers it: positions, contacts, a class —
-    /// no roles, no items, no schedule (TechDebt YD-15 is why the route carries none).
+    /// points deliberately roleless, the pre-YD-15 shape, so the repeat still
+    /// proves position fills what a stored row never wrote.
     private func rememberedOrder() -> Order {
         Order(
             created: .init(timeIntervalSince1970: 1_800_000_000),
@@ -61,6 +62,35 @@ struct RepeatDraftTests {
         #expect(model.points[1].contact?.fullName == "Анна Сидорова")
         #expect(model.points[2].contact?.givenName == "Иван")
         #expect(model.isRouteComplete)
+    }
+
+    /// YD-15 discharged: a stored return leg restores as a return, not a
+    /// drop-off — the carried role beats the positional guess it replaced.
+    @Test("A stored return leg comes back as a return")
+    func repeatKeepsCarriedRoles() {
+        var order = rememberedOrder()
+        order.route[0].role = .pickup
+        order.route[1].role = .dropoff
+        order.route[2].role = .return
+        let model = NewDeliveryView.Model(repeating: order)
+
+        #expect(model.points.map(\.role) == [.pickup, .dropoff, .return])
+    }
+
+    /// Reversed recasts every stop — the old return origin is the new pickup —
+    /// so the stored role stays in the drawer and position names the route.
+    @Test("A reversed repeat derives roles fresh")
+    func reversedRepeatDerivesRoles() {
+        var order = rememberedOrder()
+        order.route[0].role = .pickup
+        order.route[1].role = .dropoff
+        order.route[2].role = .return
+        let model = NewDeliveryView.Model(repeating: order, reversed: true)
+
+        #expect(model.points.map(\.role) == [.pickup, .dropoff, .dropoff])
+        #expect(model.points.map(\.place?.address) == [
+            "Москва, Арбат, 10", "Москва, Тверская, 6", "Москва, ул Москворечье, 6",
+        ])
     }
 
     @Test("The order's class is what the strip re-offers when prices land")

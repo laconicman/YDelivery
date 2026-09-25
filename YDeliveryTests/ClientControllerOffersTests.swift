@@ -106,6 +106,22 @@ struct ClientControllerOffersTests {
         #expect(TariffClass.other("sdd_long").words == "sdd_long")
     }
 
+    @Test("An unmarked item's journey ends at the last drop-off, not the return leg")
+    func returnLegNeverAnswersAJourney() {
+        let request = ClientController.offersRequest(for: OfferRequest(
+            waypoints: [
+                .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А", role: .pickup),
+                .init(pointID: UUID(), latitude: 3, longitude: 4, address: "Б", role: .dropoff),
+                .init(pointID: UUID(), latitude: 1, longitude: 2, address: "А", role: .return),
+            ],
+            items: [],
+            options: DeliveryOptions()
+        ))
+
+        #expect(request.items.first?.dropoffPoint == 2,
+                "point 3 is the courier's way back — the parcel leaves at the door")
+    }
+
     @Test("A backwards interval becomes absence, not a trapping range")
     func backwardsIntervalIsAbsent() throws {
         let offer = try #require(Offer(Components.Schemas.CalculatedOffer(

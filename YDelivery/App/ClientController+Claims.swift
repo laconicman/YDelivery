@@ -149,9 +149,13 @@ extension ClientController {
         let itemTag = order.fieldEntries.first {
             $0.definition.carrier == .itemTag
         }?.value
+        // `nil` handover is the route's delivery end — the last drop-off, not
+        // the last seat: a return leg rides last but is the way back (YD-15).
+        let destinationPoint = order.points.lastIndex { $0.role != .return }
+            .map { $0 + 1 } ?? order.points.count
         return .init(
             items: order.items.map { Self.wireItem(
-                $0, pointID: pointID, lastPoint: order.points.count, itemTag: itemTag) },
+                $0, pointID: pointID, destinationPoint: destinationPoint, itemTag: itemTag) },
             routePoints: order.points.enumerated().map {
                 Self.wirePoint($1, at: $0, orderNumber: orderNumber)
             },
@@ -172,7 +176,7 @@ extension ClientController {
     private nonisolated static func wireItem(
         _ item: ParcelItem,
         pointID: (UUID?, Int) -> Int64,
-        lastPoint: Int,
+        destinationPoint: Int,
         itemTag: String? = nil
     ) -> Components.Schemas.CargoItem {
         let currency: Components.Schemas.Currency = .init(rawValue: item.currency) ?? .rub
@@ -187,7 +191,7 @@ extension ClientController {
             pickupPoint: pointID(item.pickupPointID, 1),
             quantity: item.quantity,
             title: item.name,
-            dropoffPoint: pointID(item.dropoffPointID, lastPoint),
+            dropoffPoint: pointID(item.dropoffPointID, destinationPoint),
             extraId: itemTag,
             size: size,
             weight: item.weightKg
@@ -379,6 +383,18 @@ nonisolated extension Components.Schemas.PointType {
         case .pickup: .source
         case .dropoff: .destination
         case .return: ._return
+        }
+    }
+}
+
+nonisolated extension RoutePoint.Role {
+    /// The wire's `point.type` back into the route's vocabulary — the reverse
+    /// of `PointType.init(_:)`, one-to-one on the wire's three cases.
+    init(_ type: Components.Schemas.PointType) {
+        self = switch type {
+        case .source: .pickup
+        case .destination: .dropoff
+        case ._return: .return
         }
     }
 }

@@ -15,7 +15,7 @@ run is one tap. Nothing in that sentence requires the user to know what a "claim
 ## Capability map
 
 What the API offers, mapped to user-facing features. "In package" = present in
-`YandexDeliveryExpressAPI` 0.2.0.
+`YandexDeliveryExpressAPI`.
 
 | Feature | API surface | In package | Phase |
 |---|---|---|---|

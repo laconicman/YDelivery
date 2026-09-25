@@ -43,6 +43,15 @@ struct ClaimsMappingTests {
                     address: "Москва, Каширское шоссе, 52",
                     parts: nil,
                     contact: Contact(givenName: "Анна", phone: "+7 998 765-43-21"),
+                    role: .dropoff
+                ),
+                .init(
+                    pointID: UUID(),
+                    latitude: 55.640001,
+                    longitude: 37.660001,
+                    address: "Москва, ул Москворечье, 6",
+                    parts: nil,
+                    contact: Contact(givenName: "Иван", phone: "+7 912 345-67-89"),
                     role: .return
                 ),
             ],
@@ -78,7 +87,8 @@ struct ClaimsMappingTests {
         #expect(item.costValue == "60000.5", "POSIX decimal string — never a locale comma")
         #expect(item.size?.length == 0.35)
         #expect(item.pickupPoint == 1)
-        #expect(item.dropoffPoint == 2)
+        #expect(item.dropoffPoint == 2,
+                "an unmarked journey ends at the drop-off — point 3 is the return leg")
 
         #expect(request.clientRequirements?.taxiClass == .express)
         #expect(request.clientRequirements?.proCourier == true)
