@@ -23,7 +23,12 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      # The committed .xcodeproj is authoritative — no xcodegen step.
+      # project.pbxproj is gitignored — XcodeGen regenerates it from project.yml.
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen
+
       # -skipPackagePluginValidation: the OpenAPI generator's trust prompt would
       # otherwise hang a non-interactive build (YD-1's own note).
       - name: Build and test
