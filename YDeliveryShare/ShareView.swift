@@ -77,12 +77,12 @@ struct ShareView: View {
     private var endsSection: some View {
         Section {
             Picker(selection: $model.end) {
-                Text("This is the destination")
+                Text("the destination")
                     .tag(SharedDraft.End.dropoff)
-                Text("This is the origin")
+                Text("the origin")
                     .tag(SharedDraft.End.pickup)
             } label: {
-                Text("This is the destination")
+                Text("The shared point is")
             }
             .pickerStyle(.menu)
 
@@ -101,4 +101,8 @@ struct ShareView: View {
             }
         }
     }
+}
+
+#Preview {
+    ShareView(model: .preview(), cancel: {}, confirm: {})
 }

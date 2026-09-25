@@ -161,3 +161,29 @@ private extension NSItemProvider {
         }
     }
 }
+
+#if DEBUG
+extension ShareModel {
+    /// The ready card for previews — a resolved text share with door parts
+    /// and a place list, so the canvas exercises the real branches.
+    static func preview() -> ShareModel {
+        let model = ShareModel(places: [
+            SavedPlace(
+                id: UUID(), name: "Home", kind: .home,
+                point: RoutePoint(
+                    latitude: 55.75, longitude: 37.59,
+                    address: "Москва, Тверская, 6",
+                    contactName: "Иван", contactPhone: "+79123456789")),
+        ])
+        var parts = AddressParts()
+        parts.entrance = "2"
+        parts.apartment = "15"
+        model.point = RoutePoint(
+            latitude: 55.65, longitude: 37.64,
+            address: "Москва, Каширское шоссе, 52",
+            addressParts: parts)
+        model.phase = .ready
+        return model
+    }
+}
+#endif
