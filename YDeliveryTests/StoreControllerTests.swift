@@ -95,6 +95,24 @@ struct StoreControllerTests {
                 "the chip covers flat 12; flat 46 is still its own memory")
     }
 
+    @Test("The courier's ride home is not a door the sender sent anything to")
+    func returnLegsLeaveTheRecents() {
+        var route = [
+            RoutePoint(latitude: 55, longitude: 37, address: "Москворечье, 6"),
+            RoutePoint(latitude: 55, longitude: 37, address: "Каширское шоссе, 52"),
+            RoutePoint(latitude: 55, longitude: 37, address: "Депо, 1"),
+        ]
+        route[0].role = .pickup
+        route[1].role = .dropoff
+        route[2].role = .return
+
+        let recents = StoreController.recentPoints(
+            in: [Order(created: .now, status: .done, route: route)])
+
+        #expect(recents.map(\.address) == ["Москворечье, 6", "Каширское шоссе, 52"],
+                "the return leg's depot is bookkeeping — never a recent")
+    }
+
     @Test("No container is a stated reason, not an empty history")
     func containerlessHistoryExplainsItself() async {
         let containerless = StoreController(database: nil)
