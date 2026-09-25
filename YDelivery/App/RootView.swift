@@ -119,7 +119,12 @@ struct RootView: View {
         // is when a parked share gets applied: the extension's `open` is
         // best-effort, so the activation sweep is the half that always runs.
         .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .background { sync.scheduleAppRefresh() }
+            if phase == .background {
+                sync.scheduleAppRefresh()
+                // A pending debounce cannot count on ever firing — suspension
+                // may be the last run the draft gets before a force-quit.
+                draft.flushPersistedDraft()
+            }
             // `initial: true` because a launch is already `.active` — a share
             // parked while the app was terminated must not wait a full
             // background cycle to surface (review, PR #46).
@@ -144,6 +149,23 @@ struct RootView: View {
         // deep link and sweeps orphaned cards. Places publish in a second
         // pass — a repeat-by-place link re-parks until *that* read lands.
         .onChange(of: store.hasLoaded, initial: true) { republishSurfaces() }
+        // The draft is disk-backed (YD-16): whichever model is current carries
+        // the save-on-edit loop — placed, repeat, link, share and the launch
+        // restore each mint their own, and re-arming is what hands it to the
+        // substrate. A content-bearing draft parks at once rather than waiting
+        // for its first edit.
+        .onChange(of: ObjectIdentifier(draft), initial: true) {
+            draft.persistDraftChanges { store.persistDraft($0) }
+        }
+        // The launch restore runs on the view's own clock, independent of the
+        // orders read — a failed history read must not strand the parked draft.
+        // Only a draft nobody typed into may be replaced: a sender who beat the
+        // read keeps their words.
+        .task {
+            guard let restored = await store.parkedDraft(),
+                  draft.isPristineDraft else { return }
+            draft = NewDeliveryView.Model(restoring: restored)
+        }
         .onChange(of: store.hasLoadedPlaces, initial: true) { republishSurfaces() }
         // A widget, Live Activity or App Intent asks in URLs — the one channel
         // an extension has into the app's controllers (board `5b`/`5d`).
@@ -156,8 +178,12 @@ struct RootView: View {
                 placed: {
                     // The order lives in history now; the draft's job is done. A fresh
                     // model also mints a fresh idempotency token for the next run.
+                    // Disarm first: a queued debounced save must not resurrect
+                    // the row the consume is about to delete.
                     isComposing = false
+                    draft.stopPersistingDraft()
                     draft = NewDeliveryView.Model()
+                    store.consumeParkedDraft()
                 }
             )
         }

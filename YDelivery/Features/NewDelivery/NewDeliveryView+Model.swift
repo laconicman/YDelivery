@@ -28,8 +28,9 @@ extension NewDeliveryView {
             var place: PickedPlace?
             var contact: Contact?
 
-            init(role: Role, place: PickedPlace? = nil, contact: Contact? = nil) {
-                id = UUID()
+            init(id: UUID = UUID(), role: Role, place: PickedPlace? = nil,
+                 contact: Contact? = nil) {
+                self.id = id
                 self.role = role
                 self.place = place
                 self.contact = contact
@@ -137,6 +138,14 @@ extension NewDeliveryView {
 
         private let estimateRoute: RouteEstimator
 
+        /// This draft's persistence identity (YD-16) — minted once, carried by
+        /// ``persistedDraft`` so a re-save updates the parked row rather than
+        /// collapsing it. `init(restoring:)` keeps a stored draft's own.
+        private(set) var draftID = UUID()
+        /// When the draft began — survives every save so the parked row ages
+        /// honestly (`orderDrafts.createdAt`).
+        private var draftCreatedAt = Date()
+
         init(estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
             points = [Point(role: .pickup), Point(role: .dropoff)]
             self.estimateRoute = estimateRoute
@@ -202,6 +211,179 @@ extension NewDeliveryView {
                     place: PickedPlace(other),
                     contact: Contact(at: other)
                 )
+            }
+        }
+
+        // MARK: Draft persistence (YD-16)
+
+        /// The launch restore's half of the seam — a parked draft back on its
+        /// feet. The store can't promise the route invariants (a hand-edited row,
+        /// a vocabulary this build never wrote), so a stored route that cannot
+        /// satisfy them — two stops, pickup first, at most one return and it
+        /// rides last — falls back to the founding pair rather than resurrecting
+        /// a draft the mutators would refuse to edit. Item journeys are repaired
+        /// on the way in for the same reason ``repairItemJourneys`` exists.
+        convenience init(restoring draft: OrderDraft,
+                         estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
+            self.init(estimateRoute: estimateRoute)
+            draftID = draft.id
+            draftCreatedAt = draft.createdAt
+            let returns = draft.stops.filter {
+                $0.role == Role.return.persistedSpelling
+            }
+            if draft.stops.count >= 2,
+               draft.stops[0].role == Role.pickup.persistedSpelling,
+               draft.stops.dropFirst().allSatisfy({
+                   $0.role != Role.pickup.persistedSpelling }),
+               returns.count <= 1,
+               returns.isEmpty
+                   || draft.stops.last?.role == Role.return.persistedSpelling {
+                points = draft.stops.map { stop in
+                    Point(
+                        id: stop.id,
+                        role: Role(persistedSpelling: stop.role),
+                        place: stop.point.map(PickedPlace.init),
+                        contact: stop.point.flatMap(Contact.init(at:))
+                    )
+                }
+            }
+            items = draft.items.map { stored in
+                var item = ParcelItem(id: stored.id)
+                item.name = stored.name
+                item.quantity = stored.quantity
+                item.weightKg = stored.weightKg
+                // Money round-trips as the POSIX string the wire speaks — never
+                // the locale's comma.
+                item.cost = stored.cost.flatMap {
+                    Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX"))
+                }
+                item.currency = stored.currency
+                if let length = stored.sizeLengthCm,
+                   let width = stored.sizeWidthCm,
+                   let height = stored.sizeHeightCm {
+                    item.size = ParcelItem.Size(
+                        lengthCm: length, widthCm: width, heightCm: height)
+                }
+                item.pickupPointID = stored.pickupStopRef
+                item.dropoffPointID = stored.dropoffStopRef
+                return item
+            }
+            repairItemJourneys()
+            options = DeliveryOptions(
+                proCourier: draft.proCourier, toDoor: draft.toDoor,
+                thermobag: draft.thermobag, loaders: draft.loaders,
+                due: draft.due, comment: draft.comment)
+            chosenTariff = draft.chosenTariff.map(TariffClass.init(wireSpelling:))
+            fieldValues = draft.fieldValues
+            revealedFieldIDs = draft.revealedFieldRefs
+        }
+
+        /// The draft as the substrate parks it — the whole snapshot
+        /// `AppDatabase.saveDraft` writes. Pricing state (`offers`, `estimate`,
+        /// `pricedRequest`, `ordering`) is deliberately absent: a restored draft
+        /// reprices rather than resurrecting quotes that were never promised.
+        /// `fieldDefinitions` stays out too — the schema is the store's, loaded
+        /// fresh; the draft owns only the values and which doors were opened.
+        var persistedDraft: OrderDraft {
+            var persisted = OrderDraft(id: draftID, createdAt: draftCreatedAt)
+            persisted.proCourier = options.proCourier
+            persisted.toDoor = options.toDoor
+            persisted.thermobag = options.thermobag
+            persisted.loaders = options.loaders
+            persisted.due = options.due
+            persisted.comment = options.comment
+            persisted.chosenTariff = chosenTariff?.wireValue
+            persisted.stops = points.map { point in
+                OrderDraft.Stop(
+                    id: point.id, role: point.role.persistedSpelling,
+                    point: point.place.map { RoutePoint($0, contact: point.contact) })
+            }
+            persisted.items = items.map { item in
+                OrderDraft.Item(
+                    id: item.id, name: item.name, quantity: item.quantity,
+                    weightKg: item.weightKg,
+                    cost: item.cost.map(ClientController.wireDecimal),
+                    currency: item.currency,
+                    sizeLengthCm: item.size?.lengthCm,
+                    sizeWidthCm: item.size?.widthCm,
+                    sizeHeightCm: item.size?.heightCm,
+                    pickupStopRef: item.pickupPointID,
+                    dropoffStopRef: item.dropoffPointID)
+            }
+            persisted.fieldValues = fieldValues
+            persisted.revealedFieldRefs = revealedFieldIDs
+            return persisted
+        }
+
+        /// Nothing typed yet — the state where a launch's restore may replace
+        /// this model without destroying work. The route's own shape counts: an
+        /// added empty stop is content too (the hole is part of the draft, per
+        /// `OrderDraft.Stop`'s contract).
+        var isPristineDraft: Bool {
+            points.count == 2
+                && points[0].role == .pickup && points[1].role == .dropoff
+                && points.allSatisfy { $0.place == nil && $0.contact == nil }
+                && items.isEmpty
+                && options == DeliveryOptions()
+                && fieldValues.isEmpty && revealedFieldIDs.isEmpty
+                && chosenTariff == nil
+        }
+
+        /// The save-on-edit loop: armed once by the owner with the substrate's
+        /// write. Every change the projection observes then schedules one
+        /// debounced whole-snapshot write — a burst of typing coalesces into a
+        /// single row-set. A draft that already carries content (a repeat, a
+        /// link, the launch restore) parks immediately: waiting for its first
+        /// edit would leave it memory-only until then.
+        func persistDraftChanges(using sink: @escaping @MainActor (OrderDraft) -> Void) {
+            persistSink = sink
+            trackPersistedDraft()
+            if !isPristineDraft { sink(persistedDraft) }
+        }
+
+        /// The draft is consumed — placed, or deliberately discarded. The
+        /// debounce is cancelled and the sink forgotten, so a queued write can
+        /// never resurrect a row the store just deleted.
+        func stopPersistingDraft() {
+            persistTask?.cancel()
+            persistTask = nil
+            persistSink = nil
+        }
+
+        /// A write that cannot wait out the debounce — the app is leaving the
+        /// foreground, and the next launch reads what this parked.
+        func flushPersistedDraft() {
+            persistTask?.cancel()
+            persistTask = nil
+            persistSink?(persistedDraft)
+        }
+
+        /// Typing speed against a SQLite write: long enough to coalesce a
+        /// burst, short enough that a force-quit after a pause loses nothing
+        /// the screen showed.
+        private static let persistDebounce: Duration = .milliseconds(400)
+
+        @ObservationIgnored private var persistSink: (@MainActor (OrderDraft) -> Void)?
+        @ObservationIgnored private var persistTask: Task<Void, Never>?
+
+        private func trackPersistedDraft() {
+            withObservationTracking {
+                _ = persistedDraft
+            } onChange: {
+                Task { @MainActor [weak self] in
+                    self?.schedulePersist()
+                    self?.trackPersistedDraft()
+                }
+            }
+        }
+
+        private func schedulePersist() {
+            guard persistSink != nil else { return }
+            persistTask?.cancel()
+            persistTask = Task { [weak self] in
+                try? await Task.sleep(for: Self.persistDebounce)
+                guard let self, !Task.isCancelled else { return }
+                persistSink?(persistedDraft)
             }
         }
 
@@ -1065,5 +1247,28 @@ private nonisolated extension MKPolyline {
         )
         getCoordinates(&coordinates, range: NSRange(location: 0, length: pointCount))
         return coordinates.map { RouteEstimate.Coordinate(latitude: $0.latitude, longitude: $0.longitude) }
+    }
+}
+
+nonisolated extension NewDeliveryView.Model.Role {
+    /// The spelling `draftStops.role` keeps — the draft's role vocabulary is the
+    /// consumer's, per `OrderDraft.Stop.role`'s contract.
+    var persistedSpelling: String {
+        switch self {
+        case .pickup: "pickup"
+        case .dropoff: "dropoff"
+        case .return: "return"
+        }
+    }
+
+    /// What a stored row brought back. A spelling this vocabulary never wrote —
+    /// a future role, a hand edit — decodes as a delivery stop: the least
+    /// surprising door to land on, since a middle stop needs no special shape.
+    init(persistedSpelling: String) {
+        self = switch persistedSpelling {
+        case "pickup": .pickup
+        case "return": .return
+        default: .dropoff
+        }
     }
 }

@@ -235,13 +235,22 @@ would persist as `dropoff`, indistinguishable from a delivery.
   same representation in claims discovery. Do it when the product gains return
   routes — inventing the enum early only decorates a model nobody populates.
 
-## YD-16 — Draft field values are memory, not disk — **open**
+## YD-16 — Draft field values are memory, not disk — **discharged**
 
-`orderDrafts`/`draftStops`/`draftItems` exist as a skeletal tier (<doc:Schema>), but the
-draft the sender edits — including its «Ваши поля» answers — lives in
-`NewDeliveryView.Model` only. A force-quit mid-draft loses typed values along with the
-route; custom fields made the loss *larger*, not new (YD-5's unresolved acceptance is
-the sharper cousin — the claim may exist provider-side; a lost draft is merely annoying).
+Discharged: the draft tier is real columns (`orderDrafts` carries the options
+set and the remembered class; `draftStops`/`draftItems` mirror the shared shape;
+`draftCustomFields` holds values plus revealed-but-empty disclosures, `NULL` =
+disclosed-unanswered), and `NewDeliveryView.Model` runs a save-on-edit loop —
+`persistDraftChanges` observes the `persistedDraft` projection, debounces
+400 ms, writes whole snapshots through `StoreController`'s serialized tail, and
+flushes on `.background`. `init(restoring:)` rebuilds the model at launch,
+gated on `isPristineDraft` so a read that loses to a fast typist never eats
+their words; a route that cannot satisfy the invariants falls back to the
+founding pair rather than resurrecting something uneditable. Consumed on
+`placed` — a queued save cannot resurrect the row because the consume rides the
+same tail and the loop is disarmed first. Reads decode without the trapping
+subscript so a corrupt draft throws instead of self-wedging every launch
+(Kit `AppDatabase.ReadError`).
 
 - **Cost:** minutes of re-typing at worst; no money moves and no provider state
   forks — a draft has no provider existence by definition.
