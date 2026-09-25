@@ -877,9 +877,19 @@ extension NewDeliveryView {
                 )
                 ordering = .placed
             } catch is CancellationError {
-                ordering = .queued
+                // A cancel that lands after `accept` was sent is not a return to
+                // queued: the provider may have taken it, so the claim id must reach
+                // the durable drain exactly as a lost answer would (review, PR #47).
+                ordering = acceptAttempted
+                    ? .unresolved(
+                        reason: String(localized: "The order may or may not have gone through."),
+                        claimID: createdClaimID)
+                    : .queued
             } catch {
-                guard !Task.isCancelled else { return }
+                // A failed accept stays ambiguous even under cancellation: the claim
+                // may exist and be paid, which outranks leaving a newer attempt's
+                // state untouched.
+                guard !Task.isCancelled || acceptAttempted else { return }
                 let sentence = (error as? LocalizedError)?.errorDescription
                 if acceptAttempted {
                     ordering = .unresolved(

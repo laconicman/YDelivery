@@ -307,7 +307,10 @@ final class ClaimsSyncController {
     /// wipe takes it). A claim history already knows resolves by presence:
     /// whichever pass landed it, the owed answer is paid.
     private func drainPendingAcceptances(identity: Int) async throws {
-        guard let database else { return }
+        // `flushOwedReset` before the read: while a boundary wipe is still owed the
+        // queue may belong to the previous credential — no row is trustworthy yet
+        // (review, PR #47).
+        guard let database, flushOwedReset() else { return }
         let horizon = Date.now.addingTimeInterval(-Self.acceptanceWindow)
         var discovered: [Components.Schemas.ClaimResponse] = []
         for acceptance in database.pendingAcceptances() {
@@ -476,20 +479,28 @@ final class ClaimsSyncController {
         try database?.writeSyncState(state)
     }
 
-    /// The stored position — unless a boundary wipe is still owed. The account
-    /// key is shared, so while `needsStateReset` stands the stored row would
-    /// answer for the *next* credential: reads go fresh in memory and the
-    /// deletion is retried here before any pass consumes state (review, PR #38).
+    /// An owed boundary wipe, retried before any account-bound read — the account
+    /// key is shared, so while `needsStateReset` stands stored rows would answer
+    /// for the *next* credential (review, PR #38). Returns whether reads may
+    /// proceed; a failed retry leaves the flag standing for the next pass.
+    private func flushOwedReset() -> Bool {
+        guard needsStateReset else { return true }
+        do {
+            try database?.clearSyncState()
+            needsStateReset = false
+            return true
+        } catch {
+            Self.logger.error(
+                "Sync-state reset retry failed; reading fresh for this pass: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// The stored position — unless a boundary wipe is still owed, in which case
+    /// the read goes fresh in memory (the retry lives in `flushOwedReset`).
     private func syncState() -> SyncState {
-        if needsStateReset {
-            do {
-                try database?.clearSyncState()
-                needsStateReset = false
-            } catch {
-                Self.logger.error(
-                    "Sync-state reset retry failed; reading fresh for this pass: \(error.localizedDescription, privacy: .public)")
-                return SyncState(cursor: nil, historyBackfilled: false)
-            }
+        guard flushOwedReset() else {
+            return SyncState(cursor: nil, historyBackfilled: false)
         }
         return database?.readSyncState() ?? SyncState(cursor: nil, historyBackfilled: false)
     }
