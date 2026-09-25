@@ -9,12 +9,16 @@ import YDeliveryKit
 /// the share is never lost.
 final class ShareViewController: UIViewController {
     private let model = ShareModel()
+    /// The attachment read + geocode — owned so a cancelled share stops it
+    /// rather than letting it finish into a dead context (rule 6).
+    private var ingest: Task<Void, Never>?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         let root = ShareView(
             model: model,
             cancel: { [weak self] in
+                self?.ingest?.cancel()
                 self?.extensionContext?.cancelRequest(withError: CocoaError(.userCancelled))
             },
             confirm: { [weak self] in self?.handOff() }
@@ -30,11 +34,12 @@ final class ShareViewController: UIViewController {
             host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
         host.didMove(toParent: self)
-        Task { await model.load(context: extensionContext) }
+        ingest = Task { await model.load(context: extensionContext) }
     }
 
     private func handOff() {
         guard let context = extensionContext else { return }
+        ingest?.cancel()
         do {
             if let draft = model.sharedDraft() {
                 try SharedDraftStore.write(draft, inAppGroup: ShareIdentity.appGroupID)

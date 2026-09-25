@@ -41,6 +41,10 @@ nonisolated enum RecipientShareText {
               last.visit?.status == .pending || last.visit?.status == .arrived
         else { return nil }
         if let etaAt = order.etaAt {
+            // A promise already past is worse than none — the recipient reads
+            // this text later, so a stale clock reads as the app lying
+            // (review, PR #46). Bare minutes carry no stamp to contradict.
+            guard etaAt > .now else { return nil }
             return String(localized:
                 "Expected around \(etaAt.formatted(date: .omitted, time: .shortened))")
         }

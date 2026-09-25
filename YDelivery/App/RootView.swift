@@ -118,8 +118,11 @@ struct RootView: View {
         // system decides when it actually wakes the journal pass. Coming back
         // is when a parked share gets applied: the extension's `open` is
         // best-effort, so the activation sweep is the half that always runs.
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .background { sync.scheduleAppRefresh() }
+            // `initial: true` because a launch is already `.active` — a share
+            // parked while the app was terminated must not wait a full
+            // background cycle to surface (review, PR #46).
             if phase == .active { applySharedDraftIfPending() }
         }
         // A share that arrived while the sheet was up waited in its slot —

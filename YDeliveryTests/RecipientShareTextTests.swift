@@ -68,12 +68,22 @@ struct RecipientShareTextTests {
 
     @Test("The provider's clock speaks as a time when it's aboard")
     func etaAtBeatsMinutes() {
-        let observed = Date(timeIntervalSince1970: 1_800_000_000)
+        let observed = Date.now
         let text = RecipientShareText.text(
             for: order(visit: .pending, etaMinutes: 30, observedAt: observed),
             orderNumber: nil)
-        let expected = Date(timeIntervalSince1970: 1_800_001_800)
+        let expected = observed.addingTimeInterval(30 * 60)
         #expect(text.contains(expected.formatted(date: .omitted, time: .shortened)))
         #expect(!text.contains("~30 min"), "the absolute time is the better promise")
+    }
+
+    @Test("A promise already past is not repeated — the text outlives the moment")
+    func expiredEtaDrops() {
+        let longAgo = Date.now.addingTimeInterval(-3600)
+        let text = RecipientShareText.text(
+            for: order(visit: .pending, etaMinutes: 30, observedAt: longAgo),
+            orderNumber: nil)
+        #expect(!text.contains("Expected"),
+                "a stale clock reads as the app lying to the recipient (PR #46)")
     }
 }
