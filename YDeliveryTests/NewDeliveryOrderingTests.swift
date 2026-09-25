@@ -661,6 +661,48 @@ struct NewDeliveryOrderingTests {
         #expect(model.ordering == .failed("Оффер истёк"))
     }
 
+    @Test("Try again after a provider-terminal failure mints a fresh token")
+    func requestIDRenewsAfterProviderFailure() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { _ in throw Unexpected() },
+            accept: { _, _ in throw Unexpected() },
+            clock: TestClock()
+        )
+        await model.reconcileUnresolved(watch: { _ in
+            PlacedClaim(id: "claim-1", version: 1, status: .failed, failureText: "Оффер истёк")
+        })
+        #expect(model.ordering == .failed("Оффер истёк"))
+
+        model.confirmOrder()
+        #expect(model.ordering == .queued)
+        #expect(model.orderRequestID != first, "the dead claim's token must not be replayed")
+    }
+
+    @Test("Try again after a transport failure keeps the token — the claim may exist")
+    func requestIDKeepsAfterTransportFailure() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+
+        await model.placeOrder(
+            create: { _, _ in throw Unexpected() },
+            watch: { _ in throw Unexpected() },
+            accept: { _, _ in throw Unexpected() },
+            clock: TestClock()
+        )
+
+        model.confirmOrder()
+        #expect(model.ordering == .queued)
+        #expect(model.orderRequestID == first, "a maybe-never-sent create must retry under the same token")
+    }
+
     private struct Unexpected: Error {}
 }
 
