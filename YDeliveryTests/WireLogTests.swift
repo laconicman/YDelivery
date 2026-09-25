@@ -146,8 +146,8 @@ struct WireLogTests {
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true
         )
         // A whole line behind a torn tail — the file's state no process vouched for.
-        try Data(#"{"operation":"op","status":200}"#.utf8 + [UInt8(ascii: "\n")]
-            + Data(#"{"operation":"torn","stat"# .utf8)).write(to: url)
+        try (Data(#"{"operation":"op","status":200}"#.utf8) + Data([UInt8(ascii: "\n")])
+            + Data(#"{"operation":"torn","stat"#.utf8)).write(to: url)
 
         #expect(store.exportURL == nil, "a torn tail is unvouched bytes, not evidence")
 

@@ -4,16 +4,20 @@ Compromises this app carries. Each names what it costs and what would retire it.
 one from code as `// TODO(YD-n): …` — *YD* so these never collide with the package's `TD-n`
 or the demo's `AD-n`. Numbers are never reused.
 
-## YD-1 — No CI — **open**
+## YD-1 — No CI — **discharged**
 
-Every verification is a laptop ritual: `xcodebuild build … -skipPackagePluginValidation`
+Every verification was a laptop ritual: `xcodebuild build … -skipPackagePluginValidation`
 and the test action, run by whoever remembers.
 
-- **Cost:** a broken `main` is discovered by the next person to pull it, and "the previews
-  all run" is asserted, never checked.
-- **Discharge:** a workflow running build + tests on push, with
-  `-skipPackagePluginValidation` (the OpenAPI generator plugin's trust prompt fails
-  non-interactive builds with no useful message otherwise). Scheduled on the Roadmap.
+- **The cost it carried:** a broken `main` is discovered by the next person to pull it,
+  and "the previews all run" is asserted, never checked.
+- **Discharged by:** `.github/workflows/ci.yml` — `xcodebuild test` on the full scheme
+  (unit + UI suites) on `macos-15` with `latest-stable` Xcode, on every PR and every
+  push to `main`, both skip-flags carried (`-skipPackagePluginValidation` keeps the
+  OpenAPI generator plugin's trust prompt from failing non-interactive builds).
+  `project.pbxproj` is gitignored, so the workflow regenerates it with `xcodegen`
+  from the committed `project.yml`. All three repos are public — standard runners
+  need no secrets.
 
 ## YD-2 — The test targets are template stubs — **discharged**
 
