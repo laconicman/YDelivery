@@ -29,7 +29,9 @@ struct WorkingWidget: Widget {
     }
 
     struct Provider: TimelineProvider {
-        /// How many routes a medium can hold — small takes the first two.
+        /// How many routes a medium can hold — small is a single tap target,
+        /// so it shows the freshest one only: a second row would look tappable
+        /// and yet hand the tap to `widgetURL` (review, PR #44).
         private static let routeLimit = 4
 
         func placeholder(in context: Context) -> Entry {
@@ -64,7 +66,7 @@ private struct WorkingView: View {
     let entry: WorkingWidget.Entry
     @Environment(\.widgetFamily) private var family
 
-    private var routeLimit: Int { family == .systemSmall ? 2 : 4 }
+    private var routeLimit: Int { family == .systemSmall ? 1 : 4 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.Spacing.tight) {
@@ -79,7 +81,13 @@ private struct WorkingView: View {
                 newRow
             }
         }
-        .widgetURL(WidgetLink.compose)
+        // Small widgets get one tap target — the row Links never fire there,
+        // so the whole card must repeat the route it displays; a route-less
+        // small falls back to compose, same as medium's blanket link.
+        .widgetURL(family == .systemSmall
+            ? entry.routes.first.map { WidgetLink.repeatOrder($0.id) }
+                ?? WidgetLink.compose
+            : WidgetLink.compose)
     }
 
     /// «Склад → Арбат» — compact addresses, one line, a tap opens the draft.

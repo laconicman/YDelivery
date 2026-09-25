@@ -37,6 +37,9 @@ final class StoreController {
     /// first-run surface that reads emptiness as "this sender is new" would greet a
     /// returning one (review, PR #20).
     private(set) var hasLoaded = false
+    /// The places file publishes in its own pass after `orders` — a parked
+    /// repeat-by-place link needs *this* gate, not the orders' (review, PR #44).
+    private(set) var hasLoadedPlaces = false
 
     private let database: AppDatabase?
 
@@ -157,6 +160,7 @@ final class StoreController {
             do {
                 savedPlaces = try await Self.readPlaces(database)
                 placesError = nil
+                hasLoadedPlaces = true
             } catch {
                 placesError = error
             }
@@ -171,6 +175,7 @@ final class StoreController {
             renderWidgetSnapshotIfHealthy()
         } else {
             hasLoaded = true
+            hasLoadedPlaces = true
         }
     }
 

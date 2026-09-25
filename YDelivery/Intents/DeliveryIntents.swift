@@ -7,10 +7,11 @@ import YDeliveryKit
 /// the sender actually says.
 ///
 /// All three run inside the app's process and read the shared App Group store
-/// directly — the same substrate the widget extension reads — because an
-/// intent must answer even when no controller has published yet (a cold start,
-/// a Siri invocation over a locked phone). The read is the same `AppDatabase`
-/// the app itself opened; nothing here writes.
+/// directly — the widget contract's snapshot file is for extension targets;
+/// an in-process intent is the app, so it reads the same `AppDatabase` the
+/// controllers do. The read must answer even when no controller has published
+/// yet (a cold start, a Siri invocation over a locked phone). Nothing here
+/// writes.
 
 /// A saved place as an intent parameter — «доставку в …» names the destination
 /// the sender saved, never an address Siri would have to parse.
@@ -47,30 +48,31 @@ private extension SavedPlaceEntity {
     }
 }
 
-/// The one store read the intents share — opened lazily, never synced: an
-/// extension-adjacent surface reads what the app last wrote and starts nothing.
+/// The one store read the intents share — opened once per process, never
+/// synced: the surface reads what the app last wrote and starts nothing.
+/// The handle is memoized because `open` runs the schema's migrations —
+/// opening per lookup made a sender's number cost one open per order
+/// (review, PR #44).
 enum IntentStore {
     /// The same `AppDatabase` the app opens — app group, container, and the
     /// unattributed provider ref all named by the app's own constants.
-    private static func open() -> AppDatabase? {
-        AppDatabase.inAppGroup(
-            id: AppGroup.id,
-            providerAccountRef: SyncIdentity.providerAccountRef,
-            containerIdentifier: SyncIdentity.cloudKitContainer)
-    }
+    private static let database: AppDatabase? = AppDatabase.inAppGroup(
+        id: AppGroup.id,
+        providerAccountRef: SyncIdentity.providerAccountRef,
+        containerIdentifier: SyncIdentity.cloudKitContainer)
 
     static func orders() async throws -> [Order] {
-        guard let database = open() else { return [] }
+        guard let database else { return [] }
         return try database.readOrders()
     }
 
     static func places() async throws -> [SavedPlace] {
-        guard let database = open() else { return [] }
+        guard let database else { return [] }
         return try database.readPlaces()
     }
 
     static func orderNumber(for orderID: Order.ID) async throws -> String? {
-        try open()?.orderNumber(for: orderID)
+        try database?.orderNumber(for: orderID)
     }
 }
 

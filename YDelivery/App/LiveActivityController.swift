@@ -84,7 +84,15 @@ final class LiveActivityController {
                                               dismissalPolicy: dismissal) }
                 }
             case .none:
-                break  // never provider-visible — no card to write
+                // An order that slipped out of provider view — claim revoked,
+                // a merge edge that dropped it — still holds the card it
+                // earned live. The orphan sweep can't see it (its order is
+                // still listed), so `.none` must end it, not skip it
+                // (review, PR #44).
+                if let activity {
+                    nonisolated(unsafe) let activity = activity
+                    Task { await activity.end(dismissalPolicy: .immediate) }
+                }
             }
         }
         // An activity whose order is gone — wiped with the account, deleted —

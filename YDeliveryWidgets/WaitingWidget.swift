@@ -52,8 +52,15 @@ struct WaitingWidget: Widget {
         }
         private func load() -> Entry {
             let live = (WidgetStore.load()?.orders ?? []).filter(\.isLive)
-            return Entry(date: .now, order: live.first,
-                         alsoLive: Array(live.dropFirst()))
+            // Most recently moved is the headline — the provider's own stamp
+            // orders relevance: a just-placed claim and a courier found an
+            // hour in both read as now (review, PR #44).
+            let headline = live.max {
+                ($0.providerObservedAt ?? .distantPast)
+                    < ($1.providerObservedAt ?? .distantPast)
+            }
+            return Entry(date: .now, order: headline,
+                         alsoLive: live.filter { $0.id != headline?.id })
         }
     }
 }

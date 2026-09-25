@@ -130,8 +130,10 @@ struct RootView: View {
         .onChange(of: store.orderFields) { republishSurfaces() }
         // `hasLoaded` is its own trigger: an unread store reconciles nothing,
         // and the first read must also fire the pass that applies a parked
-        // deep link and sweeps orphaned cards.
+        // deep link and sweeps orphaned cards. Places publish in a second
+        // pass — a repeat-by-place link re-parks until *that* read lands.
         .onChange(of: store.hasLoaded, initial: true) { republishSurfaces() }
+        .onChange(of: store.hasLoadedPlaces, initial: true) { republishSurfaces() }
         // A widget, Live Activity or App Intent asks in URLs — the one channel
         // an extension has into the app's controllers (board `5b`/`5d`).
         .onOpenURL { url in
@@ -189,7 +191,7 @@ struct RootView: View {
             // A saved place is a *destination* — the draft's last row takes the
             // point and whoever answers its door; the pickup stays the sender's
             // to fill, because a place remembers no origin.
-            guard store.hasLoaded else { pendingLink = link; return }
+            guard store.hasLoadedPlaces else { pendingLink = link; return }
             guard let place = store.savedPlaces.first(where: { $0.id == id }) else { return }
             let model = NewDeliveryView.Model()
             guard let destination = model.points.last?.id else { return }
