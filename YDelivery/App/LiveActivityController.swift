@@ -126,13 +126,13 @@ final class LiveActivityController {
         DeliveryActivityAttributes.ContentState(
             status: order.status,
             orderNumber: orderNumber(order.id),
-            destinationAddress: order.route.last?.compactAddress ?? "",
+            destinationAddress: order.destinationPoint?.compactAddress ?? "",
             courierName: order.courierName,
             courierVehicle: order.courierVehicle,
             providerStatus: order.providerStatus,
             etaAt: order.etaAt,
             providerObservedAt: order.providerObservedAt,
-            destinationPhone: order.route.last?.contactPhone
+            destinationPhone: order.destinationPoint?.contactPhone
         )
     }
 }

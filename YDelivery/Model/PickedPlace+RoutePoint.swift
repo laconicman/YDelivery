@@ -45,7 +45,9 @@ nonisolated extension Contact {
 nonisolated extension RoutePoint {
     /// A chosen place — and who meets the courier — as the substrate remembers it.
     /// Empty strings become absence: the file stores what exists, not blank fields.
-    init(_ place: PickedPlace, contact: Contact? = nil) {
+    /// `role` stays `nil` for places and recents — a route seat is a fact of the
+    /// order, not of the door — and the draft names it where it knows it.
+    init(_ place: PickedPlace, contact: Contact? = nil, role: Role? = nil) {
         let contact = contact?.storable
         self.init(
             latitude: place.latitude,
@@ -58,7 +60,8 @@ nonisolated extension RoutePoint {
             contactGivenName: contact.flatMap { $0.givenName.isEmpty ? nil : $0.givenName },
             contactFamilyName: contact.flatMap { $0.familyName.isEmpty ? nil : $0.familyName },
             contactPhone: contact.flatMap { $0.phone.isEmpty ? nil : $0.phone },
-            contactPhoneExtension: contact.flatMap { $0.phoneExtension.isEmpty ? nil : $0.phoneExtension }
+            contactPhoneExtension: contact.flatMap { $0.phoneExtension.isEmpty ? nil : $0.phoneExtension },
+            role: role
         )
     }
 }

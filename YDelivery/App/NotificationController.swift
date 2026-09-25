@@ -89,7 +89,7 @@ final class NotificationController: NSObject {
         if let number = store.orderNumber(for: order.id) {
             String(localized: "Order №\(number)")
         } else {
-            order.route.last?.address ?? String(localized: "Delivery")
+            order.destinationPoint?.address ?? String(localized: "Delivery")
         }
     }
 

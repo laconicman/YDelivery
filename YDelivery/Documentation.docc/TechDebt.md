@@ -227,22 +227,25 @@ under load is a silent stall, not a refusal.
   adaptive (throttling that answers eventually), revisit *which* timeout before
   widening it.
 
-## YD-15 — `routeStops.role` is position-derived, not model-carried — **open**
+## YD-15 — `routeStops.role` is position-derived, not model-carried — **discharged**
 
-`AppDatabase.insertStops` writes `pickup` for index 0 and `dropoff` for the rest,
-because `Order.route` is bare `[RoutePoint]` — the app model carries no stop role,
-and placed-order construction discards the draft's roles before the store sees
-them (review, PR #38). Correct for every route the product can express today —
-one pickup, N dropoffs — but a future *return* leg (courier returns to origin)
-would persist as `dropoff`, indistinguishable from a delivery.
-
-- **Cost:** a return route would silently mislabel its last stop; provider-
-  discovered routes with a return point would likewise flatten. The schema column
-  exists — the write just can't fill it honestly yet.
-- **Discharge:** carry role on `RoutePoint` (or a route-stop value type) from the
-  draft through `Order` into `insertStops`, and map provider route kinds to the
-  same representation in claims discovery. Do it when the product gains return
-  routes — inventing the enum early only decorates a model nobody populates.
+Discharged: `RoutePoint.role` (`pickup`/`dropoff`/`return`, Kit `0.3.9`) is the
+carrier end to end. The draft already sent roles to the wire; claim sightings
+now map `point.type` back through `RoutePoint(claimPoint:)`, so provider-
+discovered routes carry them too. `insertStops` writes the carried role with
+position as the fallback for roleless points, `routeStop(_:)` reads it back
+(an unknown spelling reads roleless, never drops the stop), and `RouteLine`
+honors it — a return leg renders the return mark, not a mislabelled drop-off.
+`Order.destinationPoint`/`[RoutePoint].destinationIndex` answer "where is the
+parcel going" as the last *drop-off*, keeping the notification title, Live
+Activity, share text, intents, the widget snapshot and the detail map's ETA
+honest when a return leg rides last. `init(repeating:)` restores carried
+roles; reversed repeats re-derive by position since direction recasts the
+stops. `destinationKey` deliberately excludes role — a place's function is
+context, not identity. Item journeys follow the same end: a `nil` handover
+means the last drop-off, not the last seat — `defaultHandoverIndex` is the
+one home the callout, the repair pass, the editor's chooser and both wire
+writes read, so a return leg can never answer an unmarked parcel's journey.
 
 ## YD-16 — Draft field values are memory, not disk — **discharged**
 

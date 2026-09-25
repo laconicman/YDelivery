@@ -16,6 +16,7 @@ extension NewDeliveryView {
         struct Stop: Identifiable, Hashable {
             let id: UUID
             let label: String
+            let role: NewDeliveryView.Model.Role
         }
 
         let stops: [Stop]
@@ -129,8 +130,12 @@ extension NewDeliveryView {
                                             : nil
                                     },
                                     choose: { index in
+                                        // The default stores as nil so it tracks
+                                        // the destination through reordering —
+                                        // a return leg picked deliberately is a
+                                        // real choice and stores its id.
                                         item.dropoffPointID =
-                                            index == stops.count - 1 ? nil : stops[index].id
+                                            index == defaultHandoverIndex ? nil : stops[index].id
                                     }
                                 )
                             }
@@ -212,7 +217,14 @@ extension NewDeliveryView {
 
         private var effectiveHandoverIndex: Int {
             item.dropoffPointID.flatMap { id in stops.firstIndex { $0.id == id } }
-                ?? max(stops.count - 1, 0)
+                ?? defaultHandoverIndex
+        }
+
+        /// The route's delivery end — the last non-return stop. `nil` handover
+        /// means "the parcel's destination", not the array's last seat: a
+        /// return leg rides last but is the way back (YD-15).
+        private var defaultHandoverIndex: Int {
+            stops.lastIndex { $0.role != .return } ?? max(stops.count - 1, 0)
         }
 
         /// One end of the journey as its own row: the caption above, the full
@@ -342,9 +354,9 @@ extension NewDeliveryView.ItemEditor {
         NewDeliveryView.ItemEditor(
             item: item,
             stops: [
-                .init(id: UUID(), label: "Невский проспект, 100"),
-                .init(id: UUID(), label: "Арбат, 10"),
-                .init(id: UUID(), label: "Каширское шоссе, 52"),
+                .init(id: UUID(), label: "Невский проспект, 100", role: .pickup),
+                .init(id: UUID(), label: "Арбат, 10", role: .dropoff),
+                .init(id: UUID(), label: "Каширское шоссе, 52", role: .dropoff),
             ],
             selectedTariff: .courier,
             save: { _ in }
@@ -357,9 +369,9 @@ extension NewDeliveryView.ItemEditor {
         NewDeliveryView.ItemEditor.StopChooser(
             title: "Where it boards",
             stops: [
-                .init(id: UUID(), label: "Невский проспект, 100"),
-                .init(id: UUID(), label: "Москва, Каширское шоссе, 52, корпус 3, подъезд 2 — со двора"),
-                .init(id: UUID(), label: "Арбат, 10"),
+                .init(id: UUID(), label: "Невский проспект, 100", role: .pickup),
+                .init(id: UUID(), label: "Москва, Каширское шоссе, 52, корпус 3, подъезд 2 — со двора", role: .dropoff),
+                .init(id: UUID(), label: "Арбат, 10", role: .dropoff),
             ],
             selectedIndex: 0,
             unavailable: { index in

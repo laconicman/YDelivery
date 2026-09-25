@@ -68,8 +68,8 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.3.7 carries AddressParts.building — YD-10's vocabulary half.
-    minorVersion: 0.3.7
+    # 0.3.10 carries RoutePoint.role + destinationIndex — YD-15's halves.
+    minorVersion: 0.3.10
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols

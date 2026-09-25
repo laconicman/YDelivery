@@ -150,6 +150,9 @@ final class StoreController {
         var seen = Set(saved.map { $0.point.destinationKey })
         var recents: [RoutePoint] = []
         for point in orders.flatMap(\.route) {
+            // The courier's ride home is bookkeeping, not a door the sender sent
+            // anything to — recents remember destinations and origins, never it.
+            guard point.role != .return else { continue }
             guard !point.address.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
             guard seen.insert(point.destinationKey).inserted else { continue }
             recents.append(point)

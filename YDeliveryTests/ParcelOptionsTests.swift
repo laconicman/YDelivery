@@ -359,6 +359,48 @@ struct ParcelOptionsTests {
                 "collecting at the last stop leaves nowhere to hand it over")
     }
 
+    @Test("A return leg ends the route without becoming the parcels' destination")
+    func defaultHandoverSkipsTheReturn() {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 1, longitude: 1, address: "А"), for: model.points[0].id)
+        let door = model.points[1].id
+        model.setPlace(PickedPlace(latitude: 2, longitude: 2, address: "Б"), for: door)
+        let rideHome = model.addStop()
+        model.setPlace(PickedPlace(latitude: 1, longitude: 1, address: "А"), for: rideHome)
+        model.setRole(.return, for: rideHome)
+
+        var item = ParcelItem()   // no stops set — the default journey
+        item.name = "Коробка"
+        model.setItem(item)
+
+        #expect(model.parcelFlow(at: door).arriving == 1,
+                "the delivery's end is the last drop-off, not the last seat")
+        #expect(model.parcelFlow(at: rideHome) == (leaving: 0, arriving: 0),
+                "nothing boards and nothing is handed over on the way back")
+        #expect(model.journeyLine(for: model.items[0]) == "А → Б",
+                "the journey line names the door, never the way back")
+    }
+
+    @Test("A pickup at the delivery's own end has no room to be handed over")
+    func pickupAtDestinationYieldsToRepair() {
+        let model = NewDeliveryView.Model()
+        model.setPlace(PickedPlace(latitude: 1, longitude: 1, address: "А"), for: model.points[0].id)
+        let door = model.points[1].id
+        model.setPlace(PickedPlace(latitude: 2, longitude: 2, address: "Б"), for: door)
+        let rideHome = model.addStop()
+        model.setPlace(PickedPlace(latitude: 1, longitude: 1, address: "А"), for: rideHome)
+        model.setRole(.return, for: rideHome)
+
+        var item = ParcelItem()
+        item.name = "Коробка"
+        item.pickupPointID = door   // boards at the destination — handover impossible
+        model.setItem(item)
+
+        let saved = model.items[0]
+        #expect(saved.pickupPointID == nil && saved.dropoffPointID == nil,
+                "the pair resets to the route's ends — the return is never the answer")
+    }
+
     @Test("A class judges the whole parcel, not one row at a time")
     func parcelWeightIsJudgedTogether() {
         func box(_ kg: Double, quantity: Int = 1) -> ParcelItem {

@@ -259,7 +259,8 @@ nonisolated extension RoutePoint {
                     Visit(status: status,
                           visitedAt: point.visitedAt.actual,
                           expectedAt: point.visitedAt.expected)
-                }
+                },
+            role: Role(point._type)
         )
     }
 }

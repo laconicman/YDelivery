@@ -19,7 +19,7 @@ nonisolated enum RecipientShareText {
                 .compactMap { $0 }
                 .joined(separator: " · ")
         )
-        if let destination = order.route.last {
+        if let destination = order.destinationPoint {
             var line = String(localized: "To: \(destination.compactAddress)")
             if let contact = destination.contactSummary {
                 line += " — \(contact)"
@@ -33,12 +33,12 @@ nonisolated enum RecipientShareText {
     }
 
     /// «Expected around 19:40» when the provider's clock is aboard, else the
-    /// bare minutes — and only while the last stop is still ahead (the
+    /// bare minutes — and only while the destination is still ahead (the
     /// callout's own gate), so the text never promises what the card doesn't.
     private static func etaLine(for order: Order) -> String? {
         guard let etaMinutes = order.etaMinutes,
-              let last = order.route.last,
-              last.visit?.status == .pending || last.visit?.status == .arrived
+              let destination = order.destinationPoint,
+              destination.visit?.status == .pending || destination.visit?.status == .arrived
         else { return nil }
         if let etaAt = order.etaAt {
             // A promise already past is worse than none — the recipient reads
