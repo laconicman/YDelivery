@@ -29,6 +29,7 @@ struct ClaimsSyncTests {
                     id: 2,
                     address: .init(
                         fullname: "Москва, Каширское шоссе, 52",
+                        building: "2",
                         coordinates: [37.648210, 55.652212],
                         doorCode: "12",
                         porch: "3",
@@ -148,6 +149,8 @@ struct ClaimsSyncTests {
 
         // Door details land in AddressParts' own names; the extension keeps its own
         // field — never folded into the phone.
+        #expect(route[1].addressParts?.building == "2",
+                "the wire's `building` comes home with the other door details (YD-10)")
         #expect(route[1].addressParts?.entrance == "3")
         #expect(route[1].addressParts?.floor == "4")
         #expect(route[1].addressParts?.apartment == "45")

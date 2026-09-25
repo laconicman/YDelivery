@@ -67,6 +67,7 @@ struct ShareView: View {
     /// draft keeps.
     @ViewBuilder private func doorParts(_ point: RoutePoint) -> some View {
         if let parts = point.addressParts {
+            if !parts.building.isEmpty { Text("Building \(parts.building)") }
             if !parts.entrance.isEmpty { Text("Entrance \(parts.entrance)") }
             if !parts.intercom.isEmpty { Text("Intercom \(parts.intercom)") }
             if !parts.floor.isEmpty { Text("Floor \(parts.floor)") }
