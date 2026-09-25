@@ -88,6 +88,13 @@ final class ClientController {
         }
         do {
             try tokenStore.write(token)
+            // Kill the old session before the wipe — a task in flight can still
+            // append its (body-carrying) record through the wiped point
+            // afterwards; invalidating first turns every pending response into
+            // an error so nothing old-identity can arrive behind the new log
+            // (review, PR #49). A cancelled task's error append can still race
+            // the wipe — closing that needs a write epoch, see YD-18.
+            providerURLSession?.invalidateAndCancel()
             // A new credential means a new identity — the wipe completes before
             // the client exists, so the new session's first exchange can neither
             // land beside the previous identity's data nor be erased by its
@@ -125,10 +132,14 @@ final class ClientController {
     static let providerRequestTimeout: TimeInterval = 30
 
     /// `.default` rather than `.ephemeral` — the transport's own default session
-    /// carries the same disk cache and credential semantics; only the timeout changes.
+    /// carries the same disk cache and credential semantics; only the timeouts change.
     static func providerSession() -> URLSession {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = providerRequestTimeout
+        // The request timeout bounds *idle* time — each arriving byte resets it.
+        // The resource timeout is the wall-clock ceiling a drip-feeding stall
+        // cannot reset (review, PR #49).
+        configuration.timeoutIntervalForResource = 2 * providerRequestTimeout
         return URLSession(configuration: configuration)
     }
 

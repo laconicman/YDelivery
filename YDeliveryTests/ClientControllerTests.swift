@@ -116,4 +116,14 @@ struct ClientControllerTests {
         #expect(session.configuration.timeoutIntervalForRequest == ClientController.providerRequestTimeout)
         #expect(ClientController.providerRequestTimeout < 60)
     }
+
+    @Test("A drip-feed stall cannot outrun the request timeout — the resource bound")
+    func providerSessionResourceTimeout() {
+        // `timeoutIntervalForRequest` resets on every arriving byte; only the
+        // resource timeout is wall-clock. Pin that both exist (review, PR #49).
+        let session = ClientController.providerSession()
+
+        #expect(session.configuration.timeoutIntervalForResource
+                == 2 * ClientController.providerRequestTimeout)
+    }
 }

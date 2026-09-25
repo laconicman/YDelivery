@@ -256,6 +256,25 @@ snapshot. The wider finding review surfaced was worse than the deleted-definitio
 the definitions tier is *private*, so a collaborator could never have joined it — the
 denormalized snapshot is what makes the shared tier self-describing (Kit PR #8).
 
+## YD-18 — A cancelled request's wire record can race the identity wipe — **open**
+
+`signIn` invalidates the previous identity's `URLSession` *before* `wireLog.clear()`
+(review, PR #49), so a task in flight can no longer complete a real response into the
+wiped log. `invalidateAndCancel` is synchronous about the socket but not about the
+middleware: a cancelled task still unwinds through `WireLogMiddleware`, which records
+the exchange — *with the request body* — and that append is scheduled on the store's
+own queue. It can land after `clear()` has run, leaving one old-identity record in the
+new identity's shareable log.
+
+- **Cost:** one log line per in-flight task at the instant of a token swap — a request
+  path and body, never a response and never headers. Rare (a sign-in must land inside
+  a request's flight) and small (the new identity's log starts with an older
+  identity's tail call).
+- **Discharge:** a write epoch on `WireLogStore` — `signIn` bumps a generation before
+  the wipe, the middleware stamps its session's epoch, and stale-epoch appends drop.
+  Alternatively a drain step (`finishTasksAndInvalidate` plus settling) before the
+  wipe, which pays latency on every sign-in for a one-line leak.
+
 ## See Also
 
 - <doc:Design>
