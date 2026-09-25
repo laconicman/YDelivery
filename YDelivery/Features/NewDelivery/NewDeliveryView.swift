@@ -32,6 +32,7 @@ struct NewDeliveryView: View {
     @State private var showsExplainer = false
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
+    @Environment(ClaimsSyncController.self) private var sync
     @Environment(\.dismiss) private var dismiss
 
     /// What one priced run answers to: the inputs it prices, and which attempt at them.
@@ -119,6 +120,13 @@ struct NewDeliveryView: View {
                     watch: { try await session.claimState(id: $0) },
                     accept: { try await session.acceptClaim(id: $0, version: $1) }
                 )
+                // A lost answer outlives this screen: the sync controller's drain
+                // keeps asking until the claim answers or the window lapses — a
+                // force-quit mid-reconcile must not forget money that may have
+                // moved (YD-5).
+                if case .unresolved(_, let claimID) = draft.ordering, let claimID {
+                    sync.noteUnresolvedAcceptance(claimID: claimID)
+                }
                 // Recording happens once per placed order. This task re-runs whenever a
                 // parked draft is reopened, and `.placed` is still true then.
                 if draft.ordering == .placed, !draft.placedOrderIsRecorded,
@@ -420,9 +428,12 @@ extension NewDeliveryView.Model.Role {
 }
 
 #Preview("Empty draft") {
-    NewDeliveryView(draft: NewDeliveryView.Model(), placed: {})
-        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-        .environment(StoreController(database: nil))
+    let session = ClientController(tokenStore: TokenStore(service: "preview.YDelivery"))
+    let store = StoreController(database: nil)
+    return NewDeliveryView(draft: NewDeliveryView.Model(), placed: {})
+        .environment(session)
+        .environment(store)
+        .environment(ClaimsSyncController(session: session, store: store, database: nil))
 }
 
 #Preview("Route complete") {
@@ -439,9 +450,12 @@ extension NewDeliveryView.Model.Role {
         PickedPlace(latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52"),
         for: draft.points[1].id
     )
+    let session = ClientController(tokenStore: TokenStore(service: "preview.YDelivery"))
+    let store = StoreController(database: nil)
     return NewDeliveryView(draft: draft, placed: {})
-        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-        .environment(StoreController(database: nil))
+        .environment(session)
+        .environment(store)
+        .environment(ClaimsSyncController(session: session, store: store, database: nil))
 }
 
 #Preview("Five stops with a return") {
@@ -474,7 +488,10 @@ extension NewDeliveryView.Model.Role {
         PickedPlace(latitude: 59.932720, longitude: 30.349709, address: "Санкт-Петербург, Невский проспект, 100"),
         for: returnStop
     )
+    let session = ClientController(tokenStore: TokenStore(service: "preview.YDelivery"))
+    let store = StoreController(database: nil)
     return NewDeliveryView(draft: draft, placed: {})
-        .environment(ClientController(tokenStore: TokenStore(service: "preview.YDelivery")))
-        .environment(StoreController(database: nil))
+        .environment(session)
+        .environment(store)
+        .environment(ClaimsSyncController(session: session, store: store, database: nil))
 }

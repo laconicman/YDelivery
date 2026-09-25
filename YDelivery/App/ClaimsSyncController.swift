@@ -84,6 +84,10 @@ final class ClaimsSyncController {
     /// The runaway-stop both feeds share — a pass that outlives this many pages is
     /// chasing its own tail, not syncing.
     private static let maxPages = 20
+    /// How long a lost acceptance stays worth asking about — the provider answers
+    /// a real claim within days; past this, the row lapses to audit instead of
+    /// polling forever (YD-5).
+    private static let acceptanceWindow: TimeInterval = 7 * 24 * 3600
 
     /// The background-refresh task's identifier — must match
     /// `BGTaskSchedulerPermittedIdentifiers` in the generated Info.plist.
@@ -142,6 +146,7 @@ final class ClaimsSyncController {
         let identity = identityGeneration
         await store.refresh()
         do {
+            try await drainPendingAcceptances(identity: identity)
             try await drainPendingDiscovery(identity: identity)
             try await journalPasses(from: syncState().cursor, identity: identity)
             lastSyncedAt = .now
@@ -281,6 +286,65 @@ final class ClaimsSyncController {
         }
     }
 
+    /// The ordering flow's lost answer, persisted before the screen can forget
+    /// it — `Ordering.unresolved` without this dies with the draft (YD-5). A
+    /// signed-out session notes nothing: the boundary's wipe takes the row
+    /// anyway, and an unsigned app has no credential to reconcile it with.
+    func noteUnresolvedAcceptance(claimID: String) {
+        guard session.isSignedIn else { return }
+        do {
+            try database?.noteUnresolvedAcceptance(claimID: claimID)
+        } catch {
+            Self.logger.error(
+                "Pending-acceptance note failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// The acceptance queue's drain — the surviving sliver of YD-5. Every tick
+    /// asks after a claim the flow lost the answer to, until it materializes
+    /// (resolved into the order it becomes), outlives the window (lapsed — the
+    /// poll stops, the audit row stays), or the account signs out (the identity
+    /// wipe takes it). A claim history already knows resolves by presence:
+    /// whichever pass landed it, the owed answer is paid.
+    private func drainPendingAcceptances(identity: Int) async throws {
+        // `flushOwedReset` before the read: while a boundary wipe is still owed the
+        // queue may belong to the previous credential — no row is trustworthy yet
+        // (review, PR #47).
+        guard let database, flushOwedReset() else { return }
+        let horizon = Date.now.addingTimeInterval(-Self.acceptanceWindow)
+        var discovered: [Components.Schemas.ClaimResponse] = []
+        for acceptance in database.pendingAcceptances() {
+            guard identity == identityGeneration else { throw SyncSuperseded() }
+            if let known = store.orders.first(where: { $0.claimID == acceptance.claimID }) {
+                try database.markPendingAcceptance(
+                    acceptance, as: .resolved(orderID: known.id))
+            } else if acceptance.createdAt < horizon {
+                try database.markPendingAcceptance(acceptance, as: .lapsed)
+            } else if let card = try? await session.claimCard(id: acceptance.claimID) {
+                discovered.append(card)
+            } else {
+                try database.markPendingAcceptance(acceptance, as: .checked)
+            }
+        }
+        guard !discovered.isEmpty else { return }
+        let merged = ClaimsSync.merging(discovered, into: store.orders)
+        try await persistChanged(merged, stamps: ClaimsSync.stamps(of: discovered),
+                                 identity: identity)
+        // `card`, like the discovery drain's: a card fetch is one source whichever
+        // queue asked for it — a distinct value would mint a second sighting row
+        // for the same provider fact.
+        try await recordSightings(discovered, among: merged,
+                                  source: "card", identity: identity)
+        for acceptance in database.pendingAcceptances()
+        where discovered.contains(where: { $0.id == acceptance.claimID }) {
+            guard identity == identityGeneration else { throw SyncSuperseded() }
+            guard let order = merged.first(where: { $0.claimID == acceptance.claimID })
+            else { continue }
+            try database.markPendingAcceptance(
+                acceptance, as: .resolved(orderID: order.id))
+        }
+    }
+
     /// Retries the claims whose card fetch failed under an earlier cursor — the
     /// pending queue is the only memory of them once the feed moved on. Entries
     /// resolved by any pass (this drain or a search) drop out; entries still
@@ -415,20 +479,28 @@ final class ClaimsSyncController {
         try database?.writeSyncState(state)
     }
 
-    /// The stored position — unless a boundary wipe is still owed. The account
-    /// key is shared, so while `needsStateReset` stands the stored row would
-    /// answer for the *next* credential: reads go fresh in memory and the
-    /// deletion is retried here before any pass consumes state (review, PR #38).
+    /// An owed boundary wipe, retried before any account-bound read — the account
+    /// key is shared, so while `needsStateReset` stands stored rows would answer
+    /// for the *next* credential (review, PR #38). Returns whether reads may
+    /// proceed; a failed retry leaves the flag standing for the next pass.
+    private func flushOwedReset() -> Bool {
+        guard needsStateReset else { return true }
+        do {
+            try database?.clearSyncState()
+            needsStateReset = false
+            return true
+        } catch {
+            Self.logger.error(
+                "Sync-state reset retry failed; reading fresh for this pass: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// The stored position — unless a boundary wipe is still owed, in which case
+    /// the read goes fresh in memory (the retry lives in `flushOwedReset`).
     private func syncState() -> SyncState {
-        if needsStateReset {
-            do {
-                try database?.clearSyncState()
-                needsStateReset = false
-            } catch {
-                Self.logger.error(
-                    "Sync-state reset retry failed; reading fresh for this pass: \(error.localizedDescription, privacy: .public)")
-                return SyncState(cursor: nil, historyBackfilled: false)
-            }
+        guard flushOwedReset() else {
+            return SyncState(cursor: nil, historyBackfilled: false)
         }
         return database?.readSyncState() ?? SyncState(cursor: nil, historyBackfilled: false)
     }

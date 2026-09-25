@@ -63,9 +63,8 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.3.4 carries the share-handoff contract — SharedDraft's one-shot slot,
-    # SavedPlacesFile for the «Откуда» row, SharedAddress extraction (board `5d`).
-    minorVersion: 0.3.4
+    # 0.3.5 fills the schema's pendingAcceptances table — YD-5's durable half.
+    minorVersion: 0.3.5
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
