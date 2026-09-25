@@ -240,6 +240,7 @@ nonisolated extension RoutePoint {
     init(claimPoint point: Components.Schemas.RoutePoint) {
         let coordinates = point.address.coordinates ?? []
         let parts = AddressParts(
+            building: point.address.building ?? "",
             entrance: point.address.porch ?? "",
             floor: point.address.sfloor ?? "",
             apartment: point.address.sflat ?? "",

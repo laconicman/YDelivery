@@ -44,7 +44,7 @@ extension PointPickerView {
                 } header: {
                     Text("Door details")
                 } footer: {
-                    Text("Entrance, floor, apartment, intercom — what the pin can't know.")
+                    Text("Building, entrance, floor, apartment, intercom — what the pin can't know.")
                 }
 
                 Section {
@@ -111,18 +111,25 @@ extension PointPickerView {
 
     /// The parts of the address the pin cannot know, as compact typed fields — entrance
     /// is text («со двора», «А»), floor and apartment take the number pad, the intercom
-    /// code is its own field (DesignSystem → "Field taxonomy").
+    /// code is its own field (DesignSystem → "Field taxonomy"). `building` leads: it is
+    /// the address's own sub-designation (строение/корпус), the wire's `building` slot —
+    /// the house number itself stays in the resolved address (YD-10).
     struct PartsFields: View {
         @Binding var parts: AddressParts
 
         var body: some View {
-            HStack(spacing: Layout.Spacing.chip) {
-                partField("entrance", text: $parts.entrance)
-                partField("floor", text: $parts.floor)
-                    .keyboardType(.numberPad)
-                partField("apt.", text: $parts.apartment)
-                    .keyboardType(.numberPad)
-                partField("intercom", text: $parts.intercom)
+            VStack(alignment: .leading, spacing: Layout.Spacing.chip) {
+                HStack(spacing: Layout.Spacing.chip) {
+                    partField("bldg.", text: $parts.building)
+                    partField("entrance", text: $parts.entrance)
+                    partField("floor", text: $parts.floor)
+                        .keyboardType(.numberPad)
+                }
+                HStack(spacing: Layout.Spacing.chip) {
+                    partField("apt.", text: $parts.apartment)
+                        .keyboardType(.numberPad)
+                    partField("intercom", text: $parts.intercom)
+                }
             }
             .font(.footnote)
         }

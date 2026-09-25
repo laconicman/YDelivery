@@ -202,6 +202,7 @@ extension ClientController {
         let coordinates: [Double] = [point.longitude, point.latitude]
         let address = Components.Schemas.Address(
             fullname: point.address,
+            building: point.parts?.building.wireTrimmed,
             coordinates: coordinates,
             doorCode: point.parts?.intercom.wireTrimmed,
             porch: point.parts?.entrance.wireTrimmed,

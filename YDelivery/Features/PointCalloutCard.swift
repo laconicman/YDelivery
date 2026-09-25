@@ -60,15 +60,19 @@ enum PointCallout {
         }
     }
 
-    /// The door facts as chips — entrance, floor, flat, intercom (board `4a`'s
-    /// «всегда» line). Absent parts simply don't draw; a point with none shows
-    /// nothing rather than a row of empties.
+    /// The door facts as chips — building, entrance, floor, flat, intercom (board
+    /// `4a`'s «всегда» line). Absent parts simply don't draw; a point with none shows
+    /// nothing rather than a row of empties. `building` leads — it qualifies the
+    /// address itself before the way in.
     struct DoorChips: View {
         let parts: AddressParts?
 
         var body: some View {
             if let parts, !parts.isEmpty {
                 ChipFlow(spacing: Layout.Spacing.unit) {
+                    if !parts.building.isEmpty {
+                        chip { Text("Bldg. \(parts.building)") }
+                    }
                     if !parts.entrance.isEmpty {
                         chip { Text("Entrance \(parts.entrance)") }
                     }

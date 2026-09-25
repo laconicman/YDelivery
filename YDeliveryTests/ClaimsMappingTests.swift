@@ -32,7 +32,7 @@ struct ClaimsMappingTests {
                     latitude: 55.646068,
                     longitude: 37.668176,
                     address: "Москва, ул Москворечье, 6",
-                    parts: AddressParts(entrance: "А", floor: "3", apartment: "301", intercom: "301#"),
+                    parts: AddressParts(building: "2", entrance: "А", floor: "3", apartment: "301", intercom: "301#"),
                     contact: Contact(givenName: "Иван", familyName: "Петров", phone: "+7 912 345-67-89", phoneExtension: "12"),
                     role: .pickup
                 ),
@@ -63,6 +63,8 @@ struct ClaimsMappingTests {
         #expect(first.address.sfloor == "3")
         #expect(first.address.sflat == "301")
         #expect(first.address.doorCode == "301#")
+        #expect(first.address.building == "2",
+                "строение/корпус is the wire's own slot — never folded into fullname (YD-10)")
         #expect(first.contact.name == "Иван Петров", "components joined by the formatter")
         #expect(first.contact.phoneAdditionalCode == "12", "the extension has its own wire field")
         #expect(first._type == .source)

@@ -107,7 +107,7 @@ two-stage stack for what reads as "edit the person" is heavier than the ask
   e.g. Describe scrolled to the contact section, or a lighter sub-editor — once the
   next design round names it.
 
-## YD-10 — The wire's `building` (корпус) field has no UI — **open**
+## YD-10 — The wire's `building` (корпус) field has no UI — **discharged**
 
 `AddressParts` covers entrance/floor/apartment/intercom; the claim schema also takes
 `building` — «строение или корпус» — which the app never collects (DeepWiki consult
@@ -116,11 +116,20 @@ on `openapi.yaml`, 2026-09-18). The no-building warning added beside it catches 
 
 - **Cost:** addresses like «д. 15, корпус 2» can only be typed into the address line,
   not structured — the wire field exists and goes unfilled.
-- **Discharge:** one more `AddressParts` field mapped to `building` at the claim
-  boundary; check whether `porch`/`sfloor`/`sflat` mappings already cover what the
-  field would duplicate. In the same pass, `CLPlacemark.subThoroughfare` carried
-  into `PickedPlace` would replace `lacksBuilding`'s last-token heuristic with a
-  known fact (review, PR #30).
+- **Discharged by:** `AddressParts.building` (Kit `0.3.7`) — collected on the
+  picker's describe stage («bldg.»), rendered as the callout's leading chip,
+  persisted on every point-bearing table (`routeStops`/`savedPlaces`/`draftStops`
+  gained the column), mapped to the wire's `building` on the way out and read back
+  from claim responses. `porch`/`sfloor`/`sflat` do not duplicate it — they are
+  door details, while `building` qualifies the address itself; `destinationKey`
+  folds it in so «Тверская 6, к. 1» and «к. 2» stay distinct memories.
+- **On the `subThoroughfare` half:** carrying `CLPlacemark.subThoroughfare` into
+  `PickedPlace` was considered and deliberately not done — the picker's own
+  `deliveryAddress` composer already writes it into `fullname`, which is exactly
+  the string `lacksBuilding` reads, so the fact reaches the heuristic today. A
+  separate stored copy would only duplicate `fullname`'s content and go stale the
+  moment the sender edits the address; the residual blind spot (pasted or typed
+  addresses) has no placemark to carry the fact from anyway.
 
 ## YD-7 — Post-draft statuses read as unknown — **discharged**
 

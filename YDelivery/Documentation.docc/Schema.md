@@ -112,7 +112,8 @@ provider truth, one writer.
 ### `RouteStop` — the route
 
 One row per stop in travel order. Columns are atomic (Codd): the `AddressParts` bundle
-flattens to `entrance`/`floor`/`apartment`/`intercom`, and the contact flattens to
+flattens to `building`/`entrance`/`floor`/`apartment`/`intercom` (the wire's own
+`building` slot — строение/корпус — is a *part*, not a door detail), and the contact flattens to
 `contactGivenName`/`contactFamilyName`/`contactPhone`/`contactPhoneExtension` — plus
 `contactName`, the formatted whole the wire speaks, deliberately duplicated (name parsing
 is lossy; both forms are kept, as `RoutePoint` already does).
@@ -125,7 +126,7 @@ is lossy; both forms are kept, as `RoutePoint` already does).
 | `role` | TEXT | `pickup` / `dropoff` / `return` — the sender's vocabulary |
 | `latitude`, `longitude` | Double | |
 | `address` | TEXT | The courier-readable whole |
-| `entrance`, `floor`, `apartment`, `intercom` | TEXT? | AddressParts, flattened |
+| `building`, `entrance`, `floor`, `apartment`, `intercom` | TEXT? | AddressParts, flattened |
 | `contactName`, `contactGivenName`, `contactFamilyName`, `contactPhone`, `contactPhoneExtension` | TEXT? | Both forms, one stop |
 
 ### `OrderItem` — the parcel contents
