@@ -137,13 +137,16 @@ honest, but dumb copy if ever surfaced.
   `PlacedClaim.Progress`, where it still means "the draft's job is done" — the
   flow's vocabulary, correctly narrower than history's.
 
-## YD-8 — DMS coordinate strings are a documented parse gap — **open**
+## YD-8 — DMS coordinate strings are a documented parse gap — **discharged**
 
-<doc:LinkGrammars> lists `55 45 20.9N …` as a raw-string row; `MapLink` parses decimal
-pairs and hemisphere suffixes only, and the tests record the gap.
+<doc:LinkGrammars> lists `55 45 20.9N …` as a raw-string row; `MapLink` parsed decimal
+pairs and hemisphere suffixes only, and the tests recorded the gap.
 
-- **Cost:** a pasted DMS pair is not offered at all — rare on phones, common on paper.
-- **Discharge:** a DMS arm in `MapLink`'s raw parser, tests citing the grammar table.
+- **Cost:** a pasted DMS pair was not offered at all — rare on phones, common on paper.
+- **Discharged by:** a DMS arm in `rawCoordinatePair` — two hemisphere-lettered axes
+  (the letter is mandatory and labels the axis, so axis order never gets guessed);
+  minutes and seconds bound at < 60, degrees inside the hemisphere's bound. Tests
+  cite the grammar row and the unprovable declines.
 
 ## YD-11 — `createClaim`/`acceptClaim` still read `.ok` and bury refusals — **discharged**
 
