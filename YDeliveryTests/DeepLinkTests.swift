@@ -11,7 +11,7 @@ import YDeliveryKit
 struct DeepLinkTests {
     private let id = UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")!
 
-    @Test("The grammar's four sentences parse")
+    @Test("The grammar's five sentences parse")
     func grammarParses() throws {
         #expect(DeepLink(url: URL(string: "ydelivery://order/\(id.uuidString)")!)
                 == .order(id))
@@ -20,6 +20,8 @@ struct DeepLinkTests {
                 == .repeatOrder(id))
         #expect(DeepLink(url: URL(string: "ydelivery://repeat?place=\(id.uuidString)")!)
                 == .repeatPlace(id))
+        #expect(DeepLink(url: URL(string: "ydelivery://share")!) == .sharedDraft,
+                "the share extension's handoff verb (board `5d`)")
     }
 
     @Test("What the widget writes is what the app parses")

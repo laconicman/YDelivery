@@ -10,6 +10,7 @@ import Foundation
 ///   ydelivery://compose                 — a fresh draft
 ///   ydelivery://repeat?order=<uuid>     — a draft repeating that order's route
 ///   ydelivery://repeat?place=<uuid>     — a draft delivering to that saved place
+///   ydelivery://share                   — apply the share extension's parked draft
 ///
 /// `host` carries the verb because the scheme is ours alone — there is no
 /// path-style ambiguity to defend against.
@@ -18,6 +19,9 @@ nonisolated enum DeepLink: Equatable {
     case compose
     case repeatOrder(UUID)
     case repeatPlace(UUID)
+    /// The share extension finished — its `SharedDraft` file is the payload;
+    /// the URL only says "look" (board `5d`).
+    case sharedDraft
 
     static let scheme = "ydelivery"
 
@@ -42,6 +46,8 @@ nonisolated enum DeepLink: Equatable {
             } else {
                 return nil
             }
+        case "share":
+            self = .sharedDraft
         default:
             return nil
         }

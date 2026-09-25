@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- The extension's only entitlement: the shared container, where it writes
+     `shared-draft.json` and reads `saved-places.json`. The database is the
+     app's alone — extensions never open it (Schema → the widget contract). -->
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.learnable.YDelivery</string>
+	</array>
+</dict>
+</plist>
