@@ -16,7 +16,29 @@ extension ClientController {
             headers: .init(acceptLanguage: .ru),
             body: .json(Self.createRequest(for: order))
         ))
-        return PlacedClaim(try response.ok.body.json)
+        return try Self.createdClaim(from: response)
+    }
+
+    /// The create answer's refusal half — a documented non-200 carries the provider's
+    /// `{code, message}` («tariff not available», …), which the `.ok` accessor would
+    /// bury at the call where the sender most needs the reason (YD-11).
+    nonisolated static func createdClaim(
+        from response: Operations.CreateClaim.Output
+    ) throws -> PlacedClaim {
+        switch response {
+        case .ok(let ok):
+            return PlacedClaim(try ok.body.json)
+        case .badRequest(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .unauthorized(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .tooManyRequests(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .internalServerError(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .undocumented(let statusCode, _):
+            throw ProviderRefusal(message: nil, status: statusCode)
+        }
     }
 
     /// One look at where the claim stands.
@@ -69,8 +91,36 @@ extension ClientController {
             headers: .init(acceptLanguage: .ru),
             body: .json(.init(version: Int64(version)))
         ))
-        let accepted = try response.ok.body.json
-        return PlacedClaim(id: accepted.id, version: version, status: .init(accepted.status), failureText: nil)
+        return try Self.acceptedClaim(from: response, version: version)
+    }
+
+    /// The accept answer's refusal half. Its 409 is the spec's version/state
+    /// refusal — the provider's own sentence («заявка уже подтверждена», a stale
+    /// `version`, …) is exactly what the unresolved flow needs to hear
+    /// (YD-11).
+    nonisolated static func acceptedClaim(
+        from response: Operations.AcceptClaim.Output,
+        version: Int
+    ) throws -> PlacedClaim {
+        switch response {
+        case .ok(let ok):
+            let accepted = try ok.body.json
+            return PlacedClaim(
+                id: accepted.id, version: version,
+                status: .init(accepted.status), failureText: nil)
+        case .badRequest(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .unauthorized(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .conflict(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .tooManyRequests(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .internalServerError(let error):
+            throw ProviderRefusal(message: (try? error.body.json.message))
+        case .undocumented(let statusCode, _):
+            throw ProviderRefusal(message: nil, status: statusCode)
+        }
     }
 
     /// The create request, flat and complete. The traps stay pinned by tests:

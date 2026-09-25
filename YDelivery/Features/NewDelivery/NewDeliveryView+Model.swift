@@ -916,6 +916,12 @@ extension NewDeliveryView {
             else { return }
             do {
                 let claim = try await watch(claimID)
+                // The provider's terminal word is an answer too — a claim it calls
+                // failed is failed, and «Check again» must not spin on it forever.
+                if claim.status == .failed {
+                    ordering = .failed(claim.failureText ?? reason)
+                    return
+                }
                 guard claim.status == .searching else { return }
                 placedOrder = Order(
                     created: .now,
