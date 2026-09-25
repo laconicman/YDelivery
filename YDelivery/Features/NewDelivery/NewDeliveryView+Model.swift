@@ -610,6 +610,10 @@ extension NewDeliveryView {
         /// claim may exist and a second token would buy a second delivery.
         private(set) var orderRequestID = UUID()
         private var tokenedRequest: OrderRequest?
+        /// True once the claim this token built is provider-terminal — the token's
+        /// dedupe job is done, and a retry of the unchanged draft must mint a fresh
+        /// one rather than replay the dead claim (review, PR #48).
+        private var orderRequestIsTerminated = false
 
         /// Everything that must be true before the confirm button exists — every bound
         /// stated as a sentence the review sheet renders (the wire would otherwise say
@@ -785,10 +789,13 @@ extension NewDeliveryView {
             switch ordering {
             case .idle, .failed:
                 // Safe to rotate here and only here: `.failed` is the state that promises
-                // acceptance was never attempted.
-                if let tokenedRequest, tokenedRequest != request {
+                // acceptance was never attempted. An edited draft must mint a new token —
+                // and so must one whose claim the provider itself ended: replaying that
+                // token answers with the same dead claim (review, PR #48).
+                if let tokenedRequest, tokenedRequest != request || orderRequestIsTerminated {
                     orderRequestID = UUID()
                 }
+                orderRequestIsTerminated = false
                 tokenedRequest = request
                 ordering = .queued
             default:
@@ -841,6 +848,7 @@ extension NewDeliveryView {
                 // (review, PR #22).
                 switch claim.status {
                 case .failed:
+                    orderRequestIsTerminated = true
                     throw OrderingRefused(reason: claim.failureText)
                 case .searching:
                     break // already accepted, and the provider is finding a courier
@@ -916,6 +924,16 @@ extension NewDeliveryView {
             else { return }
             do {
                 let claim = try await watch(claimID)
+                // The provider's terminal word is an answer too — a claim it calls
+                // failed is failed, and «Check again» must not spin on it forever.
+                // The token is spent along with it (review, PR #48).
+                if claim.status == .failed {
+                    orderRequestIsTerminated = true
+                    ordering = .failed(
+                        claim.failureText
+                            ?? String(localized: "The provider ended this order."))
+                    return
+                }
                 guard claim.status == .searching else { return }
                 placedOrder = Order(
                     created: .now,

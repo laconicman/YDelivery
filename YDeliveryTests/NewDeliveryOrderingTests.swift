@@ -1,5 +1,7 @@
 import Foundation
+import OpenAPIRuntime
 import Testing
+import YandexDeliveryExpressAPI
 import YDeliveryKit
 @testable import YDelivery
 
@@ -575,6 +577,130 @@ struct NewDeliveryOrderingTests {
         model.confirmOrder()
         #expect(model.ordering == .queued, "a retry re-queues the same draft")
         #expect(model.orderRequestID == first, "same draft, same token — no second courier")
+    }
+
+    // MARK: The money calls' refusal halves (YD-11)
+
+    @Test("A refused create keeps the provider's words")
+    func createRefusalKeepsWords() {
+        let refusal = Operations.CreateClaim.Output.badRequest(
+            .init(body: .json(.init(code: "validation_failed", message: "Тариф недоступен")))
+        )
+        do {
+            _ = try ClientController.createdClaim(from: refusal)
+            Issue.record("a refusal must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.errorDescription == "Тариф недоступен")
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
+    }
+
+    @Test("A refused accept keeps the provider's words — 409 is the stale-version case")
+    func acceptConflictKeepsWords() {
+        let refusal = Operations.AcceptClaim.Output.conflict(
+            .init(body: .json(.init(code: "inappropriate_status", message: "Заявка уже подтверждена")))
+        )
+        do {
+            _ = try ClientController.acceptedClaim(from: refusal, version: 3)
+            Issue.record("a refusal must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.errorDescription == "Заявка уже подтверждена")
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
+    }
+
+    @Test("An undocumented accept status keeps its code")
+    func acceptUndocumentedKeepsCode() {
+        let output = Operations.AcceptClaim.Output.undocumented(statusCode: 503, .init())
+        do {
+            _ = try ClientController.acceptedClaim(from: output, version: 1)
+            Issue.record("an undocumented status must throw")
+        } catch let error as ProviderRefusal {
+            #expect(error.status == 503)
+        } catch {
+            Issue.record("expected ProviderRefusal, got \(error)")
+        }
+    }
+
+    @Test("A confirmed accept wraps the wire answer under the caller's version")
+    func acceptOkWrapsTheAnswer() throws {
+        let output = Operations.AcceptClaim.Output.ok(.init(body: .json(.init(
+            id: "claim-9",
+            skipClientNotify: false,
+            status: .accepted,
+            userRequestRevision: "r1",
+            version: 4
+        ))))
+        let claim = try ClientController.acceptedClaim(from: output, version: 7)
+        #expect(claim.id == "claim-9")
+        #expect(claim.status == .searching)
+        #expect(claim.version == 7)
+    }
+
+    @Test("A provider-failed reconcile lands failed, not an eternal «Check again»")
+    func reconcileConvergesOnProviderFailure() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { _ in throw Unexpected() },
+            accept: { _, _ in throw Unexpected() },
+            clock: TestClock()
+        )
+        guard case .unresolved = model.ordering else {
+            Issue.record("expected unresolved after the lost accept, got \(model.ordering)")
+            return
+        }
+
+        await model.reconcileUnresolved(watch: { _ in
+            PlacedClaim(id: "claim-1", version: 1, status: .failed, failureText: "Оффер истёк")
+        })
+        #expect(model.ordering == .failed("Оффер истёк"))
+    }
+
+    @Test("Try again after a provider-terminal failure mints a fresh token")
+    func requestIDRenewsAfterProviderFailure() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { _ in throw Unexpected() },
+            accept: { _, _ in throw Unexpected() },
+            clock: TestClock()
+        )
+        await model.reconcileUnresolved(watch: { _ in
+            PlacedClaim(id: "claim-1", version: 1, status: .failed, failureText: "Оффер истёк")
+        })
+        #expect(model.ordering == .failed("Оффер истёк"))
+
+        model.confirmOrder()
+        #expect(model.ordering == .queued)
+        #expect(model.orderRequestID != first, "the dead claim's token must not be replayed")
+    }
+
+    @Test("Try again after a transport failure keeps the token — the claim may exist")
+    func requestIDKeepsAfterTransportFailure() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+
+        await model.placeOrder(
+            create: { _, _ in throw Unexpected() },
+            watch: { _ in throw Unexpected() },
+            accept: { _, _ in throw Unexpected() },
+            clock: TestClock()
+        )
+
+        model.confirmOrder()
+        #expect(model.ordering == .queued)
+        #expect(model.orderRequestID == first, "a maybe-never-sent create must retry under the same token")
     }
 
     private struct Unexpected: Error {}
