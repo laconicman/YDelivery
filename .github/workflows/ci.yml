@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # The committed .xcodeproj is authoritative — no xcodegen step.
+      # -skipPackagePluginValidation: the OpenAPI generator's trust prompt would
+      # otherwise hang a non-interactive build (YD-1's own note).
+      - name: Build and test
+        run: |
+          xcodebuild test \
+            -scheme YDelivery \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -skipMacroValidation \
+            -skipPackagePluginValidation

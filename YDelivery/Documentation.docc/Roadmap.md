@@ -132,7 +132,7 @@ the corp-visibility wire test) stand open in <doc:Collaboration>.
   its own repo, evaluated with DeepWiki before adoption; unlocks background Live Activity
   updates.
 - Handoff codes, proof of delivery, edit/return, `delivery-methods` windows.
-- CI (build + tests on push); a Mac target if the product earns one.
+- A Mac target if the product earns one.
 - **Extract the map components into a public SPM** once the destination design has shipped —
   point picker, pin taxonomy, link-paste geocoding. The demo repo becomes the second
   consumer (its own roadmap wants maps); before that, extraction is speculation.
