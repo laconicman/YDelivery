@@ -367,6 +367,17 @@ which needs no write authority at all.
 shared row. Shared surfaces render "status as of `providerObservedAt`" — staleness is
 displayed, never hidden (author's decision).
 
+**Storage is REAL unix-epoch seconds, and the models must say so.** `Date`'s default
+`QueryBindable`/`QueryDecodable` is ISO-8601 *text* — an engine read of any `Date` column
+stored as a number decode-fails, and the failure is not cosmetic: the record provider
+reports the row missing and the pending change is *removed*, so a date-carrying row
+silently never syncs (found implementing the share seam, `sqlite-data` 1.12.0). Every
+`Date`/`Date?` column on every `@Table` therefore declares
+`@Column(as: Date.UnixEpochSecondsRepresentation.self)` — the Kit's own representation
+binding `.double(timeIntervalSince1970)`, matching the DDL's REAL columns and the hand
+SQL's epoch reads exactly. The package's `Date.UnixTimeRepresentation` binds *integer*
+seconds — wrong affinity and precision for this schema.
+
 ## Migration — the JSON stores into tables
 
 The substrate's rule applies: **bytes are never destroyed**. First launch under the new

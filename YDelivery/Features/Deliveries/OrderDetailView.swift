@@ -1,3 +1,5 @@
+import SFSafeSymbols
+import SQLiteData
 import SwiftUI
 import YDeliveryKit
 
@@ -11,6 +13,14 @@ struct OrderDetailView: View {
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @State private var model = Model()
+    /// The live share's record while its sheet is up — `CloudSharingView` binds
+    /// to it, and a fresh tap re-asks the seam (an already-shared order returns
+    /// the same `CKShare`, so the button serves "share" and "manage" alike).
+    @State private var sharedRecord: SharedRecord?
+    /// The share ask's refusal — rendered as an alert: a tap that failed must
+    /// say so rather than silently produce no sheet.
+    @State private var shareError: String?
+    @State private var shareAskInFlight = false
 
     var body: some View {
         Content(
@@ -24,12 +34,85 @@ struct OrderDetailView: View {
             confirm: { model.confirm(using: cancel) }
         )
         .navigationTitle(Text("Order"))
+        .toolbar {
+            if store.canShareOrders {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: shareOrder) {
+                        if shareAskInFlight {
+                            ProgressView()
+                        } else {
+                            Label("Share order",
+                                  systemSymbol: .personCropCircleBadgePlus)
+                        }
+                    }
+                    .disabled(shareAskInFlight)
+                }
+            }
+        }
+        .sheet(isPresented: sheetPresented) {
+            if let sharedRecord, let syncEngine = store.syncEngine {
+                // The engine is passed explicitly: the view's default pulls a
+                // @Dependency this app never configures. A saved share is the
+                // done signal — the controller's own error UI owns failures,
+                // so only success closes the sheet.
+                CloudSharingView(
+                    sharedRecord: sharedRecord,
+                    didFinish: { result in
+                        if case .success = result { self.sharedRecord = nil }
+                    },
+                    syncEngine: syncEngine
+                )
+            }
+        }
+        .alert(
+            Text("Sharing failed"),
+            isPresented: shareErrorPresented,
+            actions: { Button("OK", role: .cancel) {} },
+            message: { Text(shareError ?? "") }
+        )
         .onAppear {
             if order.isCancellable {
                 model.load(using: loadCancellation, onTerminal: recordCancelled)
             }
         }
         .onDisappear { model.stop() }
+    }
+
+    /// Sheet state folded into the one record that drives it — a second flag
+    /// could disagree with it.
+    private var sheetPresented: Binding<Bool> {
+        Binding(
+            get: { sharedRecord != nil },
+            set: { if !$0 { sharedRecord = nil } }
+        )
+    }
+
+    private var shareErrorPresented: Binding<Bool> {
+        Binding(
+            get: { shareError != nil },
+            set: { if !$0 { shareError = nil } }
+        )
+    }
+
+    /// The share ask — the seam flushes pending sync first, so a just-placed
+    /// order can still be invited to. The title is the sender's own order
+    /// number where one was written — what the recipient sees in the invite.
+    private func shareOrder() {
+        guard !shareAskInFlight else { return }
+        shareAskInFlight = true
+        Task {
+            defer { shareAskInFlight = false }
+            do {
+                sharedRecord = try await store.shareOrder(
+                    order.id,
+                    title: store.orderNumber(for: order.id)
+                        .map { String(localized: "Order №\($0)") }
+                        ?? String(localized: "Order"))
+            } catch {
+                shareError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+        }
     }
 
     /// "Try again" is whatever the current state needs — re-asking terms after a
