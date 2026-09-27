@@ -13,14 +13,6 @@ struct OrderDetailView: View {
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @State private var model = Model()
-    /// The live share's record while its sheet is up — `CloudSharingView` binds
-    /// to it, and a fresh tap re-asks the seam (an already-shared order returns
-    /// the same `CKShare`, so the button serves "share" and "manage" alike).
-    @State private var sharedRecord: SharedRecord?
-    /// The share ask's refusal — rendered as an alert: a tap that failed must
-    /// say so rather than silently produce no sheet.
-    @State private var shareError: String?
-    @State private var shareAskInFlight = false
 
     var body: some View {
         Content(
@@ -38,19 +30,19 @@ struct OrderDetailView: View {
             if store.canShareOrders {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: shareOrder) {
-                        if shareAskInFlight {
+                        if model.shareAskInFlight {
                             ProgressView()
                         } else {
                             Label("Share order",
                                   systemSymbol: .personCropCircleBadgePlus)
                         }
                     }
-                    .disabled(shareAskInFlight)
+                    .disabled(model.shareAskInFlight)
                 }
             }
         }
         .sheet(isPresented: sheetPresented) {
-            if let sharedRecord, let syncEngine = store.syncEngine {
+            if let sharedRecord = model.sharedRecord, let syncEngine = store.syncEngine {
                 // The engine is passed explicitly: the view's default pulls a
                 // @Dependency this app never configures. A saved share is the
                 // done signal — the controller's own error UI owns failures,
@@ -58,7 +50,7 @@ struct OrderDetailView: View {
                 CloudSharingView(
                     sharedRecord: sharedRecord,
                     didFinish: { result in
-                        if case .success = result { self.sharedRecord = nil }
+                        if case .success = result { model.dismissShareSheet() }
                     },
                     syncEngine: syncEngine
                 )
@@ -68,7 +60,7 @@ struct OrderDetailView: View {
             Text("Sharing failed"),
             isPresented: shareErrorPresented,
             actions: { Button("OK", role: .cancel) {} },
-            message: { Text(shareError ?? "") }
+            message: { Text(model.shareError ?? "") }
         )
         .onAppear {
             if order.isCancellable {
@@ -82,15 +74,15 @@ struct OrderDetailView: View {
     /// could disagree with it.
     private var sheetPresented: Binding<Bool> {
         Binding(
-            get: { sharedRecord != nil },
-            set: { if !$0 { sharedRecord = nil } }
+            get: { model.sharedRecord != nil },
+            set: { if !$0 { model.dismissShareSheet() } }
         )
     }
 
     private var shareErrorPresented: Binding<Bool> {
         Binding(
-            get: { shareError != nil },
-            set: { if !$0 { shareError = nil } }
+            get: { model.shareError != nil },
+            set: { if !$0 { model.dismissShareError() } }
         )
     }
 
@@ -98,21 +90,12 @@ struct OrderDetailView: View {
     /// order can still be invited to. The title is the sender's own order
     /// number where one was written — what the recipient sees in the invite.
     private func shareOrder() {
-        guard !shareAskInFlight else { return }
-        shareAskInFlight = true
-        Task {
-            defer { shareAskInFlight = false }
-            do {
-                sharedRecord = try await store.shareOrder(
-                    order.id,
-                    title: store.orderNumber(for: order.id)
-                        .map { String(localized: "Order №\($0)") }
-                        ?? String(localized: "Order"))
-            } catch {
-                shareError = (error as? LocalizedError)?.errorDescription
-                    ?? error.localizedDescription
-            }
-        }
+        model.share(
+            order.id,
+            title: store.orderNumber(for: order.id)
+                .map { String(localized: "Order №\($0)") }
+                ?? String(localized: "Order"),
+            using: { try await store.shareOrder($0, title: $1) })
     }
 
     /// "Try again" is whatever the current state needs — re-asking terms after a
@@ -201,6 +184,42 @@ extension OrderDetailView {
         /// Whether post-answer work is in flight — the screen uses it to keep a
         /// live retry from being tapped a second time (review, PR #32).
         var isReconciling: Bool { reconciliation != nil }
+
+        /// The live share's record while its sheet is up — `CloudSharingView`
+        /// binds to it, and a fresh tap re-asks the seam (an already-shared
+        /// order returns the same `CKShare`, so the button serves "share" and
+        /// "manage" alike).
+        private(set) var sharedRecord: SharedRecord?
+        /// The share ask's refusal — rendered as an alert: a tap that failed
+        /// must say so rather than silently produce no sheet.
+        private(set) var shareError: String?
+        /// The ask itself, owned like ``reconciliation``: a share creation must
+        /// finish even if this screen leaves — abandoning it mid-flight is how
+        /// a created share meets no sheet (rule 6, review PR #56).
+        private var shareAsk: Task<Void, Never>?
+        var shareAskInFlight: Bool { shareAsk != nil }
+
+        /// The share verb — the store's seam passed in by the view, like every
+        /// verb here. Single-flight: a second tap while one runs does nothing
+        /// (the button disables too, but the gate is what survives a race).
+        func share(_ id: Order.ID, title: String,
+                   using ask: @escaping (Order.ID, String) async throws -> SharedRecord) {
+            guard shareAsk == nil else { return }
+            shareAsk = Task {
+                defer { shareAsk = nil }
+                do {
+                    sharedRecord = try await ask(id, title)
+                } catch {
+                    shareError = (error as? LocalizedError)?.errorDescription
+                        ?? error.localizedDescription
+                }
+            }
+        }
+
+        /// The sheet's done — a saved share or a swipe-away; the record's job
+        /// ended either way.
+        func dismissShareSheet() { sharedRecord = nil }
+        func dismissShareError() { shareError = nil }
 
         enum Cancellation: Hashable {
             /// Asking the provider what cancelling costs.

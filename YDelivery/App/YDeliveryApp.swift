@@ -62,10 +62,10 @@ struct YDeliveryApp: App {
         _activities = State(initialValue: LiveActivityController())
         // The share-acceptance bridge — the delegates are UIKit-instantiated,
         // so the database reaches them through this property, not an init.
-        appDelegate.acceptShare = { metadata in
-            guard let database else { throw StoreController.StoreUnavailable() }
-            try await database.acceptShare(metadata: metadata)
-        }
+        // It goes through the store, not the database: accepting also re-reads
+        // the store so the just-joined order renders without waiting for the
+        // next refresh (review, PR #56).
+        appDelegate.acceptShare = { try await store.acceptShare(metadata: $0) }
         #if DEBUG
         Task { await Self.seedFieldsIfFlagged(store) }
         #endif

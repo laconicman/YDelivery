@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import Observation
 import OSLog
@@ -512,6 +513,17 @@ final class StoreController {
     func shareOrder(_ id: Order.ID, title: String) async throws -> SharedRecord {
         guard let database else { throw StoreUnavailable() }
         return try await database.shareOrder(id: id, title: title)
+    }
+
+    /// The recipient side of the door — the scene delegate's tapped share URL
+    /// lands here. Accepts through the engine (which pulls the shared zone),
+    /// then re-reads the store: ``orders`` is published by ``refresh()`` rather
+    /// than observed, so without this pass the just-joined order waits in the
+    /// database for the next refresh to notice it (review, PR #56).
+    func acceptShare(metadata: CKShare.Metadata) async throws {
+        guard let database else { throw StoreUnavailable() }
+        try await database.acceptShare(metadata: metadata)
+        await refresh()
     }
 
     struct StoreUnavailable: LocalizedError {
