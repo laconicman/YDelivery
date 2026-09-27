@@ -167,19 +167,23 @@ extension OrderChatView {
             guard !isSending else { return false }
             isSending = true
             defer { isSending = false }
+            sendError = nil
             do {
                 try await write()
             } catch {
                 sendError = Self.describe(error)
                 return false
             }
-            sendError = nil
             generation += 1
+            let born = generation
             do {
-                messages = try await reload()
+                let fetched = try await reload()
+                guard born == generation else { return true }
+                messages = fetched
                 loadError = nil
                 reaskMissingPhotos()
             } catch {
+                guard born == generation else { return true }
                 loadError = Self.describe(error)
             }
             return true
@@ -192,10 +196,16 @@ extension OrderChatView {
             photoFetch = fetch
             guard photoData[id] == nil, !photoRequests.contains(id) else { return }
             photoRequests.insert(id)
+            let born = generation
             Task {
-                defer { photoRequests.remove(id) }
-                if let data = try? await fetch(id) {
+                let data = try? await fetch(id)
+                photoRequests.remove(id)
+                if let data {
                     photoData[id] = data
+                } else if born != generation {
+                    // The stream refreshed mid-flight — this nil is stale, so
+                    // one re-ask under the new epoch heals the placeholder.
+                    photo(id, using: fetch)
                 }
             }
         }
