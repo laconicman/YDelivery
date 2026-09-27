@@ -1,6 +1,8 @@
+import CloudKit
 import Foundation
 import Observation
 import OSLog
+import SQLiteData
 import WidgetKit
 import YDeliveryKit
 
@@ -488,6 +490,40 @@ final class StoreController {
                     "Draft delete failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    // MARK: Order sharing — the private CKShare door (doc:Collaboration)
+
+    /// Whether the collaboration affordance can work at all — hidden when the
+    /// database never resolved, like ``canSavePlaces``.
+    var canShareOrders: Bool { database != nil }
+
+    /// The engine `CloudSharingView` binds its participant actions to — its
+    /// default pulls a `@Dependency` this app never configures, so the sheet
+    /// must be handed the real one explicitly. Nil where the database — or the
+    /// engine's own construction — never resolved; the share ask has already
+    /// refused by then, so the sheet cannot be up.
+    var syncEngine: SyncEngine? { try? database?.syncEngine }
+
+    /// Shares one order privately — or returns its existing share, so the one
+    /// button serves "share" and "manage sharing" alike. `title` is the
+    /// recipient-facing name the invitation shows. Throws: a share that failed
+    /// is one the sender must see fail, not a spinner that pretends (same rule
+    /// as ``save(_:)``).
+    func shareOrder(_ id: Order.ID, title: String) async throws -> SharedRecord {
+        guard let database else { throw StoreUnavailable() }
+        return try await database.shareOrder(id: id, title: title)
+    }
+
+    /// The recipient side of the door — the scene delegate's tapped share URL
+    /// lands here. Accepts through the engine (which pulls the shared zone),
+    /// then re-reads the store: ``orders`` is published by ``refresh()`` rather
+    /// than observed, so without this pass the just-joined order waits in the
+    /// database for the next refresh to notice it (review, PR #56).
+    func acceptShare(metadata: CKShare.Metadata) async throws {
+        guard let database else { throw StoreUnavailable() }
+        try await database.acceptShare(metadata: metadata)
+        await refresh()
     }
 
     struct StoreUnavailable: LocalizedError {

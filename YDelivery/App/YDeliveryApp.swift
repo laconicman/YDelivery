@@ -7,6 +7,11 @@ import YDeliveryKit
 /// it spans — it reads the session, writes the store, and views never see either wire.
 @main
 struct YDeliveryApp: App {
+    /// The app delegate exists for one job: routing scene configuration so
+    /// share-acceptance URLs reach `YDeliverySceneDelegate`. `acceptShare` is
+    /// filled below — UIKit's own instantiation is why the database arrives
+    /// as a property rather than an init parameter.
+    @UIApplicationDelegateAdaptor(YDeliveryAppDelegate.self) private var appDelegate
     @State private var session: ClientController
     @State private var store: StoreController
     @State private var sync: ClaimsSyncController
@@ -55,6 +60,12 @@ struct YDeliveryApp: App {
         _sync = State(initialValue: sync)
         _notifications = State(initialValue: notifications)
         _activities = State(initialValue: LiveActivityController())
+        // The share-acceptance bridge — the delegates are UIKit-instantiated,
+        // so the database reaches them through this property, not an init.
+        // It goes through the store, not the database: accepting also re-reads
+        // the store so the just-joined order renders without waiting for the
+        // next refresh (review, PR #56).
+        appDelegate.acceptShare = { try await store.acceptShare(metadata: $0) }
         #if DEBUG
         Task { await Self.seedFieldsIfFlagged(store) }
         #endif

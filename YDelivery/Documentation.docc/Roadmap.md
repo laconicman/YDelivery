@@ -117,9 +117,14 @@ sharing surface — re-check each WWDC (still private-only, verified 2026-09-23)
 **Schema landed 2026-09-25 — <doc:Schema> is the contract the migration implements**:
 `Order` as the share root, single-FK children below it, `*Ref` value references where
 the one-FK rule forbids a second constraint, and the provider mirror / event feed /
-collaborative tables carrying the authority split in the schema itself. What remains
-gated is implementation, not design — the live-device verifications (share acceptance,
-the corp-visibility wire test) stand open in <doc:Collaboration>.
+collaborative tables carrying the authority split in the schema itself. **The share
+door landed 2026-09-25** — `shareOrder`/`unshareOrder`/`orderIsShared`/`acceptShare`
+on `AppDatabase` (YDeliveryKit 0.3.13), the order-detail affordance, `CloudSharingView`,
+and the scene-delegate acceptance path — with one contract fix found wiring it: every
+`Date` column declares `UnixEpochSecondsRepresentation`, or the engine decodes rows as
+missing and they silently never sync (<doc:Schema> → Freshness). What remains is
+device work, not design — the live verifications (share acceptance end-to-end, the
+corp-visibility wire test) stand open in <doc:Collaboration>.
 
 ## Later — design Phase 4 and beyond
 
