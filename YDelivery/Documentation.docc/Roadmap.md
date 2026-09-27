@@ -119,10 +119,14 @@ sharing surface — re-check each WWDC (still private-only, verified 2026-09-23)
 the one-FK rule forbids a second constraint, and the provider mirror / event feed /
 collaborative tables carrying the authority split in the schema itself. **The share
 door landed 2026-09-25** — `shareOrder`/`unshareOrder`/`orderIsShared`/`acceptShare`
-on `AppDatabase` (YDeliveryKit 0.3.13), the order-detail affordance, `CloudSharingView`,
+on `AppDatabase` (YDeliveryKit 0.3.14), the order-detail affordance, `CloudSharingView`,
 and the scene-delegate acceptance path — with one contract fix found wiring it: every
 `Date` column declares `UnixEpochSecondsRepresentation`, or the engine decodes rows as
-missing and they silently never sync (<doc:Schema> → Freshness). What remains is
+missing and they silently never sync (<doc:Schema> → Freshness). **The chat door
+followed** (0.3.15): `postMessage`/`postPhotoMessage`/`messages`/`attachmentData`,
+the order detail's Chat row, and `OrderChatView` — text, photos, and
+`receptionConfirmed` riding one append-only stream, with the contract's
+`MAX`/`COALESCE` list ordering now real in `readOrders`. What remains is
 device work, not design — the live verifications (share acceptance end-to-end, the
 corp-visibility wire test) stand open in <doc:Collaboration>.
 

@@ -15,6 +15,10 @@ extension OrderDetailView {
         /// The recipient-facing share text, composed upstream — empty hides
         /// the row rather than offering a blank share (board `5d`).
         var shareText: String = ""
+        /// Whether the order's chat exists to enter — the store's availability,
+        /// not a shared-ness verdict (a private order's stream is its owner's
+        /// notes until someone is invited).
+        var canChat: Bool = false
         let cancellation: Model.Cancellation
         /// Post-answer work is in flight — the retry stays visible but refuses a
         /// second tap, so the button says so rather than swallowing it (PR #32).
@@ -78,6 +82,16 @@ extension OrderDetailView {
                         ShareLink(item: shareText) {
                             Label("Share with the recipient",
                                   systemSymbol: .squareAndArrowUp)
+                        }
+                    }
+                }
+
+                // The order's stream — the share's conversation side. Owner and
+                // participant read the same rows; posts are append-only.
+                if canChat {
+                    Section {
+                        NavigationLink(destination: OrderChatView(order: order)) {
+                            Label("Chat", systemSymbol: .textBubble)
                         }
                     }
                 }

@@ -526,6 +526,43 @@ final class StoreController {
         await refresh()
     }
 
+    // MARK: The order's chat — the participant-writable stream (doc:Schema)
+
+    /// Whether the chat surface can exist at all — same gate as sharing.
+    var canChatOrders: Bool { database != nil }
+
+    /// One order's stream, oldest first — the chat screen's read. Errors travel
+    /// up: a stream that cannot be read renders its failure, not an empty chat.
+    func messages(for orderID: Order.ID) async throws -> [OrderMessage] {
+        guard let database else { throw StoreUnavailable() }
+        return try await database.messages(orderID: orderID)
+    }
+
+    /// Appends to the stream — text, or a structured kind like
+    /// `OrderMessage.Kind.receptionConfirmed`. `authorHint` stays nil today:
+    /// no account display-name exists in the app yet, and the record's
+    /// `createdBy` carries the real attribution regardless.
+    func postMessage(_ message: OrderMessage) async throws {
+        guard let database else { throw StoreUnavailable() }
+        try database.postMessage(message)
+    }
+
+    /// The photo post — attachment, blob, and carrying message in one Kit
+    /// transaction (the same-order rule holds by construction there).
+    func postPhotoMessage(
+        orderID: Order.ID, data: Data, caption: String?
+    ) async throws {
+        guard let database else { throw StoreUnavailable() }
+        try database.postPhotoMessage(
+            orderID: orderID, data: data, caption: caption)
+    }
+
+    /// A photo's bytes, fetched lazily by id — the list never drags image data.
+    func attachmentData(_ id: UUID) async throws -> Data? {
+        guard let database else { throw StoreUnavailable() }
+        return try database.attachmentData(id)
+    }
+
     struct StoreUnavailable: LocalizedError {
         var errorDescription: String? {
             String(localized: "Shared storage is unavailable on this install.")

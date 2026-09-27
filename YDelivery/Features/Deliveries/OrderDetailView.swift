@@ -20,6 +20,7 @@ struct OrderDetailView: View {
             fields: store.fields(for: order.id),
             shareText: RecipientShareText.text(
                 for: order, orderNumber: store.orderNumber(for: order.id)),
+            canChat: store.canChatOrders,
             cancellation: model.cancellation,
             reconciling: model.isReconciling,
             retry: retryCancellation,
