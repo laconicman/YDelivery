@@ -68,11 +68,11 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.3.14 carries the per-order share door — shareOrder/unshareOrder/
-    # orderIsShared/acceptShare on AppDatabase, the epoch representation
-    # every synchronized Date column declares, and an acceptShare that
-    # pulls the accepted zone even when start() is mid-flight.
-    minorVersion: 0.3.14
+    # 0.3.15 carries the share door and the chat door — shareOrder/
+    # acceptShare on AppDatabase, the epoch representation every
+    # synchronized Date column declares, and the participant stream:
+    # postMessage/postPhotoMessage/messages/attachmentData.
+    minorVersion: 0.3.15
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
