@@ -535,7 +535,7 @@ final class StoreController {
     /// up: a stream that cannot be read renders its failure, not an empty chat.
     func messages(for orderID: Order.ID) async throws -> [OrderMessage] {
         guard let database else { throw StoreUnavailable() }
-        return try await database.messages(orderID: orderID)
+        return try await Self.readMessages(database, orderID: orderID)
     }
 
     /// Appends to the stream — text, or a structured kind like
@@ -544,7 +544,7 @@ final class StoreController {
     /// `createdBy` carries the real attribution regardless.
     func postMessage(_ message: OrderMessage) async throws {
         guard let database else { throw StoreUnavailable() }
-        try database.postMessage(message)
+        try await Self.writeMessage(message, to: database)
     }
 
     /// The photo post — attachment, blob, and carrying message in one Kit
@@ -553,14 +553,14 @@ final class StoreController {
         orderID: Order.ID, data: Data, caption: String?
     ) async throws {
         guard let database else { throw StoreUnavailable() }
-        try database.postPhotoMessage(
-            orderID: orderID, data: data, caption: caption)
+        try await Self.writePhotoMessage(
+            orderID: orderID, data: data, caption: caption, to: database)
     }
 
     /// A photo's bytes, fetched lazily by id — the list never drags image data.
     func attachmentData(_ id: UUID) async throws -> Data? {
         guard let database else { throw StoreUnavailable() }
-        return try database.attachmentData(id)
+        return try await Self.readAttachment(id, in: database)
     }
 
     struct StoreUnavailable: LocalizedError {
@@ -621,5 +621,34 @@ final class StoreController {
         _ database: AppDatabase
     ) async throws -> [OrderCustomField] {
         try database.allOrderCustomFields()
+    }
+
+    @concurrent
+    private static func readMessages(
+        _ database: AppDatabase, orderID: Order.ID
+    ) async throws -> [OrderMessage] {
+        try database.messages(orderID: orderID)
+    }
+
+    @concurrent
+    private static func writeMessage(
+        _ message: OrderMessage, to database: AppDatabase
+    ) async throws {
+        try database.postMessage(message)
+    }
+
+    @concurrent
+    private static func writePhotoMessage(
+        orderID: Order.ID, data: Data, caption: String?, to database: AppDatabase
+    ) async throws {
+        try database.postPhotoMessage(
+            orderID: orderID, data: data, caption: caption)
+    }
+
+    @concurrent
+    private static func readAttachment(
+        _ id: UUID, in database: AppDatabase
+    ) async throws -> Data? {
+        try database.attachmentData(id)
     }
 }

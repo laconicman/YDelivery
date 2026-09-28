@@ -37,9 +37,11 @@ struct OrderChatView: View {
     }
 
     /// Only a landed post consumes the draft — a failed send keeps the typed
-    /// text so retrying is not a retype (SettingsView's own rule).
+    /// text so retrying is not a retype (SettingsView's own rule). And only an
+    /// untouched draft clears: typing mid-send is newer intent, not residue.
     private func sendText() {
-        let text = composer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let draft = composer
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         Task {
             let sent = await model.post(
@@ -47,7 +49,7 @@ struct OrderChatView: View {
                     orderID: order.id, kind: OrderMessage.Kind.text, text: text),
                 using: store.postMessage,
                 then: { try await store.messages(for: order.id) })
-            if sent { composer = "" }
+            if sent, composer == draft { composer = "" }
         }
     }
 
@@ -62,13 +64,28 @@ struct OrderChatView: View {
         }
     }
 
-    private func sendPhoto(_ data: Data) {
+    /// The picker's selection → bytes → the post. A transfer that never
+    /// delivers `Data` surfaces as a send failure, not silence.
+    private func sendPhoto(_ item: PhotosPickerItem) {
         Task {
-            _ = await model.postPhoto(
-                orderID: order.id, data: data,
-                using: store.postPhotoMessage,
-                then: { try await store.messages(for: order.id) })
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self)
+                else { throw PhotoTransferFailed() }
+                _ = await model.postPhoto(
+                    orderID: order.id, data: data,
+                    using: store.postPhotoMessage,
+                    then: { try await store.messages(for: order.id) })
+            } catch {
+                model.noteSendError(error)
+            }
         }
+    }
+}
+
+/// The picker agreed and delivered nothing — an empty pick, not a post.
+private struct PhotoTransferFailed: LocalizedError {
+    var errorDescription: String? {
+        String(localized: "The selected photo could not be loaded.")
     }
 }
 
@@ -88,20 +105,36 @@ extension OrderChatView {
         private(set) var isSending = false
 
         private var loading: Task<Void, Never>?
+        /// Stream-writer epoch — a superseded `load` must never overwrite a
+        /// post's fresher snapshot (the same race `OrderDetailView` guards).
+        private var generation = 0
+        /// The epoch whose read actually published `messages` — a superseded
+        /// write still lands when the newer attempt produced nothing (a failed
+        /// refresh must not cost a post its snapshot).
+        private var appliedStream = 0
         /// A photo fetch already asked for — rows re-ask on every render, and
         /// the fetch itself is what must not repeat.
-        private var photoRequests: Set<UUID> = []
+        private(set) var photoRequests: Set<UUID> = []
+        /// The payload fetcher, remembered so a stream reload can re-ask for
+        /// references still missing bytes — a placeholder must heal on pull.
+        private var photoFetch: ((UUID) async throws -> Data?)?
 
         func load(using fetch: @escaping () async throws -> [OrderMessage]) async {
             loading?.cancel()
+            generation += 1
+            let born = generation
             loading = Task {
-                defer { loading = nil }
+                defer { if born == generation { loading = nil } }
                 do {
-                    messages = try await fetch()
+                    let fetched = try await fetch()
+                    guard appliedStream <= born else { return }
+                    messages = fetched
+                    appliedStream = born
                     loadError = nil
+                    reaskMissingPhotos()
                 } catch {
-                    loadError = (error as? LocalizedError)?.errorDescription
-                        ?? error.localizedDescription
+                    guard appliedStream <= born, !Task.isCancelled else { return }
+                    loadError = Self.describe(error)
                 }
             }
             await loading?.value
@@ -110,24 +143,14 @@ extension OrderChatView {
         /// Posts one entry and re-reads the stream — the read is local and
         /// cheap, and it is how the posted row arrives in its sorted seat.
         /// Returns whether the post landed; the caller consumes its draft then.
+        /// A landed post whose re-read failed still counts: retrying a send
+        /// that already wrote would duplicate the row.
         func post(
             _ message: OrderMessage,
             using post: (OrderMessage) async throws -> Void,
             then reload: () async throws -> [OrderMessage]
         ) async -> Bool {
-            guard !isSending else { return false }
-            isSending = true
-            defer { isSending = false }
-            do {
-                try await post(message)
-                messages = try await reload()
-                sendError = nil
-                return true
-            } catch {
-                sendError = (error as? LocalizedError)?.errorDescription
-                    ?? error.localizedDescription
-                return false
-            }
+            await runPost({ try await post(message) }, then: reload)
         }
 
         func postPhoto(
@@ -135,33 +158,84 @@ extension OrderChatView {
             using post: (Order.ID, Data, String?) async throws -> Void,
             then reload: () async throws -> [OrderMessage]
         ) async -> Bool {
+            await runPost({ try await post(orderID, data, nil) }, then: reload)
+        }
+
+        /// Single-flight write → re-read. Two failure doors, kept apart: the
+        /// write's failure keeps the caller's draft; the re-read's failure is
+        /// a stale stream over a sent row — `loadError`, and pull-to-refresh
+        /// heals it.
+        private func runPost(
+            _ write: () async throws -> Void,
+            then reload: () async throws -> [OrderMessage]
+        ) async -> Bool {
             guard !isSending else { return false }
             isSending = true
             defer { isSending = false }
+            sendError = nil
             do {
-                try await post(orderID, data, nil)
-                messages = try await reload()
-                sendError = nil
-                return true
+                try await write()
             } catch {
-                sendError = (error as? LocalizedError)?.errorDescription
-                    ?? error.localizedDescription
+                sendError = Self.describe(error)
                 return false
             }
+            generation += 1
+            let born = generation
+            do {
+                let fetched = try await reload()
+                // Publish unless a genuinely newer read already did — a
+                // superseding load that failed produced nothing, and this
+                // snapshot is still the freshest that exists.
+                guard appliedStream <= born else { return true }
+                messages = fetched
+                appliedStream = born
+                loadError = nil
+                reaskMissingPhotos()
+            } catch {
+                guard appliedStream <= born else { return true }
+                loadError = Self.describe(error)
+            }
+            return true
         }
 
         /// A photo's bytes, asked once per attachment — a nil answer (payload
-        /// still syncing) leaves the frame a placeholder, not a retry loop:
-        /// the next `.refreshable` pull re-asks by way of a fresh render.
+        /// still syncing) leaves the frame a placeholder, and the next stream
+        /// reload re-asks via `reaskMissingPhotos`.
         func photo(_ id: UUID, using fetch: @escaping (UUID) async throws -> Data?) {
+            photoFetch = fetch
             guard photoData[id] == nil, !photoRequests.contains(id) else { return }
             photoRequests.insert(id)
+            let born = generation
             Task {
-                defer { photoRequests.remove(id) }
-                if let data = try? await fetch(id) {
+                let data = try? await fetch(id)
+                photoRequests.remove(id)
+                if let data {
                     photoData[id] = data
+                } else if born != generation {
+                    // The stream refreshed mid-flight — this nil is stale, so
+                    // one re-ask under the new epoch heals the placeholder.
+                    photo(id, using: fetch)
                 }
             }
+        }
+
+        /// A failure outside a post — a photo that never became `Data`.
+        func noteSendError(_ error: any Error) {
+            sendError = Self.describe(error)
+        }
+
+        /// Payloads the fresh stream still lacks — `photo` dedupes the ones
+        /// already flying, so re-asking the whole stream is cheap.
+        private func reaskMissingPhotos() {
+            guard let photoFetch else { return }
+            for message in messages ?? [] {
+                if let ref = message.attachmentRef { photo(ref, using: photoFetch) }
+            }
+        }
+
+        private static func describe(_ error: any Error) -> String {
+            (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
         }
     }
 }
@@ -187,6 +261,20 @@ extension OrderChatView {
 }
 
 #Preview("Chat — empty") {
+    let order = Order.previewDone
+    let database = AppDatabase(
+        directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true),
+        providerAccountRef: "preview:test",
+        containerIdentifier: "iCloud.preview")
+    try? database.recordOrder(order)
+    return NavigationStack {
+        OrderChatView(order: order)
+            .environment(StoreController(database: database))
+    }
+}
+
+#Preview("Chat — storage unavailable") {
     NavigationStack {
         OrderChatView(order: .previewDone)
             .environment(StoreController(database: nil))

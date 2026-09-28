@@ -17,7 +17,9 @@ extension OrderChatView {
         @Binding var composer: String
         let send: () -> Void
         let confirmReceipt: () -> Void
-        let sendPhoto: (Data) -> Void
+        /// Hands the raw picker selection up — byte extraction and its
+        /// failure surface live with the view's model, not in render code.
+        let sendPhoto: (PhotosPickerItem) -> Void
         /// Asks the model to fetch a payload — idempotent per attachment.
         let photo: (UUID) -> Void
 
@@ -58,11 +60,7 @@ extension OrderChatView {
             }
             .onChange(of: pickedItem) { _, item in
                 pickedItem = nil
-                Task {
-                    if let data = try? await item?.loadTransferable(type: Data.self) {
-                        sendPhoto(data)
-                    }
-                }
+                if let item { sendPhoto(item) }
             }
         }
 
@@ -187,5 +185,57 @@ extension OrderChatView {
         }
 
         private static let photoPlaceholderHeight: CGFloat = 120
+    }
+}
+
+private extension OrderMessage {
+    /// A preview fixture — `orderID` is decorative here, the row never reads it.
+    static func preview(_ kind: String, text: String? = nil, author: String? = "Irina") -> OrderMessage {
+        OrderMessage(orderID: UUID(), kind: kind, text: text, authorHint: author)
+    }
+}
+
+#Preview("Stream — populated") {
+    NavigationStack {
+        OrderChatView.Content(
+            messages: [
+                .preview(OrderMessage.Kind.text, text: "The courier is at the gate"),
+                .preview(OrderMessage.Kind.receptionConfirmed),
+            ],
+            photoData: [:], loadError: nil, sendError: nil, isSending: false,
+            composer: .constant(""),
+            send: {}, confirmReceipt: {}, sendPhoto: { _ in }, photo: { _ in })
+    }
+}
+
+#Preview("Stream — empty") {
+    NavigationStack {
+        OrderChatView.Content(
+            messages: [],
+            photoData: [:], loadError: nil, sendError: nil, isSending: false,
+            composer: .constant(""),
+            send: {}, confirmReceipt: {}, sendPhoto: { _ in }, photo: { _ in })
+    }
+}
+
+#Preview("Stream — loading") {
+    NavigationStack {
+        OrderChatView.Content(
+            messages: nil,
+            photoData: [:], loadError: nil, sendError: nil, isSending: false,
+            composer: .constant(""),
+            send: {}, confirmReceipt: {}, sendPhoto: { _ in }, photo: { _ in })
+    }
+}
+
+#Preview("Stream — read refused") {
+    NavigationStack {
+        OrderChatView.Content(
+            messages: nil,
+            photoData: [:],
+            loadError: String(localized: "Shared storage is unavailable on this install."),
+            sendError: nil, isSending: false,
+            composer: .constant(""),
+            send: {}, confirmReceipt: {}, sendPhoto: { _ in }, photo: { _ in })
     }
 }

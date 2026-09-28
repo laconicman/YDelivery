@@ -63,4 +63,80 @@ struct OrderChatTests {
         #expect(model.photoData[id] == Data([7]))
         #expect(asks == 1, "the row re-asks every render; the fetch must not repeat")
     }
+
+    @Test("A landed post whose re-read failed still counts — retrying must not duplicate")
+    func postSurvivesFailedReload() async {
+        let model = OrderChatView.Model()
+        var posted: OrderMessage?
+        let sent = await model.post(
+            OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "hi"),
+            using: { posted = $0 },
+            then: { throw StoreController.StoreUnavailable() })
+        #expect(sent, "the write landed — the draft is spent")
+        #expect(posted != nil)
+        #expect(model.sendError == nil, "nothing failed at the write door")
+        #expect(model.loadError != nil, "the stale stream says so instead")
+    }
+
+    @Test("A superseded read cannot overwrite a post's fresher stream")
+    func staleLoadCannotOverwritePost() async {
+        let model = OrderChatView.Model()
+        let gate = StreamGate()
+        let stale = OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "stale")
+        let fresh = OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "fresh")
+        let loadTask = Task { await model.load { try await gate.wait() } }
+        while !gate.entered { await Task.yield() }
+        let sent = await model.post(fresh, using: { _ in }, then: { [fresh] })
+        gate.resume(with: [stale])
+        await loadTask.value
+        #expect(sent)
+        #expect(model.messages == [fresh], "the older snapshot must not land over the post's")
+    }
+
+    @Test("A stream reload re-asks for photos still missing bytes")
+    func loadReasksMissingPhotos() async {
+        let model = OrderChatView.Model()
+        let ref = UUID()
+        let counter = Counter()
+        model.photo(ref) { _ in
+            counter.n += 1
+            return counter.n >= 2 ? Data([1]) : nil
+        }
+        while model.photoRequests.contains(ref) { await Task.yield() }
+        #expect(model.photoData[ref] == nil)
+        let photoMessage = OrderMessage(
+            orderID: orderID, kind: OrderMessage.Kind.photo, attachmentRef: ref)
+        await model.load { [photoMessage] }
+        for _ in 0..<50 where model.photoData[ref] == nil { await Task.yield() }
+        #expect(counter.n == 2, "the placeholder's next ask rides the reload")
+        #expect(model.photoData[ref] == Data([1]))
+    }
+
+    @Test("A post's snapshot stands when the superseding refresh failed")
+    func postPublishesOverFailedRefresh() async {
+        let model = OrderChatView.Model()
+        let gate = StreamGate()
+        let fresh = OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "fresh")
+        let loadTask = Task { await model.load { try await gate.wait() } }
+        while !gate.entered { await Task.yield() }
+        let sent = await model.post(fresh, using: { _ in }, then: { [fresh] })
+        gate.resume(throwing: StoreController.StoreUnavailable())
+        await loadTask.value
+        #expect(sent)
+        #expect(model.messages == [fresh], "the failed refresh wrote nothing — the post's read is freshest")
+    }
+
+    /// A suspended stream read — `wait` parks on the gate, `resume` releases it.
+    private final class StreamGate: @unchecked Sendable {
+        private(set) var entered = false
+        private var waiter: CheckedContinuation<[OrderMessage], any Error>?
+        func wait() async throws -> [OrderMessage] {
+            entered = true
+            return try await withCheckedThrowingContinuation { waiter = $0 }
+        }
+        func resume(with value: [OrderMessage]) { waiter?.resume(returning: value) }
+        func resume(throwing error: any Error) { waiter?.resume(throwing: error) }
+    }
+
+    private final class Counter: @unchecked Sendable { var n = 0 }
 }
