@@ -84,7 +84,7 @@ struct OrderChatTests {
         let gate = StreamGate()
         let stale = OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "stale")
         let fresh = OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "fresh")
-        let loadTask = Task { await model.load { await gate.wait() } }
+        let loadTask = Task { await model.load { try await gate.wait() } }
         while !gate.entered { await Task.yield() }
         let sent = await model.post(fresh, using: { _ in }, then: { [fresh] })
         gate.resume(with: [stale])
@@ -112,15 +112,30 @@ struct OrderChatTests {
         #expect(model.photoData[ref] == Data([1]))
     }
 
+    @Test("A post's snapshot stands when the superseding refresh failed")
+    func postPublishesOverFailedRefresh() async {
+        let model = OrderChatView.Model()
+        let gate = StreamGate()
+        let fresh = OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "fresh")
+        let loadTask = Task { await model.load { try await gate.wait() } }
+        while !gate.entered { await Task.yield() }
+        let sent = await model.post(fresh, using: { _ in }, then: { [fresh] })
+        gate.resume(throwing: StoreController.StoreUnavailable())
+        await loadTask.value
+        #expect(sent)
+        #expect(model.messages == [fresh], "the failed refresh wrote nothing — the post's read is freshest")
+    }
+
     /// A suspended stream read — `wait` parks on the gate, `resume` releases it.
     private final class StreamGate: @unchecked Sendable {
         private(set) var entered = false
-        private var waiter: CheckedContinuation<[OrderMessage], Never>?
-        func wait() async -> [OrderMessage] {
+        private var waiter: CheckedContinuation<[OrderMessage], any Error>?
+        func wait() async throws -> [OrderMessage] {
             entered = true
-            return await withCheckedContinuation { waiter = $0 }
+            return try await withCheckedThrowingContinuation { waiter = $0 }
         }
         func resume(with value: [OrderMessage]) { waiter?.resume(returning: value) }
+        func resume(throwing error: any Error) { waiter?.resume(throwing: error) }
     }
 
     private final class Counter: @unchecked Sendable { var n = 0 }

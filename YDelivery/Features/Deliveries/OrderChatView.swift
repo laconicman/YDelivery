@@ -108,6 +108,10 @@ extension OrderChatView {
         /// Stream-writer epoch — a superseded `load` must never overwrite a
         /// post's fresher snapshot (the same race `OrderDetailView` guards).
         private var generation = 0
+        /// The epoch whose read actually published `messages` — a superseded
+        /// write still lands when the newer attempt produced nothing (a failed
+        /// refresh must not cost a post its snapshot).
+        private var appliedStream = 0
         /// A photo fetch already asked for — rows re-ask on every render, and
         /// the fetch itself is what must not repeat.
         private(set) var photoRequests: Set<UUID> = []
@@ -123,12 +127,13 @@ extension OrderChatView {
                 defer { if born == generation { loading = nil } }
                 do {
                     let fetched = try await fetch()
-                    guard born == generation else { return }
+                    guard appliedStream <= born else { return }
                     messages = fetched
+                    appliedStream = born
                     loadError = nil
                     reaskMissingPhotos()
                 } catch {
-                    guard born == generation else { return }
+                    guard appliedStream <= born, !Task.isCancelled else { return }
                     loadError = Self.describe(error)
                 }
             }
@@ -178,12 +183,16 @@ extension OrderChatView {
             let born = generation
             do {
                 let fetched = try await reload()
-                guard born == generation else { return true }
+                // Publish unless a genuinely newer read already did — a
+                // superseding load that failed produced nothing, and this
+                // snapshot is still the freshest that exists.
+                guard appliedStream <= born else { return true }
                 messages = fetched
+                appliedStream = born
                 loadError = nil
                 reaskMissingPhotos()
             } catch {
-                guard born == generation else { return true }
+                guard appliedStream <= born else { return true }
                 loadError = Self.describe(error)
             }
             return true
