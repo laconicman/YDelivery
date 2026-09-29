@@ -57,7 +57,7 @@ struct YDeliveryApp: App {
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
         _notifications = State(initialValue: notifications)
-        _activities = State(initialValue: LiveActivityController())
+        _activities = State(initialValue: LiveActivityController(reconciles: !Self.isHistoryFixture))
         // The share-acceptance bridge — the delegates are UIKit-instantiated,
         // so the database reaches them through this property, not an init.
         // It goes through the store, not the database: accepting also re-reads
@@ -75,8 +75,8 @@ struct YDeliveryApp: App {
     /// `--uitest-history` is a hermetic launch: the screenshot pass starts from an
     /// empty store on every run, must never sync fixtures into a signed-in
     /// account, must never pull a real account's orders into the fixture, and must
-    /// leave the device's real widget snapshot, Spotlight index and places file
-    /// untouched (review, PR #61). Three seams, each read once here.
+    /// leave the device's real widget snapshot, Spotlight index, places file and
+    /// Live Activities untouched (review, PR #61). Four seams, each read once here.
     private static var isHistoryFixture: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--uitest-history")
