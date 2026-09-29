@@ -12,3 +12,7 @@
 #### Kit / API version note
 
 - [ ] Consumes `YDeliveryKit x.y.z` / `YandexDeliveryExpress x.y.z` — patch or minor, stated
+
+#### Label
+
+- [ ] One of `feature` · `fix` · `debt` · `documentation` · `workflow` — it files the change under its heading in the phase's release notes (`.github/release.yml`)

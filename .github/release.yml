@@ -1,0 +1,14 @@
+# Groups generated release notes (`gh release create --generate-notes`) by PR label —
+# proposal §8. A PR carrying none of these lands under GitHub's default "Other Changes".
+changelog:
+  exclude:
+    labels: [skip-changelog]
+  categories:
+    - title: Landed
+      labels: [feature]
+    - title: Fixed
+      labels: [fix]
+    - title: Debt discharged
+      labels: [debt]
+    - title: Docs and workflow
+      labels: [documentation, workflow]
