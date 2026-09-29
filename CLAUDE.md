@@ -59,6 +59,11 @@ Concurrency — all deliberate, see `Design`.
     files (the design boards' JS, generated artifacts), applying the reviewer's inline
     suggestion via GitHub's "Apply suggestion" is an accepted cheap path — hand-crafted
     commits are for the code this repo exists to ship.
+    *Enforced since 2026-09-29:* a ruleset on `main` blocks force-push and deletion and
+    requires the `Build and test` check, with no bypass; merges are squash-only and merged
+    branches delete themselves. So nobody watches CI: read Devin's round (minutes), clear
+    `contrib in laconicman/YDelivery --pr N` to owed 0 / re-read 0, then
+    `gh pr merge N --squash --auto` merges on green (`docs/GitHubWorkflowProposal.md` §3–§4).
 
 ## Author's standing preferences
 
