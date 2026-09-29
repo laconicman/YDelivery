@@ -477,10 +477,13 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   never a share member; instances stay `OrderItem`) and a `pinned` flag on it and on
   `SavedPlace`: additive DDL, no FK, no migration (<doc:Roadmap> → Next). Tags on either
   list start private; a *shared* tag vocabulary is a workspace-root question, above.
-- **Writer attribution on relayed rows**: CloudKit's `lastModifiedUserRecordID` already
-  names the iCloud user who wrote a mirror row and `CKShare.participants` names them; no
-  column needed for *who*. *Which device* is not recorded by CloudKit and would be an
-  owner-written, opt-in label (<doc:Collaboration> → "Where this landed", 5).
+- **Signed provider state**: `signature BLOB` + `signingKeyID` on `OrderProviderState` and
+  `ProviderEvent` (owner-written), `ownerSigningKey` on `Order`; Curve25519 over a canonical
+  serialisation; the private key in the iCloud Keychain, so the owner's devices sign and
+  everyone verifies (<doc:Collaboration> → "Where this landed", 5). Additive DDL; rows
+  written before the columns exist read as *unsigned*, not *forged*. *Who* wrote a row is
+  already free from CloudKit's `lastModifiedUserRecordID`; the signature answers *whether
+  the owner's key wrote it*, which permissions cannot.
 - **Accountless couriers and support staff**: out of this design's reach — a private
   `CKShare` requires an iCloud account per participant, and an App Clip changes the
   install experience, not the identity requirement (Devin Review, second round — an
