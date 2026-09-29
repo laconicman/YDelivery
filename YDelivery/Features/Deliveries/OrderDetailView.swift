@@ -57,11 +57,14 @@ struct OrderDetailView: View {
                 )
             }
         }
+        // The typed-error overload: title from the error's own `errorDescription`,
+        // body from its reason and remedy — a refusal lands named, not as
+        // "The record could not be shared." (issue #70).
         .alert(
-            Text("Sharing failed"),
             isPresented: shareErrorPresented,
-            actions: { Button("OK", role: .cancel) {} },
-            message: { Text(model.shareError ?? "") }
+            error: model.shareError,
+            actions: { _ in Button("OK", role: .cancel) {} },
+            message: { Text($0.message) }
         )
         .onAppear {
             if order.isCancellable {
@@ -191,9 +194,11 @@ extension OrderDetailView {
         /// order returns the same `CKShare`, so the button serves "share" and
         /// "manage" alike).
         private(set) var sharedRecord: SharedRecord?
-        /// The share ask's refusal — rendered as an alert: a tap that failed
-        /// must say so rather than silently produce no sheet.
-        private(set) var shareError: String?
+        /// The share ask's refusal, kept as the error itself — the alert's
+        /// `error:` overload reads its description for a title and its reason
+        /// and remedy for the body, so a refusal says *why*, not just that a
+        /// tap failed (issue #70).
+        private(set) var shareError: PresentableError?
         /// The ask itself, owned like ``reconciliation``: a share creation must
         /// finish even if this screen leaves — abandoning it mid-flight is how
         /// a created share meets no sheet (rule 6, review PR #56).
@@ -203,18 +208,22 @@ extension OrderDetailView {
         /// The share verb — the store's seam passed in by the view, like every
         /// verb here. Single-flight: a second tap while one runs does nothing
         /// (the button disables too, but the gate is what survives a race).
+        /// Returns the owned task so a test can await the outcome.
+        @discardableResult
         func share(_ id: Order.ID, title: String,
-                   using ask: @escaping (Order.ID, String) async throws -> SharedRecord) {
-            guard shareAsk == nil else { return }
-            shareAsk = Task {
+                   using ask: @escaping (Order.ID, String) async throws -> SharedRecord
+        ) -> Task<Void, Never>? {
+            guard shareAsk == nil else { return nil }
+            let next = Task {
                 defer { shareAsk = nil }
                 do {
                     sharedRecord = try await ask(id, title)
                 } catch {
-                    shareError = (error as? LocalizedError)?.errorDescription
-                        ?? error.localizedDescription
+                    shareError = PresentableError(error)
                 }
             }
+            shareAsk = next
+            return next
         }
 
         /// The sheet's done — a saved share or a swipe-away; the record's job
