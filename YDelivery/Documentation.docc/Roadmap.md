@@ -89,6 +89,23 @@ field stating its bound.
 
 *Done when:* a sender learns their courier arrived without opening the app.
 
+**Review pass, 2026-09-29 (screenshots over a seeded store — `--uitest-history`):** the
+done-when holds in code; what the walk found is filed, not folded in here — the
+Deliveries list's next shape ([#62](https://github.com/laconicman/YDelivery/issues/62):
+collapsed rows, an expandable timeline over the provider trail that `providerEvents`
+already stores and nothing yet reads, sections so the activity sort stops looking
+broken); a `staleDate` on the Live Activity so a card the poll stopped feeding says so
+([#63](https://github.com/laconicman/YDelivery/issues/63)); a recipient-facing surface
+for a failed share acceptance ([#64](https://github.com/laconicman/YDelivery/issues/64));
+YD-13's re-key on the learned `corp_client_id`, now that the schema it waited for has
+landed ([#65](https://github.com/laconicman/YDelivery/issues/65)); and the standing
+question of live observation versus the chat model's epoch counters
+([#67](https://github.com/laconicman/YDelivery/issues/67)) — a <doc:Design> entry either
+way. Two Kit patches fell out of the walk itself: `RouteLine` rows swallowed taps in the
+history list (0.4.1) and `AppDatabase` reported a missing directory as an unreadable
+store (0.4.2). The list redesign is the recommended next slice; the author's three
+calls are in the issue.
+
 ### In parallel: the persistence and sharing research
 
 **Research landed 2026-09-24 — spike endorsed, implementation still gated on the spike's
