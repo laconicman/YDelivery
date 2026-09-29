@@ -473,6 +473,14 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
 - **Read-only participants posting messages**: today message-posting = read-write
   grant. A "comment but don't touch attachments" tier doesn't exist in CloudKit; if it
   is ever needed it is app-enforced convention on top of read-write.
+- **A parcel nomenclature** (`ParcelTemplate`, private tier — the sender's reusable goods,
+  never a share member; instances stay `OrderItem`) and a `pinned` flag on it and on
+  `SavedPlace`: additive DDL, no FK, no migration (<doc:Roadmap> → Next). Tags on either
+  list start private; a *shared* tag vocabulary is a workspace-root question, above.
+- **Writer attribution on relayed rows**: CloudKit's `lastModifiedUserRecordID` already
+  names the iCloud user who wrote a mirror row and `CKShare.participants` names them; no
+  column needed for *who*. *Which device* is not recorded by CloudKit and would be an
+  owner-written, opt-in label (<doc:Collaboration> → "Where this landed", 5).
 - **Accountless couriers and support staff**: out of this design's reach — a private
   `CKShare` requires an iCloud account per participant, and an App Clip changes the
   install experience, not the identity requirement (Devin Review, second round — an

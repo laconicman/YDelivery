@@ -151,6 +151,50 @@ the order detail's Chat row, and `OrderChatView` — text, photos, and
 device work, not design — the live verifications (share acceptance end-to-end, the
 corp-visibility wire test) stand open in <doc:Collaboration>.
 
+## Next — the sender's library (author's idea, weighed 2026-09-29)
+
+An entrepreneur sends the same goods to the same doors. Today the app remembers **places**
+(`SavedPlace`, private tier — synced to the owner's devices, never shared; chips in the
+picker, a naming sheet, `saved-places.json` for the share extension) and remembers
+**nothing about parcels**: `ParcelItem` exists only as a row *on* an order or a draft, so
+every run re-types the parcel form. The idea: two reusable lists — places and parcels —
+with a pin, and in the long run tags and a favourite mark.
+
+What the schema already says (<doc:Schema>, DeepWiki pass on the refreshed index):
+
+- **Parcels need one new table**, `ParcelTemplate`, in the **private tier** beside
+  `SavedPlace` and `CustomFieldDefinition` — the sender's vocabulary syncs across their
+  devices and never rides inside a per-order share; the *instance* on an order stays the
+  shared `OrderItem`. Same split custom fields already use (schema private, values shared).
+- **Pin is a column**, `pinned`, on both lists — `OrderPrivateState.pinned` is the
+  precedent; pinned entries lead the pickers.
+- **Shared tags do not fit the private tier.** A tag vocabulary a *team* shares needs a
+  share root above the order — the `Workspace` re-rooting Schema lists as deferred. Tags
+  therefore start private (the sender's own), and "shared" waits on the workspace
+  question with everything else that needs it.
+- **Favourite ≈ pin.** One flag, not two, until someone can say what a favourite does
+  that a pinned entry does not.
+
+**The tab question — author's call.** <doc:Design> retired the third tab because «New
+Delivery» is a verb; the library is a noun, so a tab does not contradict that decision — but
+two more tabs for two lists is a four-tab bar over a two-screen app.
+
+- (a) **Two tabs**, Places and Parcels — most discoverable, heaviest bar.
+- (b) **One «Library» tab**, segmented Places | Parcels — a noun screen the sender visits
+  to *maintain* the nomenclature; the *use* path stays the pickers inside the draft.
+- (c) **No tab** — pickers inside the draft (places already; parcels new), management
+  under Settings.
+
+Recommendation: **(b)**. The pickers are where the lists earn their keep on every order; a
+single library tab is where they are curated, pinned and pruned. (a) if the lists grow
+past what one segmented screen scans; (c) is what the app has today for places, and the
+parcel form's re-typing is the evidence it is not enough.
+
+**Slicing.** Kit: `ParcelTemplate` row + `SavedPlace.pinned`/`ParcelTemplate.pinned`
+(private tier, additive DDL — patch). App: a parcel picker in the draft's parcel section
+(chips like the places', pinned first, «Save as template» from a filled form), then the
+Library tab. Search reaches both lists. Two evenings.
+
 ## Later — design Phase 4 and beyond
 
 - Regular width: sidebar + detail, map inside detail, shortcut set, focus order — decide

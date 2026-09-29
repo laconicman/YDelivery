@@ -113,6 +113,7 @@ addresses and phone numbers, nothing to keep running.
 | See the price before you commit | `offers/calculate` → tariff strip, review sheet, per-draft idempotency |
 | Every order you sent, on every device you own, searchable | local + private CloudKit sync; search over addresses and «Ваши поля» |
 | Know when the courier arrived without opening the app | journal poll + `BGAppRefreshTask`, status notifications, Live Activity, two widgets |
+| **The page you never refresh.** The web cabinet shows what it showed when you loaded it; the app polls the feed while open, wakes on the system's schedule while closed, and *tells* you — a local notification per status change, a Lock Screen card that follows the courier. Best-effort by nature, still strictly more than a browser tab (author, 2026-09-29) | `ClaimsSyncController` 30 s poll + `handleAppRefresh`/`scheduleAppRefresh` chain, `NotificationController`, `LiveActivityController` |
 | Repeat last week's run in one tap | «Повторить»/«Наоборот», saved places, order numbers |
 | Share a delivery without sharing your account | `CKShare` per order, read-only or read-write, per-order chat with photos and «получено» |
 | Cancel with the price shown | `cancel-info` → `cancel`, the fee stated before the tap |
@@ -123,6 +124,9 @@ addresses and phone numbers, nothing to keep running.
   them; the package does not (Later). The journal carries no coordinates.
 - **Live updates while the app is closed** — background refresh is best-effort and
   system-scheduled; real push needs the relay (Later). Say "notifies", never "real-time".
+  The honest comparison with the cabinet is *a page you refresh* versus *an app that
+  refreshes itself and tells you*; whether the cabinet offers e-mail or SMS alerts of its
+  own is **[unverified]** — do not claim it has none.
 - **Edit after sending, returns, scheduled windows** beyond `due` — not in the package.
 - **A free trial** — Yandex has no sandbox; the first order a new user places costs
   money. The app can only make that first order *safe* (price on the sheet, a

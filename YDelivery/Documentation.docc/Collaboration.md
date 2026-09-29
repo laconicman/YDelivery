@@ -174,6 +174,24 @@ Author direction, recorded 2026-09-24:
    of the state it presents (the write boundary above).
 4. **Public sharing stays off** — `publicPermission = .none`, no public-database
    records; organization claims ride provider-side visibility where it exists.
+5. **Relayed state names its writer (author's idea, weighed 2026-09-29).** The «as of»
+   stamp says *when*; on a participant's device — or the owner's second one — the
+   surface should also say *who* wrote the provider state it shows. What the stack
+   offers, and what it does not:
+   - **Who, per iCloud user — free.** Every synced row carries CloudKit's system fields;
+     `lastModifiedUserRecordID` names the account that wrote it, and `CKShare.participants`
+     maps that id to a display name. «as of 12:40 · from Paul» costs a lookup, no schema.
+   - **Which device — not recorded anywhere.** CloudKit stamps the user, not the device;
+     two devices on one account are indistinguishable. A device label would be a new
+     owner-written column on `OrderProviderState` filled from the writing device's name —
+     a name that is itself personal data, so it would be opt-in and off by default.
+   - **The authority reading is the same fact from the other side**: the design already
+     says provider-mirror rows are the owner's; showing the writer makes the boundary
+     visible, and a mirror row whose writer is *not* the owner is exactly the forgery
+     signal <doc:Schema> → "The forgery boundary" reserves for later.
+
+   Decision: **user-level attribution first**, on the shared surfaces beside the stamp;
+   the device label only if a real second-device confusion is ever reported.
 
 ## Open verifications before committing
 
