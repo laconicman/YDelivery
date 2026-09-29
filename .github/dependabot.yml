@@ -1,0 +1,9 @@
+# Actions only. Swift packages are left out on purpose: their pins are floors chosen by
+# hand (`minorVersion`), and a bot PR against Package.resolved would fight the
+# package-first, tag-then-consume sequencing (GitHubWorkflowProposal §6).
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

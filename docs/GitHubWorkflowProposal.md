@@ -4,6 +4,22 @@
 section shape is kept identical so the reports consolidate. Every row below was
 verified live with `gh`/`git` on the date above, not recalled.
 
+## Applied — 2026-09-29
+
+The survey table below is the *before* picture; this section is the current state.
+
+| § | Done | Where |
+|---|---|---|
+| 1 | `delete_branch_on_merge=true` on all three repos; merged branches deleted: here 5 (`feat/claim-refusals`, `feat/pending-acceptance`, `feat/share-handoff`, `feat/widget-surface`, `fix/chat-write-epoch`), Kit 3, API 1 — each tip checked equal to its merged PR head first, so each restores from its PR page; `fetch.prune=true` in the global git config | repo API |
+| 2 | Badge, placed as in the siblings | `README.md` |
+| 3 | **(c), the author's choice.** Ruleset `protect main` (id `24193664`): `non_fast_forward`, `deletion`, `required_status_checks` = `Build and test`, pinned to the GitHub Actions app (`integration_id` 15368) so no other status source can satisfy it; no bypass actors. `allow_auto_merge=true`. `CLAUDE.md` rule 10 now says so | repo API, `CLAUDE.md` |
+| 4 | Habit written into rule 10 (`contrib in … --pr N`, then `--auto`) | `CLAUDE.md` |
+| 5 | Squash-only on all three repos; the template | repo API, `.github/pull_request_template.md` |
+| 6 | Actions-only, monthly | `.github/dependabot.yml` |
+
+Still open: §7 phase tags at the Roadmap's next done-when, §8 only with §7, §9 the
+Kit/API CI (then require its check in their protection), §10 `SECURITY.md`.
+
 ## What exists today (verified live)
 
 | Capability | State | Evidence |

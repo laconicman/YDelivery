@@ -1,5 +1,7 @@
 # YDelivery
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/laconicman/YDelivery)
+
 An **unofficial** iOS client for Yandex Delivery's Express (B2B Cargo) API — for people and
 businesses that send parcels: point-to-point, store-to-customer, warehouse runs. Built on
 [`YandexDeliveryExpressAPI`](https://github.com/laconicman/YandexDeliveryExpress).
