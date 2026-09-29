@@ -160,14 +160,20 @@ positioning does not override <doc:Design> → "Unofficial, visibly".
 - **Category.** Business primary, Utilities secondary. Not Shopping, not Travel.
 - **Screenshots, in order.** The draft card over the map; the tariff strip with prices;
   the Deliveries list; the Live Activity / Dynamic Island; a shared order's chat. The
-  `--uitest-*` launch flags already render seeded states for exactly these screens —
-  the screenshot pass is a `xcodebuild test` away from a listing.
+  `--uitest-three-stop-draft`, `--uitest-fields` and `--uitest-history` launch flags
+  render seeded states for the draft, the fields and the history/detail/chat screens
+  (`DraftScreenshotTests`, `FieldsScreenshotTests`, `HistoryScreenshotTests`); the tariff
+  strip and the Live Activity still need a seed of their own.
 - **App Review.** Guideline 2.1 requires the reviewer to exercise the app, and Yandex has
-  no sandbox. Two honest paths: (1) supply a real business token whose orders are
-  cancelled in the free window — money at risk if a reviewer accepts and forgets; (2) ship
-  a **Demo mode** — the seeded store behind a Settings switch, read-only, clearly labelled
-  — which also answers the prospective user with no token yet. The seed exists; the switch
-  is a slice. **(2) is the recommendation.**
+  no self-serve sandbox: a *test cabinet* exists, but only by asking a personal manager —
+  the API package's live tests ran on one, so it is real, and it is not something a
+  listing can assume every reviewer session will have. Three honest paths: (1) a test
+  cabinet's token, if granted — the best case, and worth the ask before submission;
+  (2) a real business token whose orders are cancelled in the free window — money at risk
+  if a reviewer accepts and forgets; (3) ship a **Demo mode** — the seeded store behind a
+  Settings switch, read-only, clearly labelled — which also answers the prospective user
+  with no token yet. The seed exists (`--uitest-history`, PR #61); the switch is a slice.
+  **(3) is the recommendation, with (1) attempted alongside.**
 - **Privacy labels.** Addresses, names and phone numbers go to Yandex (the service being
   ordered) and to the user's own iCloud private database (sync, sharing). No analytics, no
   third-party SDKs that phone home. The wire log leaves the device only by the user's

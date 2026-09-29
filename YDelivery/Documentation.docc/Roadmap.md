@@ -89,8 +89,12 @@ field stating its bound.
 
 *Done when:* a sender learns their courier arrived without opening the app.
 
-**Review pass, 2026-09-29 (screenshots over a seeded store — `--uitest-history`):** the
-done-when holds in code; what the walk found is filed, not folded in here — the
+**Review pass, 2026-09-29 (screenshots over a seeded store — `--uitest-history`, PR #61):**
+the done-when holds *in code* — advanced-status banners, the Live Activity, and a
+`BGAppRefreshTask` chain that is best-effort and system-scheduled, so "learns without
+opening the app" means *notified when iOS grants the wake*, never *live*; the device pass
+that shows a real banner on a real lock screen is still owed with the rest of the open
+verifications. What the walk found is filed, not folded in here — the
 Deliveries list's next shape ([#62](https://github.com/laconicman/YDelivery/issues/62):
 collapsed rows, an expandable timeline over the provider trail that `providerEvents`
 already stores and nothing yet reads, sections so the activity sort stops looking

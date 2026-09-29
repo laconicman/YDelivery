@@ -14,7 +14,7 @@ verified live with `gh`/`git` on the date above, not recalled.
 | CI | **Runs, green**: `macos-15`, `latest-stable` Xcode → `brew install xcodegen && xcodegen` → `xcodebuild test` (unit + UI) on `iPhone 17 Pro, OS=latest`. Triggers: PRs, pushes to `main`, manual. Concurrency group cancels superseded runs. 12 ✓ / 5 ✗ / 1 cancelled in the last 50; a green run is **12–16 min** | `.github/workflows/ci.yml`, `gh run list` |
 | Milestones | 0 | `gh api .../milestones` → `[]` |
 | Labels | GitHub defaults + `accessibility`; **applied to 0 of the last 20 PRs** | `gh label list`, `gh pr list --json labels` |
-| Issues | **0 ever** — the `YD-n` register in `TechDebt.md` and the Roadmap are the tracker | `gh issue list --state all` |
+| Issues | **0 before this review**; the review itself filed #62–#67 as decision records for its follow-ups (the pattern the siblings use — `YandexDeliveryExpress#15`, `YDeliveryKit#25`). The `YD-n` register in `TechDebt.md` and the Roadmap remain the tracker | `gh issue list --state all`, taken before the filings |
 | Merge convention | **Squash, exclusively** (#1–#59 are single-parent commits); merge and rebase also enabled, unused. Squash title = PR title, body = commit messages | `git log --format=%p`, repo API |
 | `delete_branch_on_merge` | **`false`** — 4 merged branches still on the remote (`feat/claim-refusals`, `feat/pending-acceptance`, `feat/share-handoff`, `feat/widget-surface`); 23 stale tracking refs in the local clone until `fetch --prune` | repo API, `gh api .../branches` |
 | `allow_auto_merge` | `false` | repo API |
