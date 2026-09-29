@@ -23,11 +23,11 @@ struct YDeliveryApp: App {
     @State private var syncTask: Task<Void, Never>?
 
     init() {
-        let session = ClientController()
+        let session = ClientController(tokenStore: Self.tokenStore())
         // One database, both consumers — orders/places on one side, the sync cursor
         // on the other. Sharing the instance shares the queue, not just the file.
         let database = Self.database()
-        let store = StoreController(database: database)
+        let store = StoreController(database: database, republishing: Self.republication())
         let notifications = NotificationController(store: store)
         let sync = ClaimsSyncController(session: session, store: store,
                                         database: database, notifications: notifications)
@@ -72,25 +72,48 @@ struct YDeliveryApp: App {
         #endif
     }
 
-    /// The App Group database — or, under `--uitest-history`, a throwaway one: the
-    /// screenshot pass must start from an empty store on every launch and must
-    /// never sync fixtures into a signed-in account, so it gets a fresh directory
-    /// and a container that resolves to nothing (`startSync` degrades to a logged
-    /// failure, as it does on any unentitled install).
-    private static func database() -> AppDatabase? {
+    /// `--uitest-history` is a hermetic launch: the screenshot pass starts from an
+    /// empty store on every run, must never sync fixtures into a signed-in
+    /// account, must never pull a real account's orders into the fixture, and must
+    /// leave the device's real widget snapshot, Spotlight index and places file
+    /// untouched (review, PR #61). Three seams, each read once here.
+    private static var isHistoryFixture: Bool {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--uitest-history") {
+        ProcessInfo.processInfo.arguments.contains("--uitest-history")
+        #else
+        false
+        #endif
+    }
+
+    /// The App Group database — or, for the fixture launch, a throwaway one in a
+    /// fresh directory with a container that resolves to nothing (`startSync`
+    /// degrades to a logged failure, as it does on any unentitled install).
+    private static func database() -> AppDatabase? {
+        guard !isHistoryFixture else {
             return AppDatabase(
                 directory: FileManager.default.temporaryDirectory
                     .appendingPathComponent(UUID().uuidString, isDirectory: true),
                 providerAccountRef: SyncIdentity.providerAccountRef,
                 containerIdentifier: "iCloud.uitest")
         }
-        #endif
         return AppDatabase.inAppGroup(
             id: AppGroup.id,
             providerAccountRef: SyncIdentity.providerAccountRef,
             containerIdentifier: SyncIdentity.cloudKitContainer)
+    }
+
+    /// The fixture launch reads a Keychain service no sign-in ever writes, so the
+    /// session starts signed out and the sync engine never calls the provider —
+    /// a saved token would otherwise pull the account's real orders into the
+    /// fixture store.
+    private static func tokenStore() -> TokenStore {
+        isHistoryFixture ? TokenStore(service: "uitest.YDelivery") : TokenStore()
+    }
+
+    /// The fixture store publishes nowhere — its reads must not reach the
+    /// system surfaces that belong to the real history.
+    private static func republication() -> StoreController.Republication {
+        isHistoryFixture ? .none : .systemSurfaces
     }
 
     #if DEBUG
@@ -118,8 +141,7 @@ struct YDeliveryApp: App {
     private static func seedHistoryIfFlagged(
         _ store: StoreController, database: AppDatabase?
     ) async {
-        guard ProcessInfo.processInfo.arguments.contains("--uitest-history"),
-              let database else { return }
+        guard isHistoryFixture, let database else { return }
         let logger = Logger(subsystem: "YDelivery", category: "uitest-seed")
         func seed(_ what: String, _ write: () async throws -> Void) async {
             do { try await write() } catch { logger.error("seed failed — \(what): \(error)") }

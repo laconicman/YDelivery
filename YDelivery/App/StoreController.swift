@@ -82,11 +82,27 @@ final class StoreController {
     private nonisolated static let draftLogger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "drafts")
 
+    /// Where a healthy read is republished. The store's reads feed three system
+    /// surfaces outside its own directory — the Spotlight index, the widget
+    /// snapshot in the App Group, the share extension's places file — and those
+    /// surfaces belong to *the* app's history, whichever database this instance
+    /// happens to read. A store over a fixture (the screenshot seed) must
+    /// therefore publish nowhere: an empty first read would otherwise wipe a
+    /// real device's widget before the fixtures even land (review, PR #61).
+    enum Republication {
+        case systemSurfaces
+        case none
+    }
+
+    private let republication: Republication
+
     init(database: AppDatabase? = .inAppGroup(
         id: AppGroup.id,
         providerAccountRef: SyncIdentity.providerAccountRef,
-        containerIdentifier: SyncIdentity.cloudKitContainer)) {
+        containerIdentifier: SyncIdentity.cloudKitContainer),
+         republishing republication: Republication = .systemSurfaces) {
         self.database = database
+        self.republication = republication
     }
 
     /// Whether keeping a place can work at all — the save affordance renders disabled
@@ -203,7 +219,7 @@ final class StoreController {
     /// disk still holds (review, PR #42). The index keeps its last good state until
     /// the next refresh where every input read succeeded.
     private func reindexSpotlightIfHealthy() {
-        guard ordersError == nil, fieldsError == nil else { return }
+        guard republication == .systemSurfaces, ordersError == nil, fieldsError == nil else { return }
         reindexSpotlight(orders: orders, fields: orderFields)
     }
 
@@ -223,7 +239,7 @@ final class StoreController {
     /// gate as the index: a failed read must not let a partial list masquerade
     /// as the truth the widget repeats.
     private func renderWidgetSnapshotIfHealthy() {
-        guard ordersError == nil, fieldsError == nil else { return }
+        guard republication == .systemSurfaces, ordersError == nil, fieldsError == nil else { return }
         let snapshot = DeliverySnapshot(
             renderedAt: .now,
             orders: Self.snapshotEntries(of: orders, orderNumber: orderNumber(for:)))
@@ -245,7 +261,7 @@ final class StoreController {
     /// the database. A failed read must not overwrite good bytes the last
     /// read published: same gate as the index, narrowed to its own channel.
     private func publishSavedPlacesIfHealthy() {
-        guard placesError == nil else { return }
+        guard republication == .systemSurfaces, placesError == nil else { return }
         let places = savedPlaces
         let prior = placesWrites
         placesWrites = Task.detached {
