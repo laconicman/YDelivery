@@ -1,4 +1,5 @@
 import BackgroundTasks
+import OSLog
 import SwiftUI
 import YDeliveryKit
 
@@ -22,14 +23,11 @@ struct YDeliveryApp: App {
     @State private var syncTask: Task<Void, Never>?
 
     init() {
-        let session = ClientController()
+        let session = ClientController(tokenStore: Self.tokenStore())
         // One database, both consumers — orders/places on one side, the sync cursor
         // on the other. Sharing the instance shares the queue, not just the file.
-        let database = AppDatabase.inAppGroup(
-            id: AppGroup.id,
-            providerAccountRef: SyncIdentity.providerAccountRef,
-            containerIdentifier: SyncIdentity.cloudKitContainer)
-        let store = StoreController(database: database)
+        let database = Self.database()
+        let store = StoreController(database: database, republishing: Self.republication())
         let notifications = NotificationController(store: store)
         let sync = ClaimsSyncController(session: session, store: store,
                                         database: database, notifications: notifications)
@@ -59,7 +57,7 @@ struct YDeliveryApp: App {
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
         _notifications = State(initialValue: notifications)
-        _activities = State(initialValue: LiveActivityController())
+        _activities = State(initialValue: LiveActivityController(reconciles: !Self.isHistoryFixture))
         // The share-acceptance bridge — the delegates are UIKit-instantiated,
         // so the database reaches them through this property, not an init.
         // It goes through the store, not the database: accepting also re-reads
@@ -67,8 +65,55 @@ struct YDeliveryApp: App {
         // next refresh (review, PR #56).
         appDelegate.acceptShare = { try await store.acceptShare(metadata: $0) }
         #if DEBUG
-        Task { await Self.seedFieldsIfFlagged(store) }
+        Task {
+            await Self.seedFieldsIfFlagged(store)
+            await Self.seedHistoryIfFlagged(store, database: database)
+        }
         #endif
+    }
+
+    /// `--uitest-history` is a hermetic launch: the screenshot pass starts from an
+    /// empty store on every run, must never sync fixtures into a signed-in
+    /// account, must never pull a real account's orders into the fixture, and must
+    /// leave the device's real widget snapshot, Spotlight index, places file and
+    /// Live Activities untouched (review, PR #61). Four seams, each read once here.
+    private static var isHistoryFixture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--uitest-history")
+        #else
+        false
+        #endif
+    }
+
+    /// The App Group database — or, for the fixture launch, a throwaway one in a
+    /// fresh directory with a container that resolves to nothing (`startSync`
+    /// degrades to a logged failure, as it does on any unentitled install).
+    private static func database() -> AppDatabase? {
+        guard !isHistoryFixture else {
+            return AppDatabase(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true),
+                providerAccountRef: SyncIdentity.providerAccountRef,
+                containerIdentifier: "iCloud.uitest")
+        }
+        return AppDatabase.inAppGroup(
+            id: AppGroup.id,
+            providerAccountRef: SyncIdentity.providerAccountRef,
+            containerIdentifier: SyncIdentity.cloudKitContainer)
+    }
+
+    /// The fixture launch reads a Keychain service no sign-in ever writes, so the
+    /// session starts signed out and the sync engine never calls the provider —
+    /// a saved token would otherwise pull the account's real orders into the
+    /// fixture store.
+    private static func tokenStore() -> TokenStore {
+        isHistoryFixture ? TokenStore(service: "uitest.YDelivery") : TokenStore()
+    }
+
+    /// The fixture store publishes nowhere — its reads must not reach the
+    /// system surfaces that belong to the real history.
+    private static func republication() -> StoreController.Republication {
+        isHistoryFixture ? .none : .systemSurfaces
     }
 
     #if DEBUG
@@ -85,6 +130,72 @@ struct YDeliveryApp: App {
         try? await store.saveField(CustomFieldDefinition(
             name: "Тип груза", kind: .choice, choices: ["Документы", "Коробка"],
             isOptional: true, isShownByDefault: false, position: 1))
+    }
+
+    /// `--uitest-history`: seed a history the Deliveries screen can show — five
+    /// orders across the status vocabulary, a provider-event trail on the live one,
+    /// and a chat on the finished one — through the same Kit writes the sync engine
+    /// and the chat screen perform. The store is the throwaway one `database()`
+    /// minted for this flag, so every launch seeds from empty; a write that fails
+    /// is logged, not swallowed — a screenshot over a half-seeded store would lie.
+    private static func seedHistoryIfFlagged(
+        _ store: StoreController, database: AppDatabase?
+    ) async {
+        guard isHistoryFixture, let database else { return }
+        let logger = Logger(subsystem: "YDelivery", category: "uitest-seed")
+        func seed(_ what: String, _ write: () async throws -> Void) async {
+            do { try await write() } catch { logger.error("seed failed — \(what): \(error)") }
+        }
+        let live = Order.previewEnRoute
+        let done = Order.previewDone
+        let attention = Order(
+            created: .init(timeIntervalSince1970: 1_799_900_000),
+            status: .attention,
+            route: [
+                RoutePoint(latitude: 55.7539, longitude: 37.6208, address: "Москва, Никольская, 10", contactName: "Ольга"),
+                RoutePoint(latitude: 55.7422, longitude: 37.6156, address: "Москва, Пятницкая, 25", contactName: "Сергей Волков"),
+            ],
+            price: "890", currency: "RUB", tariff: "express", claimID: "claim-preview-3",
+            providerStatus: "performer_not_found")
+        let cancelled = Order(
+            created: .init(timeIntervalSince1970: 1_799_000_000),
+            status: .cancelled,
+            route: [
+                RoutePoint(latitude: 55.7887, longitude: 37.6016, address: "Москва, Новослободская, 3"),
+                RoutePoint(latitude: 55.7658, longitude: 37.5946, address: "Москва, Тверская-Ямская, 12"),
+            ],
+            price: "1240", currency: "RUB", tariff: "courier", claimID: "claim-preview-4")
+        for order in [live, Order.previewSearching, attention, done, cancelled] {
+            await seed("order \(order.id)") { try await store.record(order) }
+        }
+        // The live order's provider trail — the words the journal keeps.
+        let t0 = live.created.timeIntervalSince1970
+        let trail: [(Int64, String, TimeInterval)] = [
+            (1, "new", 0), (2, "estimating", 40), (3, "ready_for_approval", 95),
+            (4, "accepted", 130), (5, "performer_lookup", 131), (6, "performer_found", 420),
+            (7, "pickup_arrived", 1_150), (8, "pickuped", 1_200), (9, "delivery_arrived", 2_300),
+        ]
+        for (id, status, offset) in trail {
+            await seed("event \(status)") {
+                _ = try database.recordProviderEvent(ProviderEvent(
+                    orderID: live.id, providerEventID: id,
+                    at: .init(timeIntervalSince1970: t0 + offset),
+                    kind: "status", providerStatus: status, source: "journal"))
+            }
+        }
+        // The finished order's chat — a participant's word and their confirmation.
+        await seed("chat text") {
+            try database.postMessage(OrderMessage(
+                orderID: done.id, sentAt: done.created.addingTimeInterval(3_600),
+                kind: OrderMessage.Kind.text, text: "Курьер у ворот, встречаю",
+                authorHint: "Ирина"))
+        }
+        await seed("chat confirmation") {
+            try database.postMessage(OrderMessage(
+                orderID: done.id, sentAt: done.created.addingTimeInterval(3_900),
+                kind: OrderMessage.Kind.receptionConfirmed, authorHint: "Ирина"))
+        }
+        await store.refresh()
     }
     #endif
 

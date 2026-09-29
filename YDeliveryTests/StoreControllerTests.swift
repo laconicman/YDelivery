@@ -15,8 +15,24 @@ struct StoreControllerTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
+    /// A store over a temp directory that publishes nowhere — a test's reads must
+    /// not reach the simulator's widget snapshot, Spotlight index or places file.
     private var controller: StoreController {
-        StoreController(database: AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test"))
+        StoreController(
+            database: AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test"),
+            republishing: .none)
+    }
+
+    @Test("A store that republishes nowhere leaves the App Group snapshot alone")
+    func silentStoreWritesNoSnapshot() async throws {
+        let before = DeliverySnapshotStore.read(inAppGroup: AppGroup.id)
+        let store = controller
+        try await store.record(order(created: .now, addresses: ["Москва, Арбат, 1", "Москва, Тверская, 2"]))
+        await store.refresh()
+        // Let any tail the store might have queued run to completion.
+        try await Task.sleep(for: .milliseconds(200))
+        let after = DeliverySnapshotStore.read(inAppGroup: AppGroup.id)
+        #expect(after?.renderedAt == before?.renderedAt, "a fixture store must not re-render the real widget snapshot")
     }
 
     private func order(created: Date, addresses: [String]) -> Order {
@@ -386,7 +402,7 @@ struct StoreControllerTests {
         // which side failed.
         let database = AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test")
         try await database.queue.write { try $0.execute(sql: "DROP TABLE \"orders\"") }
-        let controller = StoreController(database: database)
+        let controller = StoreController(database: database, republishing: .none)
         await controller.refresh()
         #expect(controller.historyUnavailable != nil)
 
@@ -404,7 +420,7 @@ struct StoreControllerTests {
         // A places table that cannot be read; orders healthy.
         let database = AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test")
         try await database.queue.write { try $0.execute(sql: "DROP TABLE \"savedPlaces\"") }
-        let controller = StoreController(database: database)
+        let controller = StoreController(database: database, republishing: .none)
         await controller.refresh()
         // Chips would be silently absent without their own channel (review, PR #28).
         #expect(controller.historyUnavailable == nil)

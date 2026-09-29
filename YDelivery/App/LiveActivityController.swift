@@ -28,6 +28,17 @@ final class LiveActivityController {
     /// screen, then it dismisses itself.
     nonisolated static let deliveredLinger: TimeInterval = 4 * 60
 
+    /// Whether this controller touches the Lock Screen at all. The cards belong
+    /// to *the* app's history, whichever store an instance reconciles against —
+    /// a fixture store's orders must neither start cards nor sweep a real
+    /// device's live ones as orphans (review, PR #61), so the screenshot launch
+    /// builds an inert controller.
+    private let reconciles: Bool
+
+    init(reconciles: Bool = true) {
+        self.reconciles = reconciles
+    }
+
     /// What one reconcile pass does with an order — the board `5a` rules as a
     /// pure decision the tests can hold still, so the ActivityKit plumbing in
     /// `reconcile` stays unbranched.
@@ -59,7 +70,7 @@ final class LiveActivityController {
     /// `orderNumber` resolves the sender's own number — the surface's identity
     /// is «4417», never the vendor's claim id (board `5a`).
     func reconcile(orders: [Order], orderNumber: (Order.ID) -> String?) {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard reconciles, ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let live = Activity<DeliveryActivityAttributes>.activities
         for order in orders {
             let activity = live.first { $0.attributes.orderID == order.id }
