@@ -72,10 +72,15 @@ what the app *is worth*, to whom, and what it must never claim.
 Yandex Delivery's Express API is a **B2B contract meant for backends**: a token lives in
 the business cabinet's «Ваш профиль», addresses are accepted **only as coordinates**
 (geocoding is the integrator's job), there is **no test environment** — integrations are
-proven on real, paid orders — and status reaches the client only by polling a cursor
-feed (Yandex's own integration page and the package's `WorkingWithYandex`, both checked
-2026-09-29). The official surfaces around that contract are a desktop web cabinet and the
-consumer Yandex Go app, which is a different contract at a different price.
+proven on real, paid orders, a test cabinet exists only by asking a personal manager —
+and status reaches the client only by polling a cursor feed. *Provenance:* the first
+three are quoted from Yandex's integration page
+(`dostavka.yandex.ru/integrations/api/`) as excerpted by a search engine on 2026-09-29 —
+the page itself would not serve a non-browser fetch, so they await a reader's
+confirmation against the live page; the polling fact is the package's own
+(`WorkingWithYandex`). The official surfaces around that contract are a desktop web
+cabinet and the consumer Yandex Go app, which is a different contract at a different
+price.
 
 So a small sender who holds a business token and wants to order **from a phone, at
 business terms** has two options today: run or rent a backend and build a front against
