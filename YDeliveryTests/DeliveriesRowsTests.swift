@@ -105,12 +105,46 @@ struct DeliveriesRowsTests {
         #expect(model.expandedID == nil)
     }
 
-    @Test("A failed trail read renders as nothing reported, not as a stuck spinner")
-    func failedTrailReadsEmpty() async {
+    @Test("A failed trail read is an error row — never «nothing reported», never a stuck spinner")
+    func failedTrailReadsAsError() async {
         let model = DeliveriesView.Model()
         let id = UUID()
         model.toggleTrail(of: id) { throw StoreController.StoreUnavailable() }
-        for _ in 0..<50 where model.trail == nil { await Task.yield() }
-        #expect(model.trail == [])
+        for _ in 0..<50 where model.trailError == nil { await Task.yield() }
+        #expect(model.trail == nil)
+        #expect(model.trailError != nil)
     }
+
+    @Test("A store republication re-reads the open trail in place — a failed re-read keeps the shown one")
+    func republicationRefreshesOpenTrail() async {
+        let model = DeliveriesView.Model()
+        let id = UUID()
+        let first = ProviderEvent(orderID: id, providerEventID: 1, at: .now, kind: "status",
+                                  providerStatus: "pickuped", source: "journal")
+        let second = ProviderEvent(orderID: id, providerEventID: 2, at: .now, kind: "status",
+                                   providerStatus: "delivery_arrived", source: "journal")
+        let store = Counter()
+        model.toggleTrail(of: id) {
+            store.n += 1
+            switch store.n {
+            case 1: return [first]
+            case 2: return [first, second]
+            default: throw StoreController.StoreUnavailable()
+            }
+        }
+        for _ in 0..<50 where model.trail == nil { await Task.yield() }
+        #expect(model.trail == [first])
+        model.refreshTrail()
+        for _ in 0..<50 where model.trail?.count != 2 { await Task.yield() }
+        #expect(model.trail == [first, second], "the sync's new event reaches the open row")
+        model.refreshTrail()
+        for _ in 0..<50 where store.n < 3 { await Task.yield() }
+        await Task.yield()
+        #expect(model.trail == [first, second], "a failed re-read leaves the trail on screen")
+        #expect(model.trailError == nil, "…and does not dress it as an error")
+        #expect(DeliveriesView.Model().trail == nil)
+        _ = DeliveriesView.Model().refreshTrail()
+    }
+
+    private final class Counter: @unchecked Sendable { var n = 0 }
 }

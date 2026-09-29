@@ -16,8 +16,10 @@ xcodebuild build -project YDelivery.xcodeproj -scheme YDelivery \
 xcrun simctl launch booted com.learnable.YDelivery --uitest-history
 ```
 
-Launch flags (DEBUG only; each launch is hermetic — a throwaway store, signed out, no
-widget/Spotlight/Live-Activity publication):
+Launch flags (DEBUG only). **Only `--uitest-history` is hermetic** — a throwaway store,
+signed out, no widget/Spotlight/Live-Activity publication. The draft flags seed *into the
+simulator's normal store* (a parked draft, a fields schema) and leave it there; that is
+fine on a simulator and is why this walk never runs on a device.
 
 | Flag | Seeds |
 |---|---|

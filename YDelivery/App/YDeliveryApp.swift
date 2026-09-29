@@ -141,9 +141,8 @@ struct YDeliveryApp: App {
     private static func seedHistoryIfFlagged(
         _ store: StoreController, database: AppDatabase?
     ) async {
-        let logger = Logger(subsystem: "YDelivery", category: "uitest-seed")
-        logger.notice("launch arguments: \(ProcessInfo.processInfo.arguments.dropFirst().joined(separator: " "), privacy: .public) fixture=\(isHistoryFixture)")
         guard isHistoryFixture, let database else { return }
+        let logger = Logger(subsystem: "YDelivery", category: "uitest-seed")
         func seed(_ what: String, _ write: () async throws -> Void) async {
             do { try await write() } catch { logger.error("seed failed — \(what): \(error)") }
         }

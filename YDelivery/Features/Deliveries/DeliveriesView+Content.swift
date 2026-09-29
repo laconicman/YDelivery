@@ -51,6 +51,9 @@ extension DeliveriesView {
         var expandedID: UUID? = nil
         /// The open row's trail: `nil` while the read is in flight.
         var trail: [ProviderEvent]? = nil
+        /// Why the open row's trail could not be read — rendered instead of the
+        /// trail, never as «nothing reported».
+        var trailError: String? = nil
         /// Why history is missing, when it is missing for a reason rather than because
         /// nothing was sent. An unreadable store rendered as "No deliveries yet", which
         /// tells a sender with a year of orders that they have none (review, PR #22).
@@ -96,6 +99,7 @@ extension DeliveriesView {
                                             row: row,
                                             isExpanded: expandedID == row.id,
                                             trail: expandedID == row.id ? trail : nil,
+                                            trailError: expandedID == row.id ? trailError : nil,
                                             toggleTrail: { toggleTrail(row.id) }
                                         )
                                     }
@@ -202,6 +206,9 @@ extension DeliveriesView.Content {
         /// The trail while this row is open — `nil` still loading, `[]` nothing
         /// reported; ignored while collapsed.
         let trail: [ProviderEvent]?
+        /// A read that failed — its own row, so a storage error never reads as a
+        /// fact about the provider's history.
+        var trailError: String? = nil
         let toggleTrail: () -> Void
 
         var body: some View {
@@ -290,7 +297,11 @@ extension DeliveriesView.Content {
             RouteLine(points: row.route)
                 .font(.subheadline)
                 .padding(.top, Layout.Spacing.tight)
-            if let trail {
+            if let trailError {
+                Label(trailError, systemSymbol: .exclamationmarkTriangle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if let trail {
                 if trail.isEmpty {
                     Text("The provider has not reported on this order yet.")
                         .font(.footnote)
@@ -373,6 +384,15 @@ private let previewSections: [DeliveriesView.Content.Section] = [
         DeliveriesView.Content(
             isSignedIn: true, sections: previewSections,
             expandedID: previewSections[1].rows[0].id, trail: nil, compose: {})
+    }
+}
+
+#Preview("A row opened — the read failed") {
+    NavigationStack {
+        DeliveriesView.Content(
+            isSignedIn: true, sections: previewSections,
+            expandedID: previewSections[0].rows[2].id, trail: nil,
+            trailError: "Shared storage is unavailable on this install.", compose: {})
     }
 }
 

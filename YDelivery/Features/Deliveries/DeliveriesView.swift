@@ -29,6 +29,7 @@ struct DeliveriesView: View {
                 sections: Model.sections(of: store.orders, fields: store.fields(for:)),
                 expandedID: model.expandedID,
                 trail: model.trail,
+                trailError: model.trailError,
                 historyUnavailable: store.historyUnavailable,
                 syncError: sync.lastError?.localizedDescription,
                 refresh: { await sync.syncNow() },
@@ -53,6 +54,9 @@ struct DeliveriesView: View {
                 }
                 .onChange(of: pendingOrderID) { resolvePending() }
                 .onChange(of: store.orders.map(\.id)) { resolvePending() }
+                // Every order write — a sync tick that recorded events, a pull —
+                // republishes `orders`; the open row's trail follows it.
+                .onChange(of: store.orders) { model.refreshTrail() }
         }
     }
 
@@ -83,24 +87,55 @@ extension DeliveriesView {
         /// for an order the provider never reported on: asking and nothing-there are
         /// different rows (R9).
         private(set) var trail: [ProviderEvent]?
+        /// Why the trail could not be read, when it could not — a storage failure
+        /// must not wear «nothing reported» (review, PR #77).
+        private(set) var trailError: String?
         private var loading: Task<Void, Never>?
+        /// The open row's fetch, kept so a store republication can re-read the
+        /// trail without the row being closed and reopened.
+        private var fetchTrail: (() async throws -> [ProviderEvent])?
 
-        /// Open the trail of `id`, or close it if it is the one already open. A read
-        /// that fails reads as empty — the row then says the provider has reported
-        /// nothing yet, which for a claimless order is also the truth.
+        /// Open the trail of `id`, or close it if it is the one already open.
         func toggleTrail(of id: UUID, using fetch: @escaping () async throws -> [ProviderEvent]) {
             loading?.cancel()
             guard expandedID != id else {
                 expandedID = nil
                 trail = nil
+                trailError = nil
+                fetchTrail = nil
                 return
             }
             expandedID = id
             trail = nil
+            trailError = nil
+            fetchTrail = fetch
+            read(for: id, replacing: true)
+        }
+
+        /// The store republished — sync recorded events, a pull refreshed — so the
+        /// open row's trail is re-read in place. The trail on screen stays until the
+        /// new read lands; only a success replaces it.
+        func refreshTrail() {
+            guard let id = expandedID else { return }
+            read(for: id, replacing: false)
+        }
+
+        private func read(for id: UUID, replacing: Bool) {
+            guard let fetchTrail else { return }
+            loading?.cancel()
             loading = Task {
-                let fetched = (try? await fetch()) ?? []
-                guard !Task.isCancelled, expandedID == id else { return }
-                trail = fetched
+                do {
+                    let fetched = try await fetchTrail()
+                    guard !Task.isCancelled, expandedID == id else { return }
+                    trail = fetched
+                    trailError = nil
+                } catch {
+                    guard !Task.isCancelled, expandedID == id else { return }
+                    if replacing || trail == nil {
+                        trailError = (error as? LocalizedError)?.errorDescription
+                            ?? error.localizedDescription
+                    }
+                }
             }
         }
 
