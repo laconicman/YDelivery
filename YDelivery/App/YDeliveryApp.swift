@@ -67,7 +67,10 @@ struct YDeliveryApp: App {
         // next refresh (review, PR #56).
         appDelegate.acceptShare = { try await store.acceptShare(metadata: $0) }
         #if DEBUG
-        Task { await Self.seedFieldsIfFlagged(store) }
+        Task {
+            await Self.seedFieldsIfFlagged(store)
+            await Self.seedHistoryIfFlagged(store, database: database)
+        }
         #endif
     }
 
@@ -85,6 +88,64 @@ struct YDeliveryApp: App {
         try? await store.saveField(CustomFieldDefinition(
             name: "Тип груза", kind: .choice, choices: ["Документы", "Коробка"],
             isOptional: true, isShownByDefault: false, position: 1))
+    }
+
+    /// `--uitest-history`: seed a history the Deliveries screen can show — five
+    /// orders across the status vocabulary, a provider-event trail on the live one,
+    /// and a chat on the finished one — through the same Kit writes the sync engine
+    /// and the chat screen perform. Idempotent on a non-empty store, like the
+    /// fields seed above.
+    private static func seedHistoryIfFlagged(
+        _ store: StoreController, database: AppDatabase?
+    ) async {
+        guard ProcessInfo.processInfo.arguments.contains("--uitest-history"),
+              let database else { return }
+        await store.refresh()
+        guard store.orders.isEmpty else { return }
+        let live = Order.previewEnRoute
+        let done = Order.previewDone
+        let attention = Order(
+            created: .init(timeIntervalSince1970: 1_799_900_000),
+            status: .attention,
+            route: [
+                RoutePoint(latitude: 55.7539, longitude: 37.6208, address: "Москва, Никольская, 10", contactName: "Ольга"),
+                RoutePoint(latitude: 55.7422, longitude: 37.6156, address: "Москва, Пятницкая, 25", contactName: "Сергей Волков"),
+            ],
+            price: "890", currency: "RUB", tariff: "express", claimID: "claim-preview-3",
+            providerStatus: "performer_not_found")
+        let cancelled = Order(
+            created: .init(timeIntervalSince1970: 1_799_000_000),
+            status: .cancelled,
+            route: [
+                RoutePoint(latitude: 55.7887, longitude: 37.6016, address: "Москва, Новослободская, 3"),
+                RoutePoint(latitude: 55.7658, longitude: 37.5946, address: "Москва, Тверская-Ямская, 12"),
+            ],
+            price: "1240", currency: "RUB", tariff: "courier", claimID: "claim-preview-4")
+        for order in [live, Order.previewSearching, attention, done, cancelled] {
+            try? await store.record(order)
+        }
+        // The live order's provider trail — the words the journal keeps.
+        let t0 = live.created.timeIntervalSince1970
+        let trail: [(Int64, String, TimeInterval)] = [
+            (1, "new", 0), (2, "estimating", 40), (3, "ready_for_approval", 95),
+            (4, "accepted", 130), (5, "performer_lookup", 131), (6, "performer_found", 420),
+            (7, "pickup_arrived", 1_150), (8, "pickuped", 1_200), (9, "delivery_arrived", 2_300),
+        ]
+        for (id, status, offset) in trail {
+            _ = try? database.recordProviderEvent(ProviderEvent(
+                orderID: live.id, providerEventID: id,
+                at: .init(timeIntervalSince1970: t0 + offset),
+                kind: "status", providerStatus: status, source: "journal"))
+        }
+        // The finished order's chat — a participant's word and their confirmation.
+        try? database.postMessage(OrderMessage(
+            orderID: done.id, sentAt: done.created.addingTimeInterval(3_600),
+            kind: OrderMessage.Kind.text, text: "Курьер у ворот, встречаю",
+            authorHint: "Ирина"))
+        try? database.postMessage(OrderMessage(
+            orderID: done.id, sentAt: done.created.addingTimeInterval(3_900),
+            kind: OrderMessage.Kind.receptionConfirmed, authorHint: "Ирина"))
+        await store.refresh()
     }
     #endif
 
