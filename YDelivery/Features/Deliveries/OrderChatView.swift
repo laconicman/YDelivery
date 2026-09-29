@@ -105,13 +105,21 @@ extension OrderChatView {
         private(set) var isSending = false
 
         private var loading: Task<Void, Never>?
-        /// Stream-writer epoch — a superseded `load` must never overwrite a
-        /// post's fresher snapshot (the same race `OrderDetailView` guards).
+        /// Stream-reader epoch — every read (a load, a post's re-read) is born
+        /// at one value; the three counters below decide whether its result
+        /// may still publish when it lands (the same race `OrderDetailView`
+        /// guards).
         private var generation = 0
         /// The epoch whose read actually published `messages` — a superseded
-        /// write still lands when the newer attempt produced nothing (a failed
+        /// read still lands when the newer attempt produced nothing (a failed
         /// refresh must not cost a post its snapshot).
         private var appliedStream = 0
+        /// The epoch of the last write that landed. A read born *before* it
+        /// photographed a stream without that row — its snapshot is stale
+        /// however it fares, and must not publish over the post's own account
+        /// (review, PR #58: a pre-post load dressing the stream as empty and
+        /// healthy after the post's re-read failed).
+        private var lastWrite = 0
         /// A photo fetch already asked for — rows re-ask on every render, and
         /// the fetch itself is what must not repeat.
         private(set) var photoRequests: Set<UUID> = []
@@ -127,17 +135,25 @@ extension OrderChatView {
                 defer { if born == generation { loading = nil } }
                 do {
                     let fetched = try await fetch()
-                    guard appliedStream <= born else { return }
+                    guard mayPublish(born) else { return }
                     messages = fetched
                     appliedStream = born
                     loadError = nil
                     reaskMissingPhotos()
                 } catch {
-                    guard appliedStream <= born, !Task.isCancelled else { return }
+                    guard mayPublish(born) else { return }
                     loadError = Self.describe(error)
                 }
             }
             await loading?.value
+        }
+
+        /// Whether a read born at `born` may still speak: no newer read has
+        /// published, no write landed after it began, and its caller has not
+        /// moved on — a cancelled read has no seat to publish into, success or
+        /// failure alike.
+        private func mayPublish(_ born: Int) -> Bool {
+            appliedStream <= born && lastWrite <= born && !Task.isCancelled
         }
 
         /// Posts one entry and re-reads the stream — the read is local and
@@ -181,11 +197,13 @@ extension OrderChatView {
             }
             generation += 1
             let born = generation
+            lastWrite = born
             do {
                 let fetched = try await reload()
                 // Publish unless a genuinely newer read already did — a
                 // superseding load that failed produced nothing, and this
-                // snapshot is still the freshest that exists.
+                // snapshot is still the freshest that exists. (`lastWrite`
+                // is this very epoch, so only the publication check applies.)
                 guard appliedStream <= born else { return true }
                 messages = fetched
                 appliedStream = born
