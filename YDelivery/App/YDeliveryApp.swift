@@ -1,4 +1,5 @@
 import BackgroundTasks
+import OSLog
 import SwiftUI
 import YDeliveryKit
 
@@ -25,10 +26,7 @@ struct YDeliveryApp: App {
         let session = ClientController()
         // One database, both consumers — orders/places on one side, the sync cursor
         // on the other. Sharing the instance shares the queue, not just the file.
-        let database = AppDatabase.inAppGroup(
-            id: AppGroup.id,
-            providerAccountRef: SyncIdentity.providerAccountRef,
-            containerIdentifier: SyncIdentity.cloudKitContainer)
+        let database = Self.database()
         let store = StoreController(database: database)
         let notifications = NotificationController(store: store)
         let sync = ClaimsSyncController(session: session, store: store,
@@ -74,6 +72,27 @@ struct YDeliveryApp: App {
         #endif
     }
 
+    /// The App Group database — or, under `--uitest-history`, a throwaway one: the
+    /// screenshot pass must start from an empty store on every launch and must
+    /// never sync fixtures into a signed-in account, so it gets a fresh directory
+    /// and a container that resolves to nothing (`startSync` degrades to a logged
+    /// failure, as it does on any unentitled install).
+    private static func database() -> AppDatabase? {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--uitest-history") {
+            return AppDatabase(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true),
+                providerAccountRef: SyncIdentity.providerAccountRef,
+                containerIdentifier: "iCloud.uitest")
+        }
+        #endif
+        return AppDatabase.inAppGroup(
+            id: AppGroup.id,
+            providerAccountRef: SyncIdentity.providerAccountRef,
+            containerIdentifier: SyncIdentity.cloudKitContainer)
+    }
+
     #if DEBUG
     /// `--uitest-fields`: seed a «Ваши поля» schema through the real save path —
     /// the same write the settings editor performs — so screenshot tests can see
@@ -93,15 +112,18 @@ struct YDeliveryApp: App {
     /// `--uitest-history`: seed a history the Deliveries screen can show — five
     /// orders across the status vocabulary, a provider-event trail on the live one,
     /// and a chat on the finished one — through the same Kit writes the sync engine
-    /// and the chat screen perform. Idempotent on a non-empty store, like the
-    /// fields seed above.
+    /// and the chat screen perform. The store is the throwaway one `database()`
+    /// minted for this flag, so every launch seeds from empty; a write that fails
+    /// is logged, not swallowed — a screenshot over a half-seeded store would lie.
     private static func seedHistoryIfFlagged(
         _ store: StoreController, database: AppDatabase?
     ) async {
         guard ProcessInfo.processInfo.arguments.contains("--uitest-history"),
               let database else { return }
-        await store.refresh()
-        guard store.orders.isEmpty else { return }
+        let logger = Logger(subsystem: "YDelivery", category: "uitest-seed")
+        func seed(_ what: String, _ write: () async throws -> Void) async {
+            do { try await write() } catch { logger.error("seed failed — \(what): \(error)") }
+        }
         let live = Order.previewEnRoute
         let done = Order.previewDone
         let attention = Order(
@@ -122,7 +144,7 @@ struct YDeliveryApp: App {
             ],
             price: "1240", currency: "RUB", tariff: "courier", claimID: "claim-preview-4")
         for order in [live, Order.previewSearching, attention, done, cancelled] {
-            try? await store.record(order)
+            await seed("order \(order.id)") { try await store.record(order) }
         }
         // The live order's provider trail — the words the journal keeps.
         let t0 = live.created.timeIntervalSince1970
@@ -132,19 +154,25 @@ struct YDeliveryApp: App {
             (7, "pickup_arrived", 1_150), (8, "pickuped", 1_200), (9, "delivery_arrived", 2_300),
         ]
         for (id, status, offset) in trail {
-            _ = try? database.recordProviderEvent(ProviderEvent(
-                orderID: live.id, providerEventID: id,
-                at: .init(timeIntervalSince1970: t0 + offset),
-                kind: "status", providerStatus: status, source: "journal"))
+            await seed("event \(status)") {
+                _ = try database.recordProviderEvent(ProviderEvent(
+                    orderID: live.id, providerEventID: id,
+                    at: .init(timeIntervalSince1970: t0 + offset),
+                    kind: "status", providerStatus: status, source: "journal"))
+            }
         }
         // The finished order's chat — a participant's word and their confirmation.
-        try? database.postMessage(OrderMessage(
-            orderID: done.id, sentAt: done.created.addingTimeInterval(3_600),
-            kind: OrderMessage.Kind.text, text: "Курьер у ворот, встречаю",
-            authorHint: "Ирина"))
-        try? database.postMessage(OrderMessage(
-            orderID: done.id, sentAt: done.created.addingTimeInterval(3_900),
-            kind: OrderMessage.Kind.receptionConfirmed, authorHint: "Ирина"))
+        await seed("chat text") {
+            try database.postMessage(OrderMessage(
+                orderID: done.id, sentAt: done.created.addingTimeInterval(3_600),
+                kind: OrderMessage.Kind.text, text: "Курьер у ворот, встречаю",
+                authorHint: "Ирина"))
+        }
+        await seed("chat confirmation") {
+            try database.postMessage(OrderMessage(
+                orderID: done.id, sentAt: done.created.addingTimeInterval(3_900),
+                kind: OrderMessage.Kind.receptionConfirmed, authorHint: "Ирина"))
+        }
         await store.refresh()
     }
     #endif
