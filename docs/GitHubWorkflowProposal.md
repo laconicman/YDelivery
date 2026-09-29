@@ -16,9 +16,10 @@ The survey table below is the *before* picture; this section is the current stat
 | 4 | Habit written into rule 10 (`contrib in … --pr N`, then `--auto`) | `CLAUDE.md` |
 | 5 | Squash-only on all three repos; the template | repo API, `.github/pull_request_template.md` |
 | 6 | Actions-only, monthly | `.github/dependabot.yml` |
+| 7 | **(b), then (c) at TestFlight.** Annotated tag `phase-3` on the merge that closed the phase's last slice, its message the Roadmap's done-when sentence; `gh release create phase-3 --generate-notes`. The next tag is `phase-4` at *its* done-when; `MARKETING_VERSION` stays untouched until a build leaves the machine | `git tag -n1 phase-3`, `gh release view phase-3` |
+| 8 | Five labels — `feature`, `fix`, `debt`, `workflow`, `skip-changelog` (GitHub's `documentation` reused) — and `release.yml` mapping them to *Landed / Fixed / Debt discharged / Docs and workflow*. The 27 Phase-3 PRs (#39–#78) labelled by title so the first notes read in sections; from here, `gh pr create --label …` is the habit (the PR template asks) | `gh label list`, `.github/release.yml` |
 
-Still open: §7 phase tags at the Roadmap's next done-when, §8 only with §7, §9 the
-Kit/API CI (then require its check in their protection), §10 `SECURITY.md`.
+Still open: §9 the Kit/API CI (then require its check in their protection), §10 `SECURITY.md`.
 
 ## What exists today (verified live)
 
