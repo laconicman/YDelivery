@@ -126,6 +126,38 @@ struct OrderChatTests {
         #expect(model.messages == [fresh], "the failed refresh wrote nothing — the post's read is freshest")
     }
 
+    @Test("A read begun before a post cannot publish its pre-post snapshot — even when the post's re-read failed")
+    func preWriteLoadCannotHideSentRow() async {
+        let model = OrderChatView.Model()
+        let gate = StreamGate()
+        let sent = OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "sent")
+        let loadTask = Task { await model.load { try await gate.wait() } }
+        while !gate.entered { await Task.yield() }
+        let posted = await model.post(
+            sent, using: { _ in }, then: { throw StoreController.StoreUnavailable() })
+        #expect(posted)
+        #expect(model.loadError != nil, "the failed re-read is the honest state")
+        gate.resume(with: [])
+        await loadTask.value
+        #expect(model.messages == nil, "an empty pre-post snapshot must not dress the stream as empty and healthy")
+        #expect(model.loadError != nil, "the stale read must not clear the post's read failure")
+    }
+
+    @Test("A cancelled read does not publish over a newer read's failure")
+    func cancelledLoadCannotMaskNewerFailure() async {
+        let model = OrderChatView.Model()
+        let gate = StreamGate()
+        let old = OrderMessage(orderID: orderID, kind: OrderMessage.Kind.text, text: "old")
+        let first = Task { await model.load { try await gate.wait() } }
+        while !gate.entered { await Task.yield() }
+        await model.load { throw StoreController.StoreUnavailable() }
+        #expect(model.loadError != nil)
+        gate.resume(with: [old])
+        await first.value
+        #expect(model.messages == nil, "the caller moved on — a cancelled read has no seat to publish into")
+        #expect(model.loadError != nil, "the newer read's failure stands until a valid read succeeds")
+    }
+
     /// A suspended stream read — `wait` parks on the gate, `resume` releases it.
     private final class StreamGate: @unchecked Sendable {
         private(set) var entered = false
