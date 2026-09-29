@@ -157,6 +157,18 @@ struct YDeliveryApp: App {
             ],
             price: "890", currency: "RUB", tariff: "express", claimID: "claim-preview-3",
             providerStatus: "performer_not_found")
+        // Its own route, not `previewSearching`'s: that fixture shares the live
+        // order's addresses, and the screenshot pass tells rows apart by them.
+        let searching = Order(
+            created: .init(timeIntervalSince1970: 1_799_995_000),
+            status: .searching,
+            route: [
+                RoutePoint(latitude: 55.7008, longitude: 37.5806, address: "Москва, Ленинский проспект, 40", contactName: "Марина"),
+                RoutePoint(latitude: 55.6772, longitude: 37.5619, address: "Москва, Профсоюзная, 7", contactName: "Дмитрий Орлов", contactPhone: "+79261234567"),
+            ],
+            price: "640", currency: "RUB", tariff: "express", claimID: "claim-preview-5",
+            providerStatus: "performer_lookup",
+            providerObservedAt: .init(timeIntervalSince1970: 1_799_995_600))
         let cancelled = Order(
             created: .init(timeIntervalSince1970: 1_799_000_000),
             status: .cancelled,
@@ -165,7 +177,7 @@ struct YDeliveryApp: App {
                 RoutePoint(latitude: 55.7658, longitude: 37.5946, address: "Москва, Тверская-Ямская, 12"),
             ],
             price: "1240", currency: "RUB", tariff: "courier", claimID: "claim-preview-4")
-        for order in [live, Order.previewSearching, attention, done, cancelled] {
+        for order in [live, searching, attention, done, cancelled] {
             await seed("order \(order.id)") { try await store.record(order) }
         }
         // The live order's provider trail — the words the journal keeps.

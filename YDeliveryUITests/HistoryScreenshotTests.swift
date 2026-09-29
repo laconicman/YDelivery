@@ -24,17 +24,33 @@ final class HistoryScreenshotTests: XCTestCase {
         }
 
         // The list: five rows across the status vocabulary, the live one first.
-        // Rows are single buttons with combined labels (status first) — match
-        // the button's own label, as DraftScreenshotTests does; `containing`
-        // would resolve to the list itself.
-        func row(_ statusPrefix: String) -> XCUIElement {
+        // Rows are single buttons with combined labels — match the button's own
+        // label, as DraftScreenshotTests does; `containing` would resolve to the
+        // list itself. The status pill is its own button inside the row (#62), so
+        // rows are matched by the destination address, pills by the status words.
+        func row(_ destination: String) -> XCUIElement {
             app.buttons.matching(
-                NSPredicate(format: "label BEGINSWITH %@", statusPrefix)
-            ).firstMatch
+                NSPredicate(format: "label CONTAINS %@", destination)
+            ).matching(NSPredicate(format: "NOT (label CONTAINS %@)", "Courier on the way")).firstMatch
         }
-        let liveRow = row("Courier on the way")
+        let liveRow = row("Каширское шоссе")
         XCTAssertTrue(liveRow.waitForExistence(timeout: 15))
         snap("1-deliveries-list")
+
+        // The status line opens the provider's trail in place (#62): the chip is a
+        // borderless button inside the row, so it has its own hit area.
+        let statusToggle = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Courier on the way")
+        ).firstMatch
+        XCTAssertTrue(statusToggle.waitForExistence(timeout: 5))
+        statusToggle.tap()
+        let trailRow = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "Courier is at the destination door")
+        ).firstMatch
+        XCTAssertTrue(trailRow.waitForExistence(timeout: 5), "the seeded nine-event trail must render")
+        snap("1b-deliveries-row-expanded")
+        statusToggle.tap()
+        XCTAssertTrue(trailRow.waitForNonExistence(timeout: 5), "the second tap on the pill must collapse the trail")
 
         // The finished order's detail — it carries the chat row. A List row's
         // NavigationLink is one cell; tapping the matched text lands on it.
@@ -43,14 +59,23 @@ final class HistoryScreenshotTests: XCTestCase {
         // settle, then open the row — by coordinate if the element tap is eaten.
         func open(_ element: XCUIElement) {
             sleep(2)
-            // The row's centre lands on the addresses — `RouteLine`. Through Kit
-            // 0.4.0 its rows carried an unconditional tap gesture that swallowed
-            // the touch and the row opened nothing (Kit #27); tapping here is the
-            // regression gate.
-            element.tap()
-            XCTAssertTrue(app.navigationBars["Order"].waitForExistence(timeout: 5))
+            // A row under the compose button or the tab bar is not tappable — bring
+            // it into the clear part of the screen first.
+            let clearBottom = app.windows.firstMatch.frame.height - 180
+            for _ in 0..<6 where element.frame.maxY > clearBottom {
+                app.swipeUp(velocity: .slow)
+            }
+            // Tap the route line (second line of three): the row's vertical centre
+            // is the status line, whose tap opens the trail rather than the order
+            // (#62), and a tap on the addresses is the regression gate for Kit #27
+            // — through 0.4.0 `RouteLine` swallowed exactly that tap.
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.38)).tap()
+            if !app.navigationBars["Order"].waitForExistence(timeout: 5) {
+                snap("debug-open-failed")
+                XCTFail("row did not open the order")
+            }
         }
-        let doneRow = row("Delivered")
+        let doneRow = row("Арбат")
         XCTAssertTrue(doneRow.waitForExistence(timeout: 5))
         open(doneRow)
         let chatRow = app.buttons.matching(
