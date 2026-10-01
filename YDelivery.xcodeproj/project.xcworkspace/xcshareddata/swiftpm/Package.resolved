@@ -155,6 +155,15 @@
       }
     },
     {
+      "identity" : "swift-issue-reporting",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-issue-reporting",
+      "state" : {
+        "revision" : "75b000cea2ca6d7527a57e1b9cc0bdf21a9abe9f",
+        "version" : "2.1.1"
+      }
+    },
+    {
       "identity" : "swift-numerics",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-numerics.git",
@@ -236,15 +245,6 @@
       }
     },
     {
-      "identity" : "xctest-dynamic-overlay",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/pointfreeco/xctest-dynamic-overlay",
-      "state" : {
-        "revision" : "d9308ad679143c26a30dec52daefe82f54af2b82",
-        "version" : "1.13.1"
-      }
-    },
-    {
       "identity" : "yams",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/jpsim/Yams",
@@ -267,8 +267,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/YDeliveryKit",
       "state" : {
-        "revision" : "b8bdd5980eb21c1c1fd6a30654e3bdc9bc236dd2",
-        "version" : "0.4.5"
+        "revision" : "42a3f89f99cfd6978559908fe5f1cab5d9855398",
+        "version" : "0.4.6"
       }
     }
   ],
