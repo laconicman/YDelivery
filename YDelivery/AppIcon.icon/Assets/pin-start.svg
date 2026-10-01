@@ -1,0 +1,4 @@
+<!-- concentric-ring pickup pin (ring band + center dot) — group "PinStart" -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<path fill="#1E8E3E" fill-rule="evenodd" d="M491 667 A138 138 0 1 1 215 667 A138 138 0 1 1 491 667 Z M436 667 A83 83 0 1 0 270 667 A83 83 0 1 0 436 667 Z M399 667 A46 46 0 1 1 307 667 A46 46 0 1 1 399 667 Z"/>
+</svg>
