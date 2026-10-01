@@ -258,6 +258,7 @@ extension OrderChatView {
     }
 }
 
+#if DEBUG
 #Preview("Chat — with a stream") {
     let order = Order.previewDone
     let database = AppDatabase(
@@ -298,3 +299,4 @@ extension OrderChatView {
             .environment(StoreController(database: nil))
     }
 }
+#endif

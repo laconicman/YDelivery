@@ -104,6 +104,8 @@ struct ShareView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     ShareView(model: .preview(), cancel: {}, confirm: {})
 }
+#endif
