@@ -174,36 +174,47 @@ Author direction, recorded 2026-09-24:
    of the state it presents (the write boundary above).
 4. **Public sharing stays off** — `publicPermission = .none`, no public-database
    records; organization claims ride provider-side visibility where it exists.
-5. **Provider state is signed by the device that wrote it (author's idea, 2026-09-29).**
-   The write boundary above holds by layering — read-only grants, an append-only
-   participant surface, owner overwrite — but nothing lets a reader *check* that a mirror
-   row is the owner's. A signature does, cheaply:
-   - **What is signed.** The owner's sync, when it writes `OrderProviderState` or a
-     `ProviderEvent`, signs a canonical serialisation of the row (sorted keys, the
-     `UnixEpochSecondsRepresentation` doubles as stored) and stores the signature in a new
-     owner-written column, `signature BLOB`, plus a `signingKeyID`. Participants never
-     write these tables, so the column costs them nothing.
-   - **Which key.** CryptoKit `Curve25519.Signing`; the private key lives in the
-     **iCloud Keychain** (`kSecAttrSynchronizable`), so every device of the owner's account
-     holds it and no participant ever does; the public key rides on the `Order` root
-     (owner-written) as `ownerSigningKey`. HMAC would be cheaper but leaves participants
-     unable to verify without the secret — the asymmetric key is what makes the check
-     public.
-   - **Who verifies.** Every reader, on read: the owner's other devices confirm their own
-     records were not rewritten by a read-write participant; a participant confirms the
-     mirror it relays came from the owner's key. A row that fails renders as *unverified
-     provider state* beside its «as of» stamp — visible, never hidden, never a crash. The
-     forgery boundary <doc:Schema> reserves for `lastModifiedUserRecordID` becomes a
-     signature check instead — stronger, and independent of CloudKit's system fields.
+5. **Provider state is signed by the device that wrote it (author's idea, 2026-09-29;
+   landed YD-19).** The write boundary above holds by layering — read-only grants, an
+   append-only participant surface, owner overwrite — but nothing lets a reader *check*
+   that a mirror row is the owner's. A signature does, cheaply:
+   - **What is signed.** The owner's sync, when it writes `OrderProviderState`, a
+     `ProviderEvent`, or a `RouteStop`, signs a canonical serialisation of the row
+     (sorted keys, the `UnixEpochSecondsRepresentation` doubles as stored) and stores
+     the signature in a new owner-written column, `signature` (base64 TEXT — a `Data`
+     column would ride the wire as a `CKAsset` round-trip per row), plus a
+     `signingKeyID`. `RouteStop` joined the signed set at landing: a rewritten
+     `visitStatus`/`visitedAt`/`expectedVisitAt` is provider truth too, and the whole
+     row is signed because a rewritten address is a worse forgery than a faked visit.
+   - **Which key.** CryptoKit `Curve25519.Signing` (Ed25519); the private key lives in
+     the **iCloud Keychain** (`kSecAttrSynchronizable`), so every device of the owner's
+     account holds it and no participant ever does; the public key rides on the `Order`
+     root (owner-written) as `ownerSigningKey`. HMAC would be cheaper but leaves
+     participants unable to verify without the secret — the asymmetric key is what
+     makes the check public. Only the locally owned zone signs: a participant writing
+     into a foreign shared zone must not stamp the owner's key.
+   - **Who verifies.** Every reader, on read — the verdict is a `SignatureVerdict`
+     attached to the model (`verified`, `unsigned`, `invalid`, `keyChanged`,
+     `notSigned`): the owner's other devices confirm their own records were not
+     rewritten by a read-write participant; a participant confirms the mirror it relays
+     came from the owner's key. A row that fails renders a warning beside its «as of»
+     stamp — visible, never hidden, never a crash — and `StatusTimeline` folds repeated
+     events by verdict too, so a failed row cannot hide behind a verified duplicate.
+   - **Who wrote it.** Alongside the verdict, the reader surfaces the CloudKit
+     `creatorUserRecordID`/`lastModifiedUserRecordID` archived in `SyncMetadata`'s
+     `lastKnownServerRecord`, resolved to participant names through the `CKShare` —
+     the *who* that a signature cannot name. Non-throwing; absent metadata reads as
+     absent, never as an error.
    - **What it does not do.** It does not stop a read-write participant from *writing* a
      mirror row (CloudKit permissions are per record); it makes the write detectable. A
      participant who rewrites the `Order` root's public key can forge — so the key is
-     also pinned locally on first sight (TOFU), and a changed key is itself a warning.
+     also pinned locally on first sight (`OwnerKeyPin`, device tier), and a changed key
+     is itself a warning the pin never silently rewrites.
 
-   Decision: **sign the two owner-written tables; verify on read; render, never refuse.**
-   The author's own framing — "maybe excessive given the permissions, but cheap" — is the
-   right weight: two columns, one Keychain item, one verify per row read. Sequenced after
-   the device pass of share acceptance, since verification needs two accounts to test.
+   Decision: **sign the owner-written tables; verify on read; render, never refuse.**
+   Pre-signature rows read as *unsigned*, not *forged* — additive nullable DDL keeps
+   them readable. The author's own framing — "maybe excessive given the permissions,
+   but cheap" — is the right weight.
 
 ## Open verifications before committing
 

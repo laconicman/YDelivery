@@ -30,6 +30,7 @@ struct DeliveriesView: View {
                 expandedID: model.expandedID,
                 trail: model.trail,
                 trailError: model.trailError,
+                trailModifiers: model.trailModifiers,
                 historyUnavailable: store.historyUnavailable,
                 syncError: sync.lastError?.localizedDescription,
                 refresh: { await sync.syncNow() },
@@ -39,7 +40,12 @@ struct DeliveriesView: View {
                     repeatOrder(order, reversed)
                 },
                 toggleTrail: { id in
-                    model.toggleTrail(of: id) { try await store.providerEvents(for: id) }
+                    model.toggleTrail(of: id) {
+                        try await store.providerEvents(for: id)
+                    } modifiers: {
+                        await store.providerEventsAuthorship(of: id)
+                            .compactMapValues { $0.modifierDisplayName }
+                    }
                 }
             )
                 .navigationTitle("Deliveries")
@@ -90,25 +96,40 @@ extension DeliveriesView {
         /// Why the trail could not be read, when it could not — a storage failure
         /// must not wear «nothing reported» (review, PR #77).
         private(set) var trailError: String?
+        /// Who CloudKit last saw writing each event row — populated only when a
+        /// signature verdict needs a name beside it, so a clean trail never pays
+        /// the lookup (doc:Collaboration → signed provider state).
+        private(set) var trailModifiers: [UUID: String] = [:]
         private var loading: Task<Void, Never>?
         /// The open row's fetch, kept so a store republication can re-read the
         /// trail without the row being closed and reopened.
         private var fetchTrail: (() async throws -> [ProviderEvent])?
+        /// The open row's modifier read — same lifetime as ``fetchTrail``.
+        private var fetchModifiers: (() async -> [UUID: String])?
 
         /// Open the trail of `id`, or close it if it is the one already open.
-        func toggleTrail(of id: UUID, using fetch: @escaping () async throws -> [ProviderEvent]) {
+        /// `modifiers` is the authorship read — invoked lazily, only for rows
+        /// whose signature verdict warns.
+        func toggleTrail(
+            of id: UUID, using fetch: @escaping () async throws -> [ProviderEvent],
+            modifiers: @escaping () async -> [UUID: String] = { [:] }
+        ) {
             loading?.cancel()
             guard expandedID != id else {
                 expandedID = nil
                 trail = nil
                 trailError = nil
+                trailModifiers = [:]
                 fetchTrail = nil
+                fetchModifiers = nil
                 return
             }
             expandedID = id
             trail = nil
             trailError = nil
+            trailModifiers = [:]
             fetchTrail = fetch
+            fetchModifiers = modifiers
             read(for: id, replacing: true)
         }
 
@@ -129,6 +150,10 @@ extension DeliveriesView {
                     guard !Task.isCancelled, expandedID == id else { return }
                     trail = fetched
                     trailError = nil
+                    if fetched.contains(where: { $0.signatureStatus?.trailWarning != nil }),
+                       let fetchModifiers {
+                        trailModifiers = await fetchModifiers()
+                    }
                 } catch {
                     guard !Task.isCancelled, expandedID == id else { return }
                     if replacing || trail == nil {
