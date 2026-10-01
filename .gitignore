@@ -28,6 +28,17 @@ secrets.*
 YDelivery.xcodeproj/project.pbxproj
 YDelivery.xcodeproj/xcshareddata/xcschemes/
 
+# App Store metadata (asc.json + metadata/, `asc pull` output): the listing text is
+# committed — the repo is public on purpose (AppStore repo, decision D6). What must never
+# land in a public repo is the pulled review_information/ (reviewer contact, demo-account
+# flags) and anything the local/ convention keeps "lost rather than exposed". The baseline
+# sidecar holds resource ids and digests only, so it stays tracked.
+metadata/review_information/
+local/
+# `asc questionnaire` answer sheets are working drafts — the tool's convention keeps
+# them local-only; the answers that survive review land in metadata/ instead.
+questionnaires/
+
 # NOT ignored, deliberately, and it differs from the sibling package:
 #   Package.resolved — an app pins its dependencies; a library lets consumers resolve their
 #                      own. See the workspace CLAUDE.md.

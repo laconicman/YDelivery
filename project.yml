@@ -162,6 +162,9 @@ targets:
         # When-In-Use only, asked considerately (Roadmap → Phase 2): the picker explains
         # first, and everything works without it.
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Your position appears on the map and becomes the pickup point. Everything works without it.
+        # HTTPS to Yandex and system crypto (CloudKit, Keychain) — exempt encryption.
+        # Declaring it here skips the export-compliance question on every upload.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         # CloudKit sync (Schema → Sync tiers): silent pushes wake CKSyncEngine for
         # fetch changes; CKSharingSupported opens the per-order CKShare flow.
         INFOPLIST_KEY_CKSharingSupported: YES
