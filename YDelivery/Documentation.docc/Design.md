@@ -144,6 +144,33 @@ a *cross-device wake-up* — one device syncs, a shared-zone change nudges the
 others — but they can only trigger our own reconcile; Yandex's webhooks cannot
 reach CloudKit, so provider→device push still waits on the relay above.
 
+## Background refresh is delivered on the main queue (2026-10-01)
+
+`BGTaskScheduler.register(forTaskWithIdentifier:using:launchHandler:)` takes the queue
+its launch handler runs on; `nil` means "a default background queue"
+([Apple](https://developer.apple.com/documentation/backgroundtasks/bgtaskscheduler/register(fortaskwithidentifier:using:launchhandler:))).
+We pass `.main`. The handler is written in `YDeliveryApp.init()`, so under `MainActor`
+default isolation the closure is MainActor-isolated. The SDK's `launchHandler` is
+not `@Sendable`, so nothing makes it nonisolated, and Swift 6 mode checks the
+closure's isolation at runtime on entry (SE-0423, dynamic actor isolation). Delivered on
+`com.apple.BGTaskScheduler (…)`, that check traps in `_swift_task_checkIsolatedSwift`.
+That is the crash TestFlight 1.0 (1) shipped. The handler does nothing but hand off to
+`ClaimsSyncController.handleAppRefresh`, so holding the main queue for it costs nothing.
+
+**The rule this generalises to:** a closure written in MainActor code and handed to a
+callback API that predates concurrency inherits MainActor. Either the API delivers on
+main (pass `.main` when it takes a queue), or the closure is explicitly `@Sendable`.
+Making the *callee* `nonisolated` is not enough: the trap fires before the closure
+calls it. `handleAppRefresh` was `nonisolated` the whole time.
+
+**Rejected:** keeping `nil` and marking the closure `@Sendable`. It does the same
+job, but the `[weak sync]` capture then has to satisfy `Sendable` checking, and it
+buys a background queue the handler has no use for. Also rejected: SwiftUI's
+`.backgroundTask(.appRefresh(_:))`, whose action is `@Sendable async` and so immune.
+It completes the task when the closure returns, with no way to report failure, and
+`handleAppRefresh` reports `setTaskCompleted(success: false)` so the scheduler doesn't
+read a failed pass as a good one. The test gap this left is <doc:TechDebt> YD-19.
+
 ## iOS-only
 
 One platform until the product shape settles. The package supports macOS, and nothing in

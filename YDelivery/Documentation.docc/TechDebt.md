@@ -303,6 +303,42 @@ the new identity's shareable log.
   (`finishTasksAndInvalidate` plus settling) was rejected in the register: paying
   latency on every sign-in to fence a one-line leak is the wrong trade.
 
+## YD-19 — The background-refresh launch handler has no automated test — **open**
+
+The handler registered in `YDeliveryApp.init()` only runs when iOS launches a
+`BGAppRefreshTask`. CI, the unit suites and UI tests never reach it, and a debug run
+doesn't either unless someone triggers it by hand. That is how a launch handler on
+the wrong queue shipped in TestFlight 1.0 (1) and trapped in the field
+(<doc:Design>, "Background refresh is delivered on the main queue").
+
+- **Cost:** any regression in the handler's isolation, cast or completion reporting
+  shows up only as a field crash or a quietly dead refresh chain. Swift Testing's exit
+  tests can't host the check either: they don't run on iOS.
+- **Today's ritual, on a device:** Apple documents the simulate calls as device-only
+  ([Starting and Terminating Tasks During Development](https://developer.apple.com/documentation/backgroundtasks/starting-and-terminating-tasks-during-development)).
+  Run with the debugger attached, let launch finish (an early pause lands in dyld,
+  where expressions can't resolve), pause, then:
+
+  ```
+  e -l objc -- @import BackgroundTasks
+  e -l objc -- (BOOL)[[BGTaskScheduler sharedScheduler] submitTaskRequest:[[BGAppRefreshTaskRequest alloc] initWithIdentifier:@"com.learnable.YDelivery.claims-refresh"] error:nil]
+  e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"com.learnable.YDelivery.claims-refresh"]
+  continue
+  ```
+
+  The `@import` is needed in a Swift-only binary. The explicit submit is needed
+  because the app arms a request only on `.background`; without one the scheduler
+  logs "No task request … has been scheduled" and does nothing.
+  `_simulateExpirationForTaskWithIdentifier:` exercises the expiry path the same way.
+  To see the pass finish, break on `-[BGAppRefreshTask setTaskCompletedWithSuccess:]`
+  (the success flag is in `x2`). The subclass overrides it, so a breakpoint on the
+  `BGTask` method never fires. Verified 2026-10-01 on iOS 26.6.2: the unfixed handler
+  trapped on `com.apple.BGTaskScheduler (…)`, and the fixed one completed on main with
+  `YES`.
+- **Discharge:** a seam that lets a unit test invoke the registered handler from a
+  non-main queue, or a UI-test hook that triggers the launch. Either has to stay out of
+  the shipped binary: the private selectors are grounds for App Store rejection.
+
 ## See Also
 
 - <doc:Design>
