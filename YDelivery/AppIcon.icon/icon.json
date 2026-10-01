@@ -1,0 +1,139 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.969,0.957,0.933,1",
+          "srgb:0.910,0.886,0.839,1"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 1
+          }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "gray:0.192,1",
+          "gray:0.078,1"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 1
+          }
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.80,1"
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "pin-start.svg",
+          "name": "pin-start"
+        }
+      ],
+      "lighting": "individual",
+      "name": "PinStart",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.55
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.15
+      }
+    },
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:1.0,1"
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "pin-end.svg",
+          "name": "pin-end"
+        }
+      ],
+      "lighting": "individual",
+      "name": "PinEnd",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.55
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.15
+      }
+    },
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.604,0.663,0.745,1"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.55,1"
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "route.svg",
+          "name": "route"
+        }
+      ],
+      "lighting": "individual",
+      "name": "Route",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.25
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.4
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}
