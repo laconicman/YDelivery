@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import OSLog
 import SQLiteData
@@ -42,14 +43,29 @@ extension YDeliveryApp {
         let logger = Logger(subsystem: "YDelivery", category: "ckschema-seed")
         func seed(_ what: String, _ write: () async throws -> Void) async {
             do { try await write() }
-            catch { logger.error("seed failed — \(what): \(error)") }
+            catch {
+                logger.error("seed failed — \(what): \(error)")
+                print("ckschema-seed failed — \(what): \(error)")
+            }
         }
+        print("ckschema-seed start")
 
         // The engine's per-table tracking triggers install at *construction*,
         // and `startSync` performs it — idempotent, so the launch task's own
         // call is the one this lands behind either way. A row committed before
         // construction would persist locally yet leave no CloudKit footprint.
         await database.startSync()
+
+        // Everything downstream is silent without an iCloud account — the
+        // substrate's startTask returns at its accountStatus guard and
+        // sendChanges then has no engines to push through — so the probe prints
+        // before the writes, not after they fail invisibly. rawValue: 0
+        // couldNotDetermine · 1 available · 2 restricted · 3 noAccount ·
+        // 4 temporarilyUnavailable.
+        let container = CKContainer(identifier: SyncIdentity.cloudKitContainer)
+        let status = try? await container.accountStatus()
+        print("ckschema-seed accountStatus=\(status?.rawValue ?? -1) isRunning=\((try? database.syncEngine.isRunning) ?? false)")
+        print("ckschema-seed entitled=\(database.iCloudEntitled) syncStartFailure=\(database.syncStartFailure?.localizedDescription ?? "none")")
 
         // A fixed reference moment and derived ids: a repeat launch rewrites
         // the same rows instead of accumulating seed litter — the substrate's
@@ -60,6 +76,17 @@ extension YDeliveryApp {
                          "ckschema-seed", part)
         }
         let orderID = seedID("order")
+        let orderPK = orderID.uuidString.lowercased()
+        /// STRICT-TEXT keys bind lowercase strings (AppDatabase.args' rule).
+        func hasRow(_ sql: String, _ key: String) -> Bool {
+            (try? database.queue.read { db in
+                try Bool.fetchOne(db, sql: sql, arguments: [key]) ?? false
+            }) ?? false
+        }
+        // No global "already seeded" short-circuit: every step below is
+        // self-converging (upserts, derived-id dedupe, or an explicit
+        // preflight), so a rerun rewrites the same values and pushes — and a
+        // partial earlier run always completes the rest.
 
         // Typed writes cover ten of the fourteen synced tables; the seeded
         // order populates `orders`, `routeStops` (address parts, contacts and
@@ -126,18 +153,35 @@ extension YDeliveryApp {
                 kind: "status", providerStatus: "performer_found",
                 detail: "schema seed detail", source: "journal"))
         }
-        await seed("orderMessages") {
-            try database.postMessage(OrderMessage(
-                id: seedID("message"), orderID: orderID, sentAt: t0 + 600,
-                kind: OrderMessage.Kind.text,
-                text: "schema seed message", authorHint: "Seed"))
+        // postMessage/postPhotoMessage are append-only INSERTs, not upserts —
+        // on a rerun after a partial seed they are preflighted so a repeat
+        // launch converges instead of erroring or duplicating.
+        let messageID = seedID("message")
+        if !hasRow("SELECT EXISTS(SELECT 1 FROM \"orderMessages\" WHERE \"id\" = ?)",
+                   messageID.uuidString.lowercased()) {
+            await seed("orderMessages") {
+                try database.postMessage(OrderMessage(
+                    id: messageID, orderID: orderID, sentAt: t0 + 600,
+                    kind: OrderMessage.Kind.text,
+                    text: "schema seed message", authorHint: "Seed"))
+            }
         }
         // A photo post covers what the text one cannot: `attachmentRef` on the
         // message, `orderAttachments`, and the blob that lands as a CKAsset.
-        await seed("orderAttachments, attachmentBlobs") {
-            try await store.postPhotoMessage(
-                orderID: orderID, data: Data(Self.seedPNG),
-                caption: "schema seed photo")
+        // The preflight checks authorHint, not row existence — a rerun whose
+        // earlier write predates the authorHint pass posts once more and then
+        // converges.
+        if !hasRow("""
+            SELECT EXISTS(SELECT 1 FROM "orderAttachments"
+                          WHERE "orderID" = ? AND "authorHint" IS NOT NULL)
+            """, orderPK) {
+            await seed("orderAttachments, attachmentBlobs") {
+                // AppDatabase directly — StoreController's funnel drops
+                // `authorHint`, and the schema wants the column populated.
+                try database.postPhotoMessage(
+                    orderID: orderID, data: Data(Self.seedPNG),
+                    caption: "schema seed photo", authorHint: "Seed")
+            }
         }
         await seed("savedPlaces") {
             try await store.save(SavedPlace(
@@ -165,7 +209,6 @@ extension YDeliveryApp {
         // `AppDatabase.args` enforces for the handwritten SQL it keeps internal.
         await seed("orderOptions, orderItems, orderPrivateStates, providerAccounts") {
             try database.queue.write { db in
-                let orderPK = orderID.uuidString.lowercased()
                 // The stop ids `insertStops` derives for this order's route —
                 // the journey ends name real rows, not dangling references.
                 let pickupStopPK = UUID.derived(
@@ -180,7 +223,7 @@ extension YDeliveryApp {
                     INSERT OR REPLACE INTO "orderOptions"
                       ("orderID", "proCourier", "toDoor", "thermobag",
                        "loaders", "due", "comment")
-                    VALUES (?, x'01', x'00', x'01', 2, ?, 'schema seed')
+                    VALUES (?, 1, 0, 1, 2, ?, 'schema seed')
                     """, arguments: [orderPK, t0.timeIntervalSince1970 + 3_600])
                 try db.execute(sql: """
                     INSERT OR REPLACE INTO "orderItems"
@@ -196,7 +239,7 @@ extension YDeliveryApp {
                     INSERT OR REPLACE INTO "orderPrivateStates"
                       ("orderID", "personalNote", "pinned",
                        "lastSeenActivityAt")
-                    VALUES (?, 'schema seed note', x'01', ?)
+                    VALUES (?, 'schema seed note', 1, ?)
                     """, arguments: [orderPK, t0.timeIntervalSince1970 + 600])
                 try db.execute(sql: """
                     INSERT OR REPLACE INTO "providerAccounts"
@@ -217,6 +260,17 @@ extension YDeliveryApp {
             }
         }
 
+        // Local truth check — the seed's own columns as the store holds them,
+        // so a schema miss can be blamed on upload or on the write, not guessed.
+        let buildings = (try? await database.queue.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT "building" FROM "routeStops" WHERE "building" IS NOT NULL
+                UNION SELECT "building" FROM "savedPlaces"
+                WHERE "building" IS NOT NULL
+                """)
+        }) ?? []
+        print("ckschema-seed buildings=\(buildings)")
+
         // Reflect the seeded order on screen — the run is a device operation,
         // so its rows should be visible in the list the launch leaves up.
         await store.refresh()
@@ -224,12 +278,63 @@ extension YDeliveryApp {
         // The push — sendChanges() is the manual flush the share seam already
         // uses; an absent iCloud account lands here as a thrown error the log
         // names, not a silence.
-        do {
-            try await database.syncEngine.sendChanges()
-            logger.log("schema seed flushed — order \(orderID)")
-        } catch {
-            logger.error("schema seed flush failed: \(error)")
+        func flush(_ tag: String) async {
+            do {
+                try await database.syncEngine.sendChanges()
+                let running = try database.syncEngine.isRunning
+                logger.log("schema seed \(tag) — order \(orderID)")
+                print("ckschema-seed \(tag) — order \(orderID) isRunning=\(running)")
+            } catch {
+                logger.error("schema seed \(tag) failed: \(error)")
+                print("ckschema-seed \(tag) failed: \(error)")
+            }
         }
+        await flush("flushed")
+
+        // sqlite-data swallows a re-insert under an existing primary key:
+        // DELETE (or REPLACE's internal delete) marks the row's SyncMetadata
+        // `_isDeleted` and queues a remote delete, and the INSERT that follows
+        // lands on `ON CONFLICT DO NOTHING` — no save is ever queued. The
+        // seed's own writes hit that on every rerun: `recordOrder` delete+inserts
+        // `routeStops`/`orderCustomFields`, and `INSERT OR REPLACE` covers
+        // `savedPlaces` plus the raw-SQL tables. A plain UPDATE is the one write
+        // shape that always re-marks the row save-pending — so after the first
+        // flush ships the deletes, these touches resurrect the rows remotely
+        // and push them through the *current* serializer (which is what lets a
+        // newly declared column, e.g. `building`, finally reach the schema).
+        await seed("resurrect swallowed rewrites") {
+            try database.queue.write { db in
+                try db.execute(sql: """
+                    UPDATE "routeStops" SET "building" = "building"
+                    WHERE "orderID" = ?
+                    """, arguments: [orderPK])
+                try db.execute(sql: """
+                    UPDATE "orderCustomFields" SET "value" = "value"
+                    WHERE "orderID" = ?
+                    """, arguments: [orderPK])
+                try db.execute(sql: """
+                    UPDATE "savedPlaces" SET "building" = "building"
+                    WHERE "id" = ?
+                    """, arguments: [seedID("place").uuidString.lowercased()])
+                try db.execute(sql: """
+                    UPDATE "orderOptions" SET "comment" = "comment"
+                    WHERE "orderID" = ?
+                    """, arguments: [orderPK])
+                try db.execute(sql: """
+                    UPDATE "orderItems" SET "name" = "name"
+                    WHERE "orderID" = ?
+                    """, arguments: [orderPK])
+                try db.execute(sql: """
+                    UPDATE "orderPrivateStates" SET "personalNote" = "personalNote"
+                    WHERE "orderID" = ?
+                    """, arguments: [orderPK])
+                try db.execute(sql: """
+                    UPDATE "providerAccounts" SET "displayLabel" = "displayLabel"
+                    WHERE "key" = ?
+                    """, arguments: [SyncIdentity.providerAccountRef])
+            }
+        }
+        await flush("resurrected")
     }
 
     /// A 1×1 PNG — the attachment's bytes are opaque to the schema (a BLOB
