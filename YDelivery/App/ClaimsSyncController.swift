@@ -442,10 +442,10 @@ final class ClaimsSyncController {
     /// The background-refresh half: iOS wakes the app briefly, one journal pass
     /// is the whole job — the feed's cheap delta, not the membership re-ask.
     /// The next request is armed *first*, so a run killed mid-pass still
-    /// leaves a wake-up queued behind it. `nonisolated`: the launch handler
-    /// runs on a system background queue (`nil` in `register`), and everything
-    /// here — `BGTaskScheduler`, the `Task` spawn — is already off-actor safe;
-    /// the journal pass itself hops to MainActor at the `await`.
+    /// leaves a wake-up queued behind it. `nonisolated`: the launch handler is
+    /// delivered on `.main` (see `register` in `YDeliveryApp`), but nothing
+    /// here needs the actor — `BGTaskScheduler` and the `Task` spawn are
+    /// off-actor safe, and the journal pass hops to MainActor at the `await`.
     nonisolated func handleAppRefresh(_ task: BGAppRefreshTask) {
         scheduleAppRefresh()
         // BGTask predates Sendable — its completion/expiry API is thread-safe

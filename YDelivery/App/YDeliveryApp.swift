@@ -37,10 +37,14 @@ struct YDeliveryApp: App {
         session.onIdentityChange = { [weak sync] in sync?.resetIdentityState() }
         // The background-refresh registration must complete before launch finishes;
         // the handler is the journal pass — the feed's cheap delta, not the
-        // membership re-ask.
+        // membership re-ask. `.main`, not `nil`: written here, the closure is
+        // MainActor-isolated, and Swift 6 checks that on entry — `nil` delivers
+        // it on BackgroundTasks' own queue and the check traps (TestFlight 1.0 (1),
+        // `_swift_task_checkIsolatedSwift`; Design, "Background refresh is
+        // delivered on the main queue"; untested by CI — YD-19).
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: ClaimsSyncController.refreshTaskIdentifier,
-            using: nil
+            using: .main
         ) { [weak sync] task in
             guard let refresh = task as? BGAppRefreshTask else { return }
             // The scheduler retains this closure for the app's lifetime —
