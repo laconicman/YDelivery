@@ -1,0 +1,11 @@
+{
+  "bundleId": "com.learnable.YDelivery",
+  "platform": "IOS",
+  "metadataRoot": "metadata",
+  "locales": [
+    "en-GB",
+    "ru"
+  ],
+  "minimumOSVersion": "17.0",
+  "appSource": "."
+}
