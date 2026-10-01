@@ -77,6 +77,13 @@ extension NewDeliveryView {
             var journey: String? = nil
         }
 
+        /// A parcel template, reduced to its chip — the library's *use* path
+        /// (the Library tab is the curate path). Pinned entries lead.
+        struct TemplateChip: Identifiable, Hashable {
+            let id: UUID
+            let name: String
+        }
+
         let rows: [Row]
         let pins: [Pin]
         let estimate: NewDeliveryView.Model.Estimate
@@ -120,6 +127,18 @@ extension NewDeliveryView {
         let addItem: () -> Void
         let editItem: (UUID) -> Void
         let removeItems: (IndexSet) -> Void
+        /// The library's chips, and its seam: `templatesError` filled means the
+        /// templates could not be *read* — which must never draw as an empty
+        /// library (the `fieldsError` rule, one channel over). Defaulted so
+        /// previews of the parcel rows stay terse.
+        var templateChips: [TemplateChip] = []
+        var templatesError: String? = nil
+        var retryTemplates: () -> Void = {}
+        var applyTemplate: (TemplateChip.ID) -> Void = { _ in }
+        /// The item row's second door to «Save as template» — the naming sheet
+        /// opens at the root. `nil` when the store cannot keep one, so the row
+        /// never shows a menu item that cannot run (the `savePlace` rule).
+        var saveTemplateItem: ((UUID) -> Void)? = nil
         let setFieldValue: (UUID, String) -> Void
         let revealField: (UUID) -> Void
         let editOptions: (NewDeliveryView.OptionsEditor.Focus) -> Void
@@ -216,6 +235,34 @@ extension NewDeliveryView {
             }
         }
 
+        /// The library's chips above the items — the picker's `chipsRow` precedent:
+        /// capsules in a horizontal scroll, one tap appends the template's items.
+        private var templateChipsRow: some View {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Layout.Spacing.unit) {
+                    ForEach(templateChips) { chip in
+                        Button {
+                            applyTemplate(chip.id)
+                        } label: {
+                            Label(chip.name, systemSymbol: .shippingbox)
+                                .font(.subheadline)
+                                .padding(.horizontal, Layout.Spacing.gutter)
+                                .padding(.vertical, Layout.Spacing.chip)
+                                .background(Color(.secondarySystemFill), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .listRowInsets(EdgeInsets(
+                top: Layout.Spacing.tight,
+                leading: Layout.Spacing.gutter,
+                bottom: Layout.Spacing.tight,
+                trailing: Layout.Spacing.gutter
+            ))
+            .listRowBackground(Color.clear)
+        }
+
         private var routeCard: some View {
             List {
                 Section {
@@ -285,6 +332,18 @@ extension NewDeliveryView {
                 }
 
                 Section {
+                    if let templatesError {
+                        VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                            Text(templatesError)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                            Button("Retry", action: retryTemplates)
+                                .font(.footnote)
+                        }
+                    }
+                    if !templateChips.isEmpty {
+                        templateChipsRow
+                    }
                     ForEach(itemRows) { item in
                         Button {
                             editItem(item.id)
@@ -313,6 +372,17 @@ extension NewDeliveryView {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            // The second door to «Save as template» — the first
+                            // lives in the item editor itself (the library doc).
+                            if let saveTemplateItem {
+                                Button {
+                                    saveTemplateItem(item.id)
+                                } label: {
+                                    Label("Save as a template", systemSymbol: .shippingbox)
+                                }
+                            }
+                        }
                     }
                     .onDelete(perform: removeItems)
 
@@ -1114,6 +1184,13 @@ private extension MKCoordinateRegion {
         addItem: {},
         editItem: { _ in },
         removeItems: { _ in },
+        // The library's chips — pinned leads; the row menu is the second door
+        // to «Save as template».
+        templateChips: [
+            .init(id: UUID(), name: "Учебники"),
+            .init(id: UUID(), name: "Документы"),
+        ],
+        saveTemplateItem: { _ in },
         setFieldValue: { _, _ in },
         revealField: { _ in },
         editOptions: { _ in },

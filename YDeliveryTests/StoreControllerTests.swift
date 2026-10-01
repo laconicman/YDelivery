@@ -460,4 +460,112 @@ struct StoreControllerTests {
         #expect(Contact(at: chip.point) == ivan,
                 "the chip restores the whole point — picking it is chip → done, contact included")
     }
+
+    // MARK: The sender's library — parcel templates and pins
+
+    @Test("A kept template publishes; refresh reads it back")
+    func templateRoundTripsThroughTheStore() async throws {
+        let controller = controller
+        let template = ParcelTemplate(name: "Учебники", items: [
+            .init(name: "Комплект учебников", quantity: 5, weightKg: 12,
+                  cost: "2500.00", currency: "RUB",
+                  sizeLengthCm: 30, sizeWidthCm: 21, sizeHeightCm: 8),
+        ])
+
+        try await controller.save(template)
+
+        let stored = try #require(controller.parcelTemplates.first)
+        #expect(stored.name == "Учебники")
+        #expect(stored.items.map(\.name) == ["Комплект учебников"])
+        #expect(stored.items[0].cost == "2500.00")
+
+        // And again off a cold read — the list the chips draw is the store's,
+        // not whatever the save happened to publish.
+        await controller.refresh()
+        #expect(controller.parcelTemplates.map(\.name) == ["Учебники"])
+        #expect(controller.templatesError == nil)
+    }
+
+    @Test("Pinned templates lead the chips; the toggle persists")
+    func templatePinLeads() async throws {
+        let controller = controller
+        let older = ParcelTemplate(name: "Старый", items: [
+            .init(name: "А", currency: "RUB")])
+        let newer = ParcelTemplate(name: "Новый", items: [
+            .init(name: "Б", currency: "RUB")])
+        try await controller.save(older)
+        try await controller.save(newer)
+        #expect(controller.parcelTemplates.map(\.name) == ["Старый", "Новый"])
+
+        await controller.setTemplatePinned(newer.id, pinned: true)
+
+        #expect(controller.parcelTemplates.map(\.name) == ["Новый", "Старый"],
+                "the pinned template leads despite being newer")
+        #expect(controller.parcelTemplates.first?.pinned == true)
+    }
+
+    @Test("Forgetting a template clears the list")
+    func deletingTemplateForgets() async throws {
+        let controller = controller
+        let template = ParcelTemplate(name: "Коробка", items: [
+            .init(name: "А", currency: "RUB")])
+        try await controller.save(template)
+
+        await controller.deleteTemplate(template.id)
+
+        #expect(controller.parcelTemplates.isEmpty)
+        #expect(controller.templatesError == nil)
+    }
+
+    /// The channel the chips' absence speaks on: a library that could not be
+    /// *read* must not draw as a library that is empty (review, PR #28).
+    @Test("A template read that fails is a channel, not an empty library")
+    func templateReadFailureIsNotEmpty() async throws {
+        let database = AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test")
+        try await database.queue.write {
+            try $0.execute(sql: "DROP TABLE \"parcelTemplates\"")
+        }
+        let controller = StoreController(database: database, republishing: .none)
+
+        await controller.refresh()
+
+        #expect(controller.parcelTemplates.isEmpty)
+        #expect(controller.templatesError != nil)
+    }
+
+    @Test("A containerless store refuses a template keep, worded")
+    func unavailableStoreRefusesTemplate() async throws {
+        let controller = StoreController(database: nil)
+        #expect(!controller.canSaveTemplates)
+
+        await #expect(throws: StoreController.StoreUnavailable.self) {
+            try await controller.save(ParcelTemplate(name: "Коробка", items: [
+                .init(name: "А", currency: "RUB")]))
+        }
+    }
+
+    @Test("A place pin leads the chips and survives a refresh")
+    func placePinLeadsAndPersists() async throws {
+        let controller = controller
+        let home = SavedPlace(
+            name: "Дом", kind: .home,
+            point: RoutePoint(latitude: 55, longitude: 37, address: "Тверская, 6"))
+        let warehouse = SavedPlace(
+            name: "Склад", kind: .warehouse,
+            point: RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100"))
+        try await controller.save(home)
+        try await controller.save(warehouse)
+        #expect(controller.savedPlaces.map(\.name) == ["Дом", "Склад"])
+
+        await controller.setPlacePinned(warehouse.id, pinned: true)
+
+        #expect(controller.savedPlaces.map(\.name) == ["Склад", "Дом"],
+                "pinned leads; the rest keep insertion order")
+        #expect(controller.savedPlaces.first?.pinned == true)
+
+        await controller.refresh()
+        #expect(controller.savedPlaces.first?.pinned == true,
+                "the pin is the store's truth, not the publish's")
+        #expect(controller.placesError == nil)
+    }
 }

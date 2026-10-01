@@ -27,6 +27,64 @@ struct NewDeliveryModelTests {
         #expect(!model.isRouteComplete)
     }
 
+    /// The chip's tap appends — fresh ids, the route's ends for journeys: a
+    /// template cannot carry a route (they are route-relative by definition),
+    /// and applying twice makes two identical boxes, legitimately.
+    @Test("Applying a template appends its items — twice makes two boxes")
+    func applyingTemplateAppendsFreshItems() {
+        let model = filledDraft()
+        let template = ParcelTemplate(name: "Учебники", items: [
+            .init(name: "Комплект учебников", quantity: 5, weightKg: 12, currency: "RUB"),
+        ])
+
+        model.applyTemplate(template)
+        model.applyTemplate(template)
+
+        #expect(model.items.count == 2)
+        #expect(model.items[0].id != model.items[1].id, "two boxes, two identities")
+        #expect(model.items.allSatisfy { $0.pickupPointID == nil && $0.dropoffPointID == nil },
+                "a template never carries journey refs — the route's ends read")
+        #expect(model.items.allSatisfy { $0.name == "Комплект учебников" && $0.quantity == 5 })
+    }
+
+    /// The multi-item reading the schema already admits: a bundle applies every
+    /// row in the template's order.
+    @Test("A bundle applies its rows in order")
+    func applyingBundleKeepsRowOrder() {
+        let model = filledDraft()
+        let template = ParcelTemplate(name: "Комплект", items: [
+            .init(name: "А", currency: "RUB"),
+            .init(name: "Б", currency: "RUB"),
+            .init(name: "В", currency: "RUB"),
+        ])
+
+        model.applyTemplate(template)
+
+        #expect(model.items.map(\.name) == ["А", "Б", "В"])
+    }
+
+    /// The library row keeps the item's facts through the round-trip — cost as
+    /// the wire's decimal string, size joined, journey refs nil on the way back.
+    @Test("An item keeps its facts through the library round-trip")
+    func templateItemRoundTrips() {
+        var item = ParcelItem()
+        item.name = "Учебники"
+        item.quantity = 5
+        item.weightKg = 12.5
+        item.cost = Decimal(string: "2500.50")
+        item.currency = "RUB"
+        item.size = ParcelItem.Size(lengthCm: 30, widthCm: 21, heightCm: 8)
+
+        let back = ParcelItem(templateItem: item.templateItem)
+
+        #expect(back.name == item.name && back.quantity == item.quantity)
+        #expect(back.weightKg == item.weightKg)
+        #expect(back.cost == item.cost, "the POSIX string parses back to the same money")
+        #expect(back.size == item.size && back.currency == item.currency)
+        #expect(back.id != item.id)
+        #expect(back.pickupPointID == nil && back.dropoffPointID == nil)
+    }
+
     /// A schema that could not be read is not an empty one — required fields may
     /// exist that nobody is being asked about, so the draft refuses to order until
     /// the schema is readable again (review, PR #42). With a schema on hand the

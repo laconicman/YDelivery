@@ -1,4 +1,5 @@
 import Foundation
+import YDeliveryKit
 
 /// One thing the courier carries — the rows of «What's inside» (board `3d`). Typed
 /// fields with units owned by the field: centimetres and kilograms here, metres on the
@@ -34,6 +35,41 @@ nonisolated struct ParcelItem: Hashable, Sendable, Identifiable {
     var isBlank: Bool {
         name.trimmingCharacters(in: .whitespaces).isEmpty
             && weightKg == nil && cost == nil && size == nil
+    }
+}
+
+nonisolated extension ParcelItem {
+    /// From a library entry — a *fresh* id and nil journey refs: applying a chip
+    /// appends a box (applying twice makes two identical boxes — legitimate; the
+    /// library doc rules no dedupe), and a template cannot carry a route. Cost
+    /// parses POSIX like `init(restoring:)`'s items — the wire string, never the
+    /// locale's comma.
+    init(templateItem: ParcelTemplate.Item) {
+        self.init()
+        name = templateItem.name
+        quantity = templateItem.quantity
+        weightKg = templateItem.weightKg
+        cost = templateItem.cost.flatMap {
+            Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX"))
+        }
+        currency = templateItem.currency
+        if let length = templateItem.sizeLengthCm,
+           let width = templateItem.sizeWidthCm,
+           let height = templateItem.sizeHeightCm {
+            size = Size(lengthCm: length, widthCm: width, heightCm: height)
+        }
+    }
+
+    /// The library row this item would keep — journey refs drop by definition:
+    /// they are route-relative and a template has no route.
+    var templateItem: ParcelTemplate.Item {
+        ParcelTemplate.Item(
+            name: name, quantity: quantity, weightKg: weightKg,
+            cost: cost.map(ClientController.wireDecimal),
+            currency: currency,
+            sizeLengthCm: size?.lengthCm,
+            sizeWidthCm: size?.widthCm,
+            sizeHeightCm: size?.heightCm)
     }
 }
 

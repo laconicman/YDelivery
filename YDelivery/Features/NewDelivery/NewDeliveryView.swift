@@ -28,6 +28,9 @@ struct NewDeliveryView: View {
     @State private var estimateAttempt = 0
     @State private var offersAttempt = 0
     @State private var editingItem: ParcelItem?
+    /// The item the row menu's «Save as a template» is naming — the editor's
+    /// own door presents its naming sheet inside its sheet instead.
+    @State private var namingTemplateItem: ParcelItem?
     @State private var editingOptions: OptionsEditor.Focus?
     @State private var showsExplainer = false
     @Environment(ClientController.self) private var session
@@ -95,6 +98,19 @@ struct NewDeliveryView: View {
                 addItem: { editingItem = ParcelItem() },
                 editItem: { editingItem = draft.item(withID: $0) },
                 removeItems: { draft.removeItems(at: $0) },
+                templateChips: store.parcelTemplates.map {
+                    Content.TemplateChip(id: $0.id, name: $0.name)
+                },
+                templatesError: store.templatesError?.localizedDescription,
+                retryTemplates: { Task { await store.refresh() } },
+                applyTemplate: { id in
+                    guard let template = store.parcelTemplates
+                        .first(where: { $0.id == id }) else { return }
+                    draft.applyTemplate(template)
+                },
+                saveTemplateItem: store.canSaveTemplates
+                    ? { id in namingTemplateItem = draft.item(withID: id) }
+                    : nil,
                 setFieldValue: { draft.setFieldValue($1, for: $0) },
                 revealField: { draft.revealField($0) },
                 editOptions: { editingOptions = $0 },
@@ -222,8 +238,20 @@ struct NewDeliveryView: View {
                     item: item,
                     stops: itemStops,
                     selectedTariff: draft.chosenTariff,
-                    save: { draft.setItem($0) }
+                    save: { draft.setItem($0) },
+                    saveTemplate: store.canSaveTemplates
+                        ? { item, name in
+                            try await store.save(ParcelTemplate(
+                                name: name, items: [item.templateItem]))
+                        }
+                        : nil
                 )
+            }
+            .sheet(item: $namingTemplateItem) { item in
+                SaveTemplateSheet(item: item) { name in
+                    try await store.save(ParcelTemplate(
+                        name: name, items: [item.templateItem]))
+                }
             }
             .sheet(item: $editingOptions) { focus in
                 OptionsEditor(

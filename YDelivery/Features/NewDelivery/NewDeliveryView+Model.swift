@@ -625,6 +625,14 @@ extension NewDeliveryView {
             items.remove(atOffsets: offsets)
         }
 
+        /// The chip's tap: the template's rows join the parcel — fresh ids and the
+        /// route's ends for journeys (the library doc's ruling: appending twice
+        /// makes two identical boxes, legitimate). Repricing follows `items`
+        /// through the keyed task, as any edit's does.
+        func applyTemplate(_ template: ParcelTemplate) {
+            items += template.items.map(ParcelItem.init(templateItem:))
+        }
+
         /// The heaviest reading of the parcel against a class's bounds — what the strip
         /// and the explainer warn with (board `3a`: the mismatch note).
         func itemsThatDontFit(_ tariff: TariffClass) -> [ParcelItem] {

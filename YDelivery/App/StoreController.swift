@@ -17,6 +17,9 @@ import YDeliveryKit
 final class StoreController {
     private(set) var orders: [Order] = []
     private(set) var savedPlaces: [SavedPlace] = []
+    /// The sender's parcel library — the draft's template chips and the Library
+    /// tab's Parcels segment read this one list (pinned-first, insertion after).
+    private(set) var parcelTemplates: [ParcelTemplate] = []
     /// «Ваши поля» — the sender's field schema (board `4b`), in definition order.
     private(set) var fieldDefinitions: [CustomFieldDefinition] = []
     /// Every stored field value — the search filter, Spotlight, and the detail view
@@ -33,6 +36,10 @@ final class StoreController {
     /// The fields side of the seam — a schema that failed to read is a draft showing
     /// no fields, which is exactly the state to tell apart from "nothing configured".
     private(set) var fieldsError: (any Error)?
+    /// The parcel library's side of the seam — same rule: a template list that
+    /// could not be read must not render as an empty one (the chip row's
+    /// absence would otherwise read as "you have saved nothing").
+    private(set) var templatesError: (any Error)?
 
     /// Whether the store has been read through at least once, successfully. Until it
     /// has, an empty ``orders`` means *not looked yet*, not *nothing there* — and a
@@ -204,6 +211,12 @@ final class StoreController {
                 fieldsError = nil
             } catch {
                 fieldsError = error
+            }
+            do {
+                parcelTemplates = try await Self.readParcelTemplates(database)
+                templatesError = nil
+            } catch {
+                templatesError = error
             }
             reindexSpotlightIfHealthy()
             renderWidgetSnapshotIfHealthy()
@@ -415,6 +428,69 @@ final class StoreController {
         }
     }
 
+    /// Whether keeping a template can work at all — the Save-as-template
+    /// affordance hides rather than offering a write that cannot run, like
+    /// ``canSavePlaces``.
+    var canSaveTemplates: Bool { database != nil }
+
+    /// The pin toggle on a remembered door — the chip menu's write and the
+    /// Library's. Nobody renders a thrown error, so a failure lands on
+    /// ``placesError`` like ``deletePlace(_:)``.
+    func setPlacePinned(_ id: SavedPlace.ID, pinned: Bool) async {
+        guard let database else { return }
+        do {
+            try await Self.setPlacePinned(id, pinned: pinned, in: database)
+            savedPlaces = try await Self.readPlaces(database)
+            placesError = nil
+            publishSavedPlacesIfHealthy()
+        } catch {
+            placesError = error
+        }
+    }
+
+    /// Keeps a parcel template and republishes the library. Throws like
+    /// ``save(_:)``: the naming sheet stands in front of the sender and renders
+    /// the refusal where it happened — a template that did not persist must
+    /// never look like one that did.
+    func save(_ template: ParcelTemplate) async throws {
+        guard let database else { throw StoreUnavailable() }
+        try await Self.write(template, to: database)
+        do {
+            parcelTemplates = try await Self.readParcelTemplates(database)
+            templatesError = nil
+        } catch {
+            // The write held but the confirming read did not — same truth as
+            // save(place:)'s: only the read may clear the channel.
+            templatesError = error
+            throw error
+        }
+    }
+
+    /// Forgets a template — the context menu's write: nobody renders a thrown
+    /// error, so a failure lands on ``templatesError`` and the chip stays.
+    func deleteTemplate(_ id: ParcelTemplate.ID) async {
+        guard let database else { return }
+        do {
+            try await Self.deleteTemplate(id, from: database)
+            parcelTemplates = try await Self.readParcelTemplates(database)
+            templatesError = nil
+        } catch {
+            templatesError = error
+        }
+    }
+
+    /// The pin toggle on a template — same discipline as ``setPlacePinned``.
+    func setTemplatePinned(_ id: ParcelTemplate.ID, pinned: Bool) async {
+        guard let database else { return }
+        do {
+            try await Self.setTemplatePinned(id, pinned: pinned, in: database)
+            parcelTemplates = try await Self.readParcelTemplates(database)
+            templatesError = nil
+        } catch {
+            templatesError = error
+        }
+    }
+
     /// Records a placed order and republishes history. Throws — an order that was
     /// *placed* but not *remembered* is a state the sender must see, not a silent gap
     /// in the list. `providerObservedAt` marks a provider sighting: callers fresh off
@@ -615,6 +691,41 @@ final class StoreController {
     @concurrent
     private static func deletePlace(_ id: SavedPlace.ID, from database: AppDatabase) async throws {
         try database.deletePlace(id: id)
+    }
+
+    @concurrent
+    private static func setPlacePinned(
+        _ id: SavedPlace.ID, pinned: Bool, in database: AppDatabase
+    ) async throws {
+        try database.setPlacePinned(id: id, pinned: pinned)
+    }
+
+    @concurrent
+    private static func readParcelTemplates(
+        _ database: AppDatabase
+    ) async throws -> [ParcelTemplate] {
+        try database.readParcelTemplates()
+    }
+
+    @concurrent
+    private static func write(
+        _ template: ParcelTemplate, to database: AppDatabase
+    ) async throws {
+        try database.saveParcelTemplate(template)
+    }
+
+    @concurrent
+    private static func deleteTemplate(
+        _ id: ParcelTemplate.ID, from database: AppDatabase
+    ) async throws {
+        try database.deleteParcelTemplate(id: id)
+    }
+
+    @concurrent
+    private static func setTemplatePinned(
+        _ id: ParcelTemplate.ID, pinned: Bool, in database: AppDatabase
+    ) async throws {
+        try database.setParcelTemplatePinned(id: id, pinned: pinned)
     }
 
     @concurrent
