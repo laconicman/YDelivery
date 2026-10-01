@@ -397,6 +397,7 @@ extension OrderDetailView {
     }
 }
 
+#if DEBUG
 #Preview("Searching — cancellable") {
     NavigationStack {
         OrderDetailView(order: .previewSearching)
@@ -412,3 +413,4 @@ extension OrderDetailView {
             .environment(StoreController(database: nil))
     }
 }
+#endif
