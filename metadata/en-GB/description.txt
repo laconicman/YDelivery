@@ -1,0 +1,9 @@
+YDelivery is an unofficial client for Yandex Delivery business accounts — the delivery service's Express API in your pocket, with no backend and no integrator.
+
+Place orders from a map instead of coordinates: pick points visually, use saved places and recents, or paste a link. See the price before you commit — every tariff shown up front — and repeat last week's run in one tap.
+
+Every order you sent stays on every device you own, synced through your private iCloud, searchable by address and your own fields. The app keeps itself updated: a notification on every status change and a Live Activity that follows the delivery on your Lock Screen — no page to refresh.
+
+Share a delivery without sharing your account: let a recipient or a colleague follow the order, chat per order, confirm receipt — no Yandex login needed for them. And if plans change, cancel with the fee shown before the tap.
+
+Requires a Yandex Delivery business account and its API token — your cabinet, at business terms. Delivery is paid to Yandex on your business account. Not affiliated with or endorsed by Yandex.
