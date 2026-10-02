@@ -259,9 +259,11 @@ contact, a role, default options; history stores whole orders, so «Повтор
 everything in one tap. Recents, saved places and repeat-order are one local store read three
 ways. **Rejected:** three separate features — triple the work, split truth.
 
-**The tab bar goes.** «New Delivery» is a verb, not a place; two tabs remain (Доставки,
-Настройки) and the flow presents modally, making the draft's lifetime legible — a tab
-switch may no longer destroy it. **Rejected:** the three-tab layout this app shipped with.
+**The tab bar goes.** «New Delivery» is a verb, not a place; the flow presents modally,
+making the draft's lifetime legible — a tab switch may no longer destroy it. **Rejected:**
+the three-tab layout this app shipped with. *Addendum 2026-10-02:* «Library» joined as
+the third tab — a noun screen, so it does not contradict this decision, which only
+retired the *verb* tab (<doc:Roadmap> → the sender's library).
 
 Two framings that settle later arguments: **the unit of work is the order, not the parcel**
 (the sender's own order number outranks the vendor's claim id on every surface), and **the

@@ -28,7 +28,7 @@ struct RootView: View {
     @Environment(LiveActivityController.self) private var activities
     @Environment(\.scenePhase) private var scenePhase
 
-    enum Tab { case deliveries, settings }
+    enum Tab { case deliveries, library, settings }
 
     #if DEBUG
     /// UI-test seeding: a three-stop draft with real-length addresses, opened on the
@@ -90,6 +90,12 @@ struct RootView: View {
             )
                 .tabItem { Label("Deliveries", systemSymbol: .shippingbox) }
                 .tag(Tab.deliveries)
+            // The sender's library between history and settings — the curate
+            // half of «where saved things live»; the use half stays inside the
+            // draft (Roadmap → the sender's library).
+            LibraryView()
+                .tabItem { Label("Library", systemSymbol: .archivebox) }
+                .tag(Tab.library)
             SettingsView()
                 .tabItem { Label("Settings", systemSymbol: .gearshape) }
                 .tag(Tab.settings)

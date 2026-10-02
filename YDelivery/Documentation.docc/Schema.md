@@ -248,7 +248,9 @@ stop, also a `claims/search` filter), `extra_id` (item) — verified against gen
 |---|---|---|---|
 | `ProviderAccount` | `key` TEXT PK (`"yandex:<corpClientID>"`) | `provider`, `corpClientID`, `displayLabel`, `firstSeenAt`, `lastSeenAt` | none needed — orders reference it by value |
 | `OrderPrivateState` | `orderID` PK + FK → `Order` | `personalNote`, `pinned`, `lastSeenActivityAt` (unread bookkeeping) | 1 — legal: private tables aren't shared, the no-FK rule doesn't apply |
-| `SavedPlace` | `id` UUID PK | `name`, `kind`, + the RouteStop column set minus `orderID`/`position`/`role` | 0 (it's never a share root — sharing is per-order) |
+| `SavedPlace` | `id` UUID PK | `name`, `kind`, `pinned`, + the RouteStop column set minus `orderID`/`position`/`role` | 0 (it's never a share root — sharing is per-order) |
+| `ParcelTemplate` | `id` UUID PK | `name` (the library's label — free to differ from the goods'), `pinned` | 0 — the sender's vocabulary, never a share member; instances on an order stay `OrderItem` |
+| `ParcelTemplateItem` | `id` UUID PK | `templateID` → `ParcelTemplate`, `position`, `name`, `quantity`, `weightKg`, `cost`, `currency`, `sizeLengthCm`/`sizeWidthCm`/`sizeHeightCm` | 1 — the child tier that gives a template bundle room; v1 writes exactly one item (a UI convention, not a schema invariant), and deletes sweep children explicitly because `PRAGMA foreign_keys` stays off |
 | `CustomFieldDefinition` | `id` UUID PK | `name`, `kind` (`text`/`choice`), `choicesJSON`, `isOptional`, `isShownByDefault` (required ⇒ shown, enforced on write), `carrier`, `position` | 0 — the schema is the sender's vocabulary; the *values* ride shared on `OrderCustomField` |
 
 `carrier` is exclusive by write transaction — one field may claim each wire slot, and the
@@ -473,10 +475,10 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
 - **Read-only participants posting messages**: today message-posting = read-write
   grant. A "comment but don't touch attachments" tier doesn't exist in CloudKit; if it
   is ever needed it is app-enforced convention on top of read-write.
-- **A parcel nomenclature** (`ParcelTemplate`, private tier — the sender's reusable goods,
-  never a share member; instances stay `OrderItem`) and a `pinned` flag on it and on
-  `SavedPlace`: additive DDL, no FK, no migration (<doc:Roadmap> → Next). Tags on either
-  list start private; a *shared* tag vocabulary is a workspace-root question, above.
+- **Tags on the library lists**: `ParcelTemplate`/`ParcelTemplateItem` and `pinned` on
+  both lists **landed** (Kit 0.4.7, additive DDL — see the private-tier table above).
+  What stays open is *shared* tags: a tag vocabulary a team shares is the workspace-root
+  question above; private tags wait until someone names a use pin doesn't cover.
 - **Signed provider state**: `signature BLOB` + `signingKeyID` on `OrderProviderState` and
   `ProviderEvent` (owner-written), `ownerSigningKey` on `Order`; Curve25519 over a canonical
   serialisation; the private key in the iCloud Keychain, so the owner's devices sign and

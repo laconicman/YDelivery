@@ -28,6 +28,9 @@ struct NewDeliveryView: View {
     @State private var estimateAttempt = 0
     @State private var offersAttempt = 0
     @State private var editingItem: ParcelItem?
+    /// The item the row menu's «Save as a template» is naming — the editor's
+    /// own door presents its naming sheet inside its sheet instead.
+    @State private var namingTemplateItem: ParcelItem?
     @State private var editingOptions: OptionsEditor.Focus?
     @State private var showsExplainer = false
     @Environment(ClientController.self) private var session
@@ -52,9 +55,13 @@ struct NewDeliveryView: View {
         let unavailable: Bool
     }
 
-    var body: some View {
-        NavigationStack {
-            Content(
+    /// The screen's content, assembled. The init call keeps its pre-library
+    /// argument list because the older CI toolchain's solver tips past it —
+    /// "failed to produce diagnostic", then "ambiguous" on `NavigationStack`
+    /// once the body went multi-statement. The fields are `var`s with defaults,
+    /// so they attach after construction instead.
+    private var content: Content {
+        var content = Content(
                 rows: contentRows,
                 pins: contentPins,
                 estimate: draft.estimate,
@@ -100,6 +107,33 @@ struct NewDeliveryView: View {
                 editOptions: { editingOptions = $0 },
                 openReview: { showsReview = true }
             )
+            content.templateChips = store.parcelTemplates.map {
+                Content.TemplateChip(id: $0.id, name: $0.name)
+            }
+            content.templatesError = store.templatesError?.localizedDescription
+            content.retryTemplates = { Task { await store.refresh() } }
+            content.applyTemplate = { id in
+                guard let template = store.parcelTemplates
+                    .first(where: { $0.id == id }) else { return }
+                draft.applyTemplate(template)
+            }
+            content.saveTemplateItem = store.canSaveTemplates
+                ? { id in namingTemplateItem = draft.item(withID: id) }
+                : nil
+            return content
+        }
+
+    /// The «Save as a template» write, gated the same way both doors need —
+    /// hoisted because a ternary producing an optional closure inside a call
+    /// is precisely what the older toolchain's solver choked on.
+    private var saveItemTemplate: ((ParcelItem, String) async throws -> Void)? {
+        guard store.canSaveTemplates else { return nil }
+        return { item, name in try await store.saveTemplate(item, name: name) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            content
             // Structured re-pricing: the ids are what pricing answers to — the route for
             // the estimate; route, parcel, and options for offers — so any edit cancels
             // the stale run and starts the right one; dismissal cancels outright. Each id
@@ -222,8 +256,14 @@ struct NewDeliveryView: View {
                     item: item,
                     stops: itemStops,
                     selectedTariff: draft.chosenTariff,
-                    save: { draft.setItem($0) }
+                    save: { draft.setItem($0) },
+                    saveTemplate: saveItemTemplate
                 )
+            }
+            .sheet(item: $namingTemplateItem) { item in
+                SaveTemplateSheet(item: item) { name in
+                    try await store.saveTemplate(item, name: name)
+                }
             }
             .sheet(item: $editingOptions) { focus in
                 OptionsEditor(

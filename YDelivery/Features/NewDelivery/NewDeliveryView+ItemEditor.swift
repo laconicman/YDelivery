@@ -1,3 +1,4 @@
+import SFSafeSymbols
 import SwiftUI
 import YDeliveryKit
 
@@ -22,20 +23,29 @@ extension NewDeliveryView {
         let stops: [Stop]
         let selectedTariff: TariffClass?
         let save: (ParcelItem) -> Void
+        /// The filled form's door to the library (the task doc's ruling — the
+        /// other door is the item row's menu). Takes the item and its template
+        /// name; `nil` when the store cannot keep one, and the row stays hidden.
+        let saveTemplate: ((ParcelItem, String) async throws -> Void)?
 
         @State private var item: ParcelItem
         @State private var hasSize: Bool
+        /// The naming sheet over this one — presented *inside* the editor, since
+        /// two `.sheet`s cannot stack on the root the editor itself rides.
+        @State private var namingTemplate = false
         @Environment(\.dismiss) private var dismiss
 
         init(
             item: ParcelItem,
             stops: [Stop],
             selectedTariff: TariffClass?,
-            save: @escaping (ParcelItem) -> Void
+            save: @escaping (ParcelItem) -> Void,
+            saveTemplate: ((ParcelItem, String) async throws -> Void)? = nil
         ) {
             self.stops = stops
             self.selectedTariff = selectedTariff
             self.save = save
+            self.saveTemplate = saveTemplate
             _item = State(initialValue: item)
             _hasSize = State(initialValue: item.size != nil)
         }
@@ -64,15 +74,7 @@ extension NewDeliveryView {
                                 TextField("—", value: $item.cost, format: .number.precision(.fractionLength(0...2)))
                                     .keyboardType(.decimalPad)
                                     .multilineTextAlignment(.trailing)
-                                Picker("Currency", selection: $item.currency) {
-                                    // The wire's three (ISO 4217); a picker, not a text
-                                    // field — no free-text number ever means two things.
-                                    Text(verbatim: "₽ RUB").tag("RUB")
-                                    Text(verbatim: "$ USD").tag("USD")
-                                    Text(verbatim: "€ EUR").tag("EUR")
-                                }
-                                .labelsHidden()
-                                .fixedSize()
+                                CurrencyPicker(currency: $item.currency)
                             }
                         }
                     }
@@ -84,6 +86,18 @@ extension NewDeliveryView {
                         }
                     } footer: {
                         fitFooter
+                    }
+
+                    if saveTemplate != nil {
+                        Section {
+                            Button {
+                                namingTemplate = true
+                            } label: {
+                                Label("Save as a template", systemSymbol: .shippingbox)
+                            }
+                        } footer: {
+                            Text("Adds it to the Library — the next parcel starts filled.")
+                        }
                     }
 
                     if stops.count > 2 {
@@ -144,6 +158,15 @@ extension NewDeliveryView {
                 }
                 .navigationTitle("Item")
                 .navigationBarTitleDisplayMode(.inline)
+                .sheet(isPresented: $namingTemplate) {
+                    // The naming sheet owns the write — a refusal is rendered
+                    // there, and this form stays filled beneath it.
+                    if let saveTemplate {
+                        SaveTemplateSheet(item: item) { name in
+                            try await saveTemplate(item, name)
+                        }
+                    }
+                }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
@@ -331,6 +354,23 @@ extension NewDeliveryView.ItemEditor {
                 .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: Layout.Radius.field))
         }
     }
+
+    /// The wire's three currencies (ISO 4217) — a picker, not a text field: no
+    /// free-text number ever means two things. Shared with the library's
+    /// template editor so the list lives in one place.
+    struct CurrencyPicker: View {
+        @Binding var currency: String
+
+        var body: some View {
+            Picker("Currency", selection: $currency) {
+                Text(verbatim: "₽ RUB").tag("RUB")
+                Text(verbatim: "$ USD").tag("USD")
+                Text(verbatim: "€ EUR").tag("EUR")
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+    }
 }
 
 #Preview("New item") {
@@ -359,7 +399,8 @@ extension NewDeliveryView.ItemEditor {
                 .init(id: UUID(), label: "Каширское шоссе, 52", role: .dropoff),
             ],
             selectedTariff: .courier,
-            save: { _ in }
+            save: { _ in },
+            saveTemplate: { _, _ in }
         )
     }
 }
