@@ -113,6 +113,37 @@ nonisolated extension Offer {
     }
 }
 
+#if DEBUG
+extension Offer {
+    /// The `--uitest-offers` strip — what the provider might answer for a short
+    /// city run, priced like the #Preview fixture plus a superexpress card, which
+    /// renders by its wire name until the tariff lands in `TariffClass`. Payloads
+    /// are opaque stand-ins; nothing spends them, the same way no fixture launch
+    /// could place the order anyway.
+    static var listingStrip: [Offer] {
+        let now = Date.now
+        return [
+            Offer(tariff: .courier, price: 749, currency: "RUB",
+                  pickupInterval: now + 15 * 60 ... now + 30 * 60,
+                  deliveryInterval: now + 50 * 60 ... now + 80 * 60,
+                  payload: "uitest-courier"),
+            Offer(tariff: .express, price: 1190, currency: "RUB",
+                  pickupInterval: now + 10 * 60 ... now + 25 * 60,
+                  deliveryInterval: now + 40 * 60 ... now + 70 * 60,
+                  payload: "uitest-express"),
+            Offer(tariff: .other("superexpress_d2d"), price: 1890, currency: "RUB",
+                  pickupInterval: now + 5 * 60 ... now + 15 * 60,
+                  deliveryInterval: now + 25 * 60 ... now + 45 * 60,
+                  payload: "uitest-faster"),
+            Offer(tariff: .cargo, price: 3400, currency: "RUB",
+                  pickupInterval: now + 30 * 60 ... now + 60 * 60,
+                  deliveryInterval: now + 90 * 60 ... now + 150 * 60,
+                  payload: "uitest-cargo"),
+        ]
+    }
+}
+#endif
+
 /// Thrown by the offers fetch when no session exists — the strip renders a sign-in
 /// invitation, not a failure. Model-layer type so the draft model never learns the
 /// controller's shape. `LocalizedError` with a filled description, like every error
