@@ -68,10 +68,10 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.4.6 marks the value-vocabulary extensions nonisolated, which Xcode 27
-    # needs; earlier 0.4.x leaks MainActor into nonisolated share text. (0.4.5's
-    # ShareError remains a requirement too — it's subsumed by this floor.)
-    minorVersion: 0.4.6
+    # 0.4.7 ships the sender's library — `ParcelTemplate`/`parcelTemplateItems`
+    # and `SavedPlace.pinned` — which the schema seed writes. (0.4.6's
+    # nonisolated vocabulary is subsumed by this floor.)
+    minorVersion: 0.4.7
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols

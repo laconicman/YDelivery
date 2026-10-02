@@ -196,7 +196,22 @@ extension YDeliveryApp {
                     contactName: "Seed Place",
                     contactGivenName: "Seed", contactFamilyName: "Place",
                     contactPhone: "+70000000003",
-                    contactPhoneExtension: "9")))
+                    contactPhoneExtension: "9"),
+                pinned: true))
+        }
+        // The sender's library (doc:Roadmap): `saveParcelTemplate` upserts the
+        // root and rewrites `parcelTemplateItems` wholesale, so one typed write
+        // populates both synced tables.
+        await seed("parcelTemplates, parcelTemplateItems") {
+            try database.saveParcelTemplate(ParcelTemplate(
+                id: seedID("template"),
+                name: "Schema seed template", pinned: true,
+                items: [ParcelTemplate.Item(
+                    id: seedID("templateItem"),
+                    name: "schema seed parcel", quantity: 2,
+                    weightKg: 0.5, cost: "1.00", currency: "RUB",
+                    sizeLengthCm: 10.0, sizeWidthCm: 10.0,
+                    sizeHeightCm: 5.0)]))
         }
 
         // Four synced tables no typed write reaches — `orderOptions`,
@@ -332,6 +347,14 @@ extension YDeliveryApp {
                     UPDATE "providerAccounts" SET "displayLabel" = "displayLabel"
                     WHERE "key" = ?
                     """, arguments: [SyncIdentity.providerAccountRef])
+                try db.execute(sql: """
+                    UPDATE "parcelTemplates" SET "name" = "name"
+                    WHERE "id" = ?
+                    """, arguments: [seedID("template").uuidString.lowercased()])
+                try db.execute(sql: """
+                    UPDATE "parcelTemplateItems" SET "name" = "name"
+                    WHERE "templateID" = ?
+                    """, arguments: [seedID("template").uuidString.lowercased()])
             }
         }
         await flush("resurrected")
