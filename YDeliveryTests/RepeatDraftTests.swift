@@ -116,7 +116,7 @@ struct RepeatDraftTests {
 
     @Test("Wire spellings round-trip, unknowns keeping their name")
     func tariffWireSpellingRoundTrips() {
-        for known in [TariffClass.courier, .express, .cargo, .other("deli")] {
+        for known in [TariffClass.courier, .express, .faster, .cargo, .other("deli")] {
             #expect(TariffClass(wireSpelling: known.wireValue) == known)
         }
         #expect(TariffClass(wireSpelling: "whatever-next") == .other("whatever-next"))

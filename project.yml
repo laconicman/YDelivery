@@ -141,6 +141,10 @@ targets:
       # surface now, not only test seams (doc:Collaboration).
       - package: SQLiteData
         product: SQLiteData
+      # CloudKitSchemaSeed drives db.execute(sql:) directly — the module arrives
+      # transitively through SQLiteData, but the link needs the product named.
+      - package: GRDB
+        product: GRDB
       # The widget extension — embeds into the app's PlugIns; the surfaces
       # inside read the shared App Group store and never the app itself.
       - target: YDeliveryWidgets

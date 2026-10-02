@@ -359,6 +359,7 @@ nonisolated extension TariffClass {
         switch self {
         case .courier: "courier"
         case .express: "express"
+        case .faster: "superexpress_d2d"
         case .cargo: "cargo"
         case .other(let raw): raw
         }
@@ -371,6 +372,7 @@ nonisolated extension TariffClass {
         self = switch wireSpelling {
         case "courier": .courier
         case "express": .express
+        case "superexpress_d2d": .faster
         case "cargo": .cargo
         default: .other(wireSpelling)
         }

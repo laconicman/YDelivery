@@ -22,6 +22,10 @@ nonisolated struct Offer: Hashable, Sendable, Identifiable {
 nonisolated enum TariffClass: Hashable, Sendable {
     case courier
     case express
+    /// «Быстрее» — the provider's fastest door-to-door run (`superexpress_d2d`).
+    /// Conditional by design: the provider offers it per order, by account, route
+    /// and current load, so nothing about it is promised ahead of the quote.
+    case faster
     case cargo
     /// A class this app does not know yet — rendered by its wire name rather than
     /// dropped, so new provider vocabulary stays visible (the demo's lesson: advisory
@@ -34,6 +38,7 @@ nonisolated extension TariffClass {
         switch self {
         case .courier: String(localized: "Courier")
         case .express: String(localized: "Express")
+        case .faster: String(localized: "Faster")
         case .cargo: String(localized: "Cargo van")
         case .other(let name): name
         }
@@ -43,6 +48,7 @@ nonisolated extension TariffClass {
         switch self {
         case .courier: "🛵"
         case .express: "🚗"
+        case .faster: "⚡"
         case .cargo: "🚚"
         case .other: "📦"
         }
@@ -53,6 +59,9 @@ nonisolated extension TariffClass {
         switch self {
         case .courier: String(localized: "On foot or a scooter")
         case .express: String(localized: "A passenger car")
+        // Conditional by offer, not by promise — its card explains itself only when
+        // the provider has actually quoted one for this route.
+        case .faster: String(localized: "The quickest door-to-door run, when offered")
         case .cargo: String(localized: "A van, loaders available")
         case .other: nil
         }
@@ -68,6 +77,9 @@ nonisolated extension TariffClass {
         switch self {
         case .courier: 10
         case .express: 20
+        // The provider publishes no bounds for the conditional tariff — `nil` states
+        // nothing, and the live offer is the only promise that counts.
+        case .faster: nil
         case .cargo: 300
         case .other: nil
         }
@@ -78,6 +90,7 @@ nonisolated extension TariffClass {
         switch self {
         case .courier: [80, 50, 50]
         case .express: [100, 60, 50]
+        case .faster: nil
         case .cargo: [170, 96, 90]
         case .other: nil
         }

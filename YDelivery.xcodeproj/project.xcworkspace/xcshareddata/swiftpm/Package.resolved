@@ -258,8 +258,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/YandexDeliveryExpress",
       "state" : {
-        "revision" : "c3095117ad6f57fd55905665261f264dd43993a3",
-        "version" : "0.3.1"
+        "branch" : "feat/superexpress-d2d",
+        "revision" : "b7f12f0d31a3a24f6c053a3cd6bce02f07cb8987"
       }
     },
     {
@@ -267,8 +267,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/YDeliveryKit",
       "state" : {
-        "revision" : "4cff5817a810245ec605ab6af8f5cf9e7a2aee3a",
-        "version" : "0.4.7"
+        "branch" : "preview/record-signing-on-main",
+        "revision" : "6fb6faa38ab69f12f30e0492de2ac4e4d64d70df"
       }
     }
   ],

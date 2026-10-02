@@ -106,6 +106,27 @@ struct ClientControllerOffersTests {
         #expect(TariffClass.other("sdd_long").words == "sdd_long")
     }
 
+    @Test("The conditional Faster tariff reads into the app's vocabulary and back")
+    func fasterTariffMaps() throws {
+        let offer = try #require(Offer(Components.Schemas.CalculatedOffer(
+            deliveryInterval: .init(
+                from: Date(timeIntervalSince1970: 1000),
+                to: Date(timeIntervalSince1970: 5000)
+            ),
+            payload: "offer-token",
+            pickupInterval: .init(
+                from: Date(timeIntervalSince1970: 500),
+                to: Date(timeIntervalSince1970: 900)
+            ),
+            price: .init(currency: .rub, surgeRatio: 1, totalPrice: "900", totalPriceWithVat: "1080"),
+            taxiClass: .superexpressD2d
+        )))
+
+        #expect(offer.tariff == .faster)
+        #expect(offer.tariff.wireValue == "superexpress_d2d")
+        #expect(TariffClass(wireSpelling: "superexpress_d2d") == .faster)
+    }
+
     @Test("An unmarked item's journey ends at the last drop-off, not the return leg")
     func returnLegNeverAnswersAJourney() {
         let request = ClientController.offersRequest(for: OfferRequest(

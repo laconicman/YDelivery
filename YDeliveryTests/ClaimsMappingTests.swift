@@ -97,6 +97,15 @@ struct ClaimsMappingTests {
         #expect(request.offerPayload == "offer-token")
     }
 
+    @Test("The conditional Faster tariff reaches the create request — not the courier fallback")
+    func fasterTariffReachesCreate() {
+        var order = order()
+        order.tariffWireValue = TariffClass.faster.wireValue
+        let request = ClientController.createRequest(for: order)
+        #expect(request.clientRequirements?.taxiClass == .superexpressD2d,
+                "a spelling the enum knows must not fall back to courier")
+    }
+
     @Test("Custom fields ride their carriers — document, order number, item tag")
     func fieldCarriersMapToTheWire() throws {
         let request = ClientController.createRequest(for: OrderRequest(

@@ -209,6 +209,7 @@ nonisolated extension TariffClass {
         self = switch wire {
         case .courier: .courier
         case .express: .express
+        case .superexpressD2d: .faster
         case .cargo: .cargo
         default: .other(wire.rawValue)
         }
