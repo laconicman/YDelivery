@@ -534,7 +534,7 @@ the wrong queue shipped in TestFlight 1.0 (1) and trapped in the field
   non-main queue, or a UI-test hook that triggers the launch. Either has to stay out of
   the shipped binary: the private selectors are grounds for App Store rejection.
 
-## YD-20 — sqlite-data swallows a re-insert under an existing key — **open**
+## YD-34 — sqlite-data swallows a re-insert under an existing key — **open**
 
 Upstream `sqlite-data` (1.12.0) loses a row that is deleted and re-inserted under
 the same primary key in one transaction — the exact shape of `recordOrder`'s
