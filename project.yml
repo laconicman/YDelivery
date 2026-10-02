@@ -70,10 +70,11 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # PREVIEW PIN — testflight branch only: feat/record-signing carries the
-    # unmerged signing work (Kit PR #34 + #36). Revert to `minorVersion: 0.4.7`
-    # (or its tag) before this branch ever feeds main.
-    branch: feat/record-signing
+    # PREVIEW PIN — testflight branch only: preview/record-signing-on-main is
+    # main (0.4.7, the library) plus the unmerged signing stack (Kit PR #34 +
+    # #36). Revert to `minorVersion:` of the tag that ships signing before this
+    # branch ever feeds main.
+    branch: preview/record-signing-on-main
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
