@@ -2,17 +2,19 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/laconicman/YDelivery)
 
-An **unofficial** iOS client for Yandex Delivery's Express (B2B Cargo) API — for people and
-businesses that send parcels: point-to-point, store-to-customer, warehouse runs. Built on
+A general-purpose iOS delivery app — for people and businesses that send parcels:
+point-to-point, store-to-customer, warehouse runs. Order from a map, watch the courier,
+share the tracking, repeat the run. Delivery providers plug in behind one boundary; the
+first integration is Yandex Delivery's Express (B2B Cargo) API through
 [`YandexDeliveryExpressAPI`](https://github.com/laconicman/YandexDeliveryExpress).
 
-> Unaffiliated with Yandex. The API has no published OpenAPI document; the package's is
-> hand-written and validated against live traffic. This app deliberately carries no Yandex
-> branding.
+> The Yandex integration is **unofficial** and unaffiliated: the API has no published
+> OpenAPI document, so the package's is hand-written and validated against live traffic.
+> This app deliberately carries no provider branding.
 
-Its sibling, [`YandexDeliveryExpressDemo`](https://github.com/laconicman/YandexDeliveryExpressDemo),
+The sibling [`YandexDeliveryExpressDemo`](https://github.com/laconicman/YandexDeliveryExpressDemo)
 demonstrates the package honestly, rough edges included. This app is the product bet: the
-user never sees a "claim".
+user never sees a "claim" — or which API answered.
 
 ## Documentation
 
