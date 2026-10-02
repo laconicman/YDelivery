@@ -12,6 +12,9 @@ extension PointPickerView {
             let id: UUID
             let name: String
             let symbol: SFSymbol
+            /// Pinned chips lead the row — the mark names why (pin ≈ favourite,
+            /// the sender's-library ruling).
+            var pinned = false
         }
 
         /// A remembered point, reduced to its row. Identity is the *destination* — two
@@ -44,6 +47,8 @@ extension PointPickerView {
         /// forget. Defaulted so previews stay terse.
         var editChip: (Chip.ID) -> Void = { _ in }
         var deleteChip: (Chip.ID) -> Void = { _ in }
+        /// Pin/Unpin on the same menu — the Library's curation from the use path.
+        var pinChip: (Chip.ID) -> Void = { _ in }
         let pickRecent: (Recent.ID) -> Void
         let select: (Model.AddressSuggestion) -> Void
         let searchAsAddress: (String) -> Void
@@ -140,14 +145,28 @@ extension PointPickerView {
                         Button {
                             pickChip(chip.id)
                         } label: {
-                            Label(chip.name, systemSymbol: chip.symbol)
-                                .font(.subheadline)
-                                .padding(.horizontal, Layout.Spacing.gutter)
-                                .padding(.vertical, Layout.Spacing.chip)
-                                .background(Color(.secondarySystemFill), in: Capsule())
+                            HStack(spacing: Layout.Spacing.chip) {
+                                Label(chip.name, systemSymbol: chip.symbol)
+                                if chip.pinned {
+                                    Image(systemSymbol: .pinFill)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .font(.subheadline)
+                            .padding(.horizontal, Layout.Spacing.gutter)
+                            .padding(.vertical, Layout.Spacing.chip)
+                            .background(Color(.secondarySystemFill), in: Capsule())
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
+                            Button {
+                                pinChip(chip.id)
+                            } label: {
+                                Label(
+                                    chip.pinned ? "Unpin" : "Pin",
+                                    systemSymbol: chip.pinned ? .pinSlash : .pin)
+                            }
                             Button {
                                 editChip(chip.id)
                             } label: {

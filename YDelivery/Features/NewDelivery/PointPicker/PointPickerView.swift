@@ -58,7 +58,9 @@ struct PointPickerView: View {
         NavigationStack {
             SearchContent(
                 chips: store.savedPlaces.map {
-                    SearchContent.Chip(id: $0.id, name: $0.name, symbol: $0.kind.symbol)
+                    SearchContent.Chip(
+                        id: $0.id, name: $0.name, symbol: $0.kind.symbol,
+                        pinned: $0.pinned)
                 },
                 recents: store.recentPoints.map(SearchContent.Recent.init),
                 historyUnavailable: store.pickerMemoryUnavailable,
@@ -80,6 +82,11 @@ struct PointPickerView: View {
                 },
                 deleteChip: { id in
                     pendingDelete = store.savedPlaces.first(where: { $0.id == id })
+                },
+                pinChip: { id in
+                    guard let place = store.savedPlaces.first(where: { $0.id == id })
+                    else { return }
+                    Task { await store.setPlacePinned(id, pinned: !place.pinned) }
                 },
                 pickRecent: { id in
                     guard let point = store.recentPoints.first(
@@ -184,7 +191,8 @@ struct PointPickerView: View {
             // adopts the row's identity, and the explicit id is belt and suspenders.
             SavePlaceSheet(address: place.point.address, editing: place) { name, kind in
                 try await store.save(
-                    SavedPlace(id: place.id, name: name, kind: kind, point: place.point)
+                    SavedPlace(id: place.id, name: name, kind: kind,
+                               point: place.point, pinned: place.pinned)
                 )
             }
         }
