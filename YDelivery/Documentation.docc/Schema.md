@@ -493,6 +493,43 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   identities ever become a requirement, the answer is a separate authenticated relay,
   not CloudKit — a different feature, not a flag on this one.
 
+## The development schema, verified (2026-10)
+
+`--ckschema-seed` (DEBUG only) wrote one fully populated row per synchronized table
+on a development-signed device, `SyncEngine` flushed them, and
+`xcrun cktool export-schema --environment development` confirms **all fourteen**
+record types exist with every declared column present as a field — NULL columns
+never become fields, so presence is proof the write carried a value:
+
+- **Shared tier:** `orders` (5), `routeStops` (20 — all `AddressParts`,
+  `contact*` and `visit*` fields), `orderItems` (12 — both `*StopRef` value
+  references), `orderProviderStates` (16 — `corpClientID`/`dueAt`/`finishedAt`/
+  `providerDetail` included), `orderOptions` (7), `orderCustomFields` (6),
+  `providerEvents` (8), `orderMessages` (7 — `attachmentRef`, `authorHint`),
+  `orderAttachments` (7), `attachmentBlobs` (`data` lands as a CKAsset plus its
+  `data_hash`).
+- **Private tier:** `providerAccounts` (6), `orderPrivateStates` (4),
+  `savedPlaces` (16), `customFieldDefinitions` (8).
+- **Device tier produces no record types by design:** `syncStates`,
+  `pendingDiscoveries`, `pendingAcceptances`, `orderDrafts`, `draftStops`,
+  `draftItems`, `draftCustomFields` are not registered with the engine.
+
+Every child record carries `parent` to `orders` via its single declared FK;
+`*Ref` columns are plain string fields, matching the value-reference convention.
+Each row also carries `sqlitedata_icloud_userModificationTime` plus a per-field
+companion — the substrate's LWW bookkeeping — which is expected, not seed noise.
+
+Two findings the run surfaced, both fixed before this verification: issued
+provisioning profiles encode `icloud-services` as the wildcard string `"*"`,
+which the entitlement gate false-rejected (Kit fix), and `building` existed in
+the DDL but not in the `@Table` descriptors, so it could never serialize (Kit
+fix). A third stays open as <doc:TechDebt> **YD-20**: rows written by
+delete+insert or `INSERT OR REPLACE` are remotely deleted and never re-saved —
+the seed works around it with resurrection UPDATEs; production has the exposure.
+
+Nothing here promotes anything: the schema lives in **development**, and
+"Deploy Schema Changes" in CloudKit Console remains a deliberate, separate act.
+
 ## See Also
 
 - <doc:Collaboration> — the stack research and grant model this schema implements
