@@ -56,7 +56,17 @@ struct NewDeliveryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        // Hoisted from the call — a ternary producing an optional closure in the
+        // middle of this many arguments defeated the type checker's diagnostic
+        // path on the older CI toolchain ("failed to produce diagnostic"; the
+        // newer local compiler accepted it). Named types keep the call cheap.
+        let templateChips = store.parcelTemplates.map {
+            Content.TemplateChip(id: $0.id, name: $0.name)
+        }
+        let saveTemplateItem: ((UUID) -> Void)? = store.canSaveTemplates
+            ? { id in namingTemplateItem = draft.item(withID: id) }
+            : nil
+        return NavigationStack {
             Content(
                 rows: contentRows,
                 pins: contentPins,
@@ -98,9 +108,7 @@ struct NewDeliveryView: View {
                 addItem: { editingItem = ParcelItem() },
                 editItem: { editingItem = draft.item(withID: $0) },
                 removeItems: { draft.removeItems(at: $0) },
-                templateChips: store.parcelTemplates.map {
-                    Content.TemplateChip(id: $0.id, name: $0.name)
-                },
+                templateChips: templateChips,
                 templatesError: store.templatesError?.localizedDescription,
                 retryTemplates: { Task { await store.refresh() } },
                 applyTemplate: { id in
@@ -108,9 +116,7 @@ struct NewDeliveryView: View {
                         .first(where: { $0.id == id }) else { return }
                     draft.applyTemplate(template)
                 },
-                saveTemplateItem: store.canSaveTemplates
-                    ? { id in namingTemplateItem = draft.item(withID: id) }
-                    : nil,
+                saveTemplateItem: saveTemplateItem,
                 setFieldValue: { draft.setFieldValue($1, for: $0) },
                 revealField: { draft.revealField($0) },
                 editOptions: { editingOptions = $0 },
