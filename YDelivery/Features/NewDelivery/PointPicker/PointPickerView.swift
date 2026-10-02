@@ -191,7 +191,8 @@ struct PointPickerView: View {
             // adopts the row's identity, and the explicit id is belt and suspenders.
             SavePlaceSheet(address: place.point.address, editing: place) { name, kind in
                 try await store.save(
-                    SavedPlace(id: place.id, name: name, kind: kind, point: place.point)
+                    SavedPlace(id: place.id, name: name, kind: kind,
+                               point: place.point, pinned: place.pinned)
                 )
             }
         }
