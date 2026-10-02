@@ -74,15 +74,7 @@ extension NewDeliveryView {
                                 TextField("—", value: $item.cost, format: .number.precision(.fractionLength(0...2)))
                                     .keyboardType(.decimalPad)
                                     .multilineTextAlignment(.trailing)
-                                Picker("Currency", selection: $item.currency) {
-                                    // The wire's three (ISO 4217); a picker, not a text
-                                    // field — no free-text number ever means two things.
-                                    Text(verbatim: "₽ RUB").tag("RUB")
-                                    Text(verbatim: "$ USD").tag("USD")
-                                    Text(verbatim: "€ EUR").tag("EUR")
-                                }
-                                .labelsHidden()
-                                .fixedSize()
+                                CurrencyPicker(currency: $item.currency)
                             }
                         }
                     }
@@ -360,6 +352,23 @@ extension NewDeliveryView.ItemEditor {
                 .padding(.vertical, Layout.Spacing.chip)
                 .padding(.horizontal, Layout.Spacing.unit)
                 .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: Layout.Radius.field))
+        }
+    }
+
+    /// The wire's three currencies (ISO 4217) — a picker, not a text field: no
+    /// free-text number ever means two things. Shared with the library's
+    /// template editor so the list lives in one place.
+    struct CurrencyPicker: View {
+        @Binding var currency: String
+
+        var body: some View {
+            Picker("Currency", selection: $currency) {
+                Text(verbatim: "₽ RUB").tag("RUB")
+                Text(verbatim: "$ USD").tag("USD")
+                Text(verbatim: "€ EUR").tag("EUR")
+            }
+            .labelsHidden()
+            .fixedSize()
         }
     }
 }
