@@ -1,9 +1,12 @@
 # YDelivery — product app
 
-An unofficial, real client for Yandex Delivery's Express (B2B Cargo) API, built on
-[`YandexDeliveryExpressAPI`](../YandexDeliveryExpress). Unlike its sibling
-`YandexDeliveryExpressDemo` — whose job is to show the package's rough edges honestly — this
-app optimizes for the person sending a parcel. Convenience is the product here.
+A general-purpose delivery client for iOS — send, watch, share, repeat — with delivery
+providers plugged in behind one boundary. The first integration is Yandex Delivery's
+Express (B2B Cargo) API, built on
+[`YandexDeliveryExpressAPI`](../YandexDeliveryExpress) — an **unofficial** client of it.
+Unlike its sibling `YandexDeliveryExpressDemo` — whose job is to show the package's rough
+edges honestly — this app optimizes for the person sending a parcel, whichever provider
+carries it. Convenience is the product here.
 
 The DocC catalog (`YDelivery/Documentation.docc/`) is authoritative for direction:
 `Design` (decisions + rejected alternatives) · `Vision` (what this app is, the capability
