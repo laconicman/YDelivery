@@ -151,7 +151,14 @@ the order detail's Chat row, and `OrderChatView` — text, photos, and
 device work, not design — the live verifications (share acceptance end-to-end, the
 corp-visibility wire test) stand open in <doc:Collaboration>.
 
-## Next — the sender's library (author's idea, weighed 2026-09-29)
+## Landed — the sender's library (author's idea, weighed 2026-09-29; shipped 2026-10-02)
+
+Shipped per option (b): Kit 0.4.7 carries `parcelTemplates`/`parcelTemplateItems` and
+`pinned` on both lists; the draft's chips, «Save as a template» and place pin/unpin
+landed in #93; the Library tab in #94. The one upgrade made while building: the table
+became a **root+child pair** (`parcelTemplateItems.position` from day one) so a future
+bundle is a UI widening, not a migration fork — `items.count == 1` is a UI convention,
+not a schema invariant. The weighing below stays as the design's record.
 
 An entrepreneur sends the same goods to the same doors. Today the app remembers **places**
 (`SavedPlace`, private tier — synced to the owner's devices, never shared; chips in the
