@@ -56,24 +56,11 @@ struct NewDeliveryView: View {
     }
 
     var body: some View {
-        // Hoisted from the call — a ternary producing an optional closure in the
-        // middle of this many arguments defeated the type checker's diagnostic
-        // path on the older CI toolchain ("failed to produce diagnostic"; the
-        // newer local compiler accepted it). Named types keep the call cheap.
-        let templateChips: [Content.TemplateChip] = store.parcelTemplates.map {
-            Content.TemplateChip(id: $0.id, name: $0.name)
-        }
-        let retryTemplates: () -> Void = { Task { await store.refresh() } }
-        let applyTemplate: (UUID) -> Void = { id in
-            guard let template = store.parcelTemplates
-                .first(where: { $0.id == id }) else { return }
-            draft.applyTemplate(template)
-        }
-        let saveTemplateItem: ((UUID) -> Void)? = store.canSaveTemplates
-            ? { id in namingTemplateItem = draft.item(withID: id) }
-            : nil
-        return NavigationStack {
-            Content(
+        // The library's five fields stay out of the call: on the older CI
+        // toolchain the added parameters pushed this already-large init past
+        // the solver's diagnostic limit ("failed to produce diagnostic", then
+        // "ambiguous" on NavigationStack). The fields are vars — set them after.
+        var content = Content(
                 rows: contentRows,
                 pins: contentPins,
                 estimate: draft.estimate,
@@ -114,16 +101,26 @@ struct NewDeliveryView: View {
                 addItem: { editingItem = ParcelItem() },
                 editItem: { editingItem = draft.item(withID: $0) },
                 removeItems: { draft.removeItems(at: $0) },
-                templateChips: templateChips,
-                templatesError: store.templatesError?.localizedDescription,
-                retryTemplates: retryTemplates,
-                applyTemplate: applyTemplate,
-                saveTemplateItem: saveTemplateItem,
                 setFieldValue: { draft.setFieldValue($1, for: $0) },
                 revealField: { draft.revealField($0) },
                 editOptions: { editingOptions = $0 },
                 openReview: { showsReview = true }
             )
+            content.templateChips = store.parcelTemplates.map {
+                Content.TemplateChip(id: $0.id, name: $0.name)
+            }
+            content.templatesError = store.templatesError?.localizedDescription
+            content.retryTemplates = { Task { await store.refresh() } }
+            content.applyTemplate = { id in
+                guard let template = store.parcelTemplates
+                    .first(where: { $0.id == id }) else { return }
+                draft.applyTemplate(template)
+            }
+            content.saveTemplateItem = store.canSaveTemplates
+                ? { id in namingTemplateItem = draft.item(withID: id) }
+                : nil
+            return NavigationStack {
+                content
             // Structured re-pricing: the ids are what pricing answers to — the route for
             // the estimate; route, parcel, and options for offers — so any edit cancels
             // the stale run and starts the right one; dismissal cancels outright. Each id
