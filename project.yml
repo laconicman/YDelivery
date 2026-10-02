@@ -50,8 +50,10 @@ packages:
   # (workspace CLAUDE.md); cross-editing uses Xcode's local-override instead.
   YandexDeliveryExpress:
     url: https://github.com/laconicman/YandexDeliveryExpress
-    # 0.3.1: Client.init takes a transport — YD-14's request-timeout seam.
-    minorVersion: 0.3.1
+    # PREVIEW PIN — testflight branch only: feat/superexpress-d2d carries the
+    # unmerged TaxiClass case (API PR #19). Revert to `minorVersion:` of the tag
+    # that ships it before this branch ever feeds main.
+    branch: feat/superexpress-d2d
   # Pulled transitively by YandexDeliveryExpress; declared because ClientController
   # imports it directly — `URLSessionTransport(configuration:)` for YD-14's timeout.
   swift-openapi-urlsession:
@@ -68,10 +70,10 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.4.7 adds the sender's library — ParcelTemplate and savedPlaces.pinned —
-    # which the draft's chips and the Library tab consume. (0.4.6's nonisolated
-    # vocabulary and 0.4.5's ShareError stay requirements, subsumed by this floor.)
-    minorVersion: 0.4.7
+    # PREVIEW PIN — testflight branch only: feat/record-signing carries the
+    # unmerged signing work (Kit PR #34 + #36). Revert to `minorVersion: 0.4.7`
+    # (or its tag) before this branch ever feeds main.
+    branch: feat/record-signing
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
