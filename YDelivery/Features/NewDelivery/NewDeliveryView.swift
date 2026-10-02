@@ -55,11 +55,12 @@ struct NewDeliveryView: View {
         let unavailable: Bool
     }
 
-    var body: some View {
-        // The library's five fields stay out of the call: on the older CI
-        // toolchain the added parameters pushed this already-large init past
-        // the solver's diagnostic limit ("failed to produce diagnostic", then
-        // "ambiguous" on NavigationStack). The fields are vars — set them after.
+    /// The screen's content, assembled. The init call keeps its pre-library
+    /// argument list because the older CI toolchain's solver tips past it —
+    /// "failed to produce diagnostic", then "ambiguous" on `NavigationStack`
+    /// once the body went multi-statement. The fields are `var`s with defaults,
+    /// so they attach after construction instead.
+    private var content: Content {
         var content = Content(
                 rows: contentRows,
                 pins: contentPins,
@@ -119,8 +120,12 @@ struct NewDeliveryView: View {
             content.saveTemplateItem = store.canSaveTemplates
                 ? { id in namingTemplateItem = draft.item(withID: id) }
                 : nil
-            return NavigationStack {
-                content
+            return content
+        }
+
+    var body: some View {
+        NavigationStack {
+            content
             // Structured re-pricing: the ids are what pricing answers to — the route for
             // the estimate; route, parcel, and options for offers — so any edit cancels
             // the stale run and starts the right one; dismissal cancels outright. Each id
