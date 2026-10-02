@@ -19,6 +19,10 @@ extension OrderDetailView {
         /// not a shared-ness verdict (a private order's stream is its owner's
         /// notes until someone is invited).
         var canChat: Bool = false
+        /// Who last wrote the provider mirror, resolved upstream — shown where
+        /// the order is shared (or the debug flag asks); also names the account
+        /// on a signature-warning row.
+        var recordedBy: String? = nil
         let cancellation: Model.Cancellation
         /// Post-answer work is in flight — the retry stays visible but refuses a
         /// second tap, so the button says so rather than swallowing it (PR #32).
@@ -60,6 +64,23 @@ extension OrderDetailView {
                     }
                     if let tariff = order.tariff {
                         LabeledContent("Tariff", value: tariff)
+                    }
+                    // The signature's word on the mirror row — a bad verdict
+                    // warns in place and names the account CloudKit saw, never
+                    // hides the data (doc:Collaboration → signed provider state).
+                    if let warning = order.signatureStatus?.trailWarning {
+                        Label(title: {
+                            Text(warning) + Text(recordedBy.map {
+                                String(localized: " · last change by \($0)")
+                            } ?? "")
+                        }, icon: {
+                            Image(systemSymbol: .exclamationmarkTriangleFill)
+                        })
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                    }
+                    if let recordedBy {
+                        LabeledContent("Recorded by", value: recordedBy)
                     }
                 }
 
@@ -361,6 +382,19 @@ nonisolated extension Order {
     }
 }
 
+#Preview("A signature that failed warns in place") {
+    NavigationStack {
+        OrderDetailView.Content(
+            order: .previewEnRoute.withSignatureStatus(.invalid),
+            recordedBy: "Irina",
+            cancellation: .ready(.init(status: .other("pickuped"), version: 9, terms: .unavailable)),
+            reconciling: false,
+            retry: {},
+            confirm: {}
+        )
+    }
+}
+
 #Preview("En route — courier mid-run") {
     NavigationStack {
         OrderDetailView.Content(
@@ -376,6 +410,14 @@ nonisolated extension Order {
 }
 
 extension Order {
+    /// Fixture helper — a stored verdict on a preview order without re-listing
+    /// every field the fixture already named.
+    func withSignatureStatus(_ verdict: SignatureVerdict) -> Order {
+        var order = self
+        order.signatureStatus = verdict
+        return order
+    }
+
     /// Preview fixtures — a claim still being worked, and one long done.
     static var previewSearching: Order {
         Order(

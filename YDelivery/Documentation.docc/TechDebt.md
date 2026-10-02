@@ -364,6 +364,25 @@ the one write shape that always re-marks the row save-pending.
   children as diffed UPDATEs instead of delete+insert. The seed's two-flush
   resurrection (`UPDATE … SET col = col` after the deletes ship) is the working
   proof of the minimal repair, not the fix.
+## YD-21 — Private-order attribution shows a pseudonym, not a name — **open**
+
+Signed provider state landed with row authorship: `SyncMetadata`'s
+`lastKnownServerRecord` archives `creatorUserRecordID`/`lastModifiedUserRecordID`,
+and the app resolves them to readable names through the order's `CKShare` participant
+list. On a *shared* order that resolves to a person. On a *private* order there is no
+share — the only identity on the record is the owner's own opaque
+`CloudKitUserRecordName` pseudonym, which renders as itself only under
+`--record-authorship` (debug/TestFlight); production surfaces hide it via
+`StoreController.recordAuthorshipVisible(for:)`.
+
+- **Cost:** nothing wrong is shown — a pseudonym never claims to be a name — but the
+  private-order surface carries a debug flag rather than a designed rule, and a
+  signature warning on a private order cannot name its modifier beyond "the owner's
+  account" because the only writer is the owner by construction.
+- **Discharge:** decide the production rule — likely "owner account" phrasing with the
+  pseudonym demoted to a detail, or dropping attribution entirely when the verdict is
+  `verified` (the warning already says what matters; the name only earns its keep on
+  `invalid`/`keyChanged`). One designed sentence, not a mechanism.
 
 ## See Also
 

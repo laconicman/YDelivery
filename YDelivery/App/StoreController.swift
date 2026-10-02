@@ -103,13 +103,25 @@ final class StoreController {
 
     private let republication: Republication
 
+    /// Whether an order's row-level attribution surface renders at all — the
+    /// "recorded by" line and the modifier names on signature warnings. On a
+    /// *shared* order it is the collaboration feature (doc:Collaboration);
+    /// on a private one the modifier is always the owner, so it hides unless
+    /// `--record-authorship` asks for it (debug/TestFlight).
+    /// TODO(YD-21): decide the production rule for the private-order
+    /// authorship surface.
+    private let alwaysShowRecordAuthorship: Bool
+
     init(database: AppDatabase? = .inAppGroup(
         id: AppGroup.id,
         providerAccountRef: SyncIdentity.providerAccountRef,
-        containerIdentifier: SyncIdentity.cloudKitContainer),
-         republishing republication: Republication = .systemSurfaces) {
+        containerIdentifier: SyncIdentity.cloudKitContainer,
+        signingService: SyncIdentity.recordSigningService),
+         republishing republication: Republication = .systemSurfaces,
+         alwaysShowRecordAuthorship: Bool = false) {
         self.database = database
         self.republication = republication
+        self.alwaysShowRecordAuthorship = alwaysShowRecordAuthorship
     }
 
     /// Whether keeping a place can work at all — the save affordance renders disabled
@@ -664,6 +676,33 @@ final class StoreController {
         return try await Self.readProviderEvents(database, orderID: orderID)
     }
 
+    // MARK: Record authorship — who CloudKit last saw touching a row
+
+    /// Whether this order's attribution surface renders — shared orders always;
+    /// private ones only under `--record-authorship` (their modifier is the
+    /// owner by construction). The caller then asks for the authorship itself —
+    /// the visibility answer is cheap; the CloudKit read is not.
+    func recordAuthorshipVisible(for orderID: Order.ID) -> Bool {
+        alwaysShowRecordAuthorship || ((try? database?.orderIsShared(orderID)) ?? false)
+    }
+
+    /// The provider mirror's authorship — who last wrote the row CloudKit holds.
+    /// Best-effort by design: a nil database or an unsynced row reads as an
+    /// empty attribution, never an error.
+    func providerStateAuthorship(of orderID: Order.ID) async -> AppDatabase.RecordAuthorship {
+        guard let database else { return AppDatabase.RecordAuthorship() }
+        return await Self.readProviderStateAuthorship(database, orderID: orderID)
+    }
+
+    /// Per-event authorship for the trail — fetched only when a signature
+    /// verdict needs a name beside it, not on every trail open.
+    func providerEventsAuthorship(
+        of orderID: Order.ID
+    ) async -> [ProviderEvent.ID: AppDatabase.RecordAuthorship] {
+        guard let database else { return [:] }
+        return await Self.readProviderEventsAuthorship(database, orderID: orderID)
+    }
+
     /// A photo's bytes, fetched lazily by id — the list never drags image data.
     func attachmentData(_ id: UUID) async throws -> Data? {
         guard let database else { throw StoreUnavailable() }
@@ -795,9 +834,41 @@ final class StoreController {
     }
 
     @concurrent
+    private static func readProviderStateAuthorship(
+        _ database: AppDatabase, orderID: Order.ID
+    ) async -> AppDatabase.RecordAuthorship {
+        database.providerStateAuthorship(orderID: orderID)
+    }
+
+    @concurrent
+    private static func readProviderEventsAuthorship(
+        _ database: AppDatabase, orderID: Order.ID
+    ) async -> [ProviderEvent.ID: AppDatabase.RecordAuthorship] {
+        database.providerEventsAuthorship(orderID: orderID)
+    }
+
+    @concurrent
     private static func readAttachment(
         _ id: UUID, in database: AppDatabase
     ) async throws -> Data? {
         try database.attachmentData(id)
+    }
+}
+
+nonisolated extension AppDatabase.RecordAuthorship {
+    /// The one-line attribution for surfaces that name a writer: the share's
+    /// participant name where iCloud discloses it, then the honest labels —
+    /// an owner whose name iCloud hides is still "the owner", an unresolved
+    /// collaborator "a participant". With no share to ask (a private order —
+    /// reachable only under `--record-authorship`), the record-name pseudonym
+    /// is the debug surface's honest answer.
+    var modifierDisplayName: String? {
+        if let modifierName { return modifierName }
+        switch modifierIsOwner {
+        case true: return String(localized: "the owner")
+        case false: return modifierRecordName.map { _ in
+                String(localized: "a participant") }
+        case nil: return modifierRecordName
+        }
     }
 }

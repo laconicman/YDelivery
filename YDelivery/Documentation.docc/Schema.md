@@ -73,6 +73,7 @@ Order ────────────────────────�
 | `providerAccountRef` | TEXT? | **Value, not FK** — matches `ProviderAccount.key` on the private side. Cannot be an FK: the root must have none. NULL = *unattributed* — a row whose provider account isn't recorded (legacy imports, see Migration) |
 | `provider` | TEXT | `"yandex"` today; provider plurality is a column, not a schema version |
 | `lastActivityAt` | Date | Owner-maintained *provider-activity* marker — denormalized, stated as such. List ordering is derived, not stored (below) |
+| `ownerSigningKey` | TEXT? | The owner's record-signing public key, base64 — the only self-signed surface: the key that attests everything else cannot attest itself, so readers pin it on first sight (`OwnerKeyPin`, device tier) and a change reads as `keyChanged` (<doc:Collaboration> → item 5) |
 
 No `claimID` here — the provider mirror carries it (below), keeping every provider-derived
 fact in one owner-written row.
@@ -108,6 +109,7 @@ provider truth, one writer.
 | `dueAt`, `finishedAt` | Date? | Scheduled pickup; completion — the field the 3e card needs |
 | `providerObservedAt` | Date? | When the owner's sync last *saw* this state — the "as of" stamp shared surfaces render (author's staleness decision, <doc:Collaboration>) |
 | `mirroredAt` | Date | When this row was written — distinct from observed: the mirror can lag the sighting |
+| `signature`, `signingKeyID` | TEXT? | Ed25519 signature over the row's canonical bytes, base64 — the same pair `ProviderEvent` and `RouteStop` carry. TEXT, not the BLOB the design note sketched: a `Data` column rides the wire as a `CKAsset` — an asset round-trip per row for 64 bytes. NULL reads as *unsigned*, never *forged* |
 
 ### `RouteStop` — the route
 
@@ -128,6 +130,7 @@ is lossy; both forms are kept, as `RoutePoint` already does).
 | `address` | TEXT | The courier-readable whole |
 | `building`, `entrance`, `floor`, `apartment`, `intercom` | TEXT? | AddressParts, flattened |
 | `contactName`, `contactGivenName`, `contactFamilyName`, `contactPhone`, `contactPhoneExtension` | TEXT? | Both forms, one stop |
+| `signature`, `signingKeyID` | TEXT? | Owner signature over the *whole* row — sender fields included: an address a participant rewrites is a worse forgery than a faked visit, so the signed surface is the row, not just the visit columns |
 
 ### `OrderItem` — the parcel contents
 
@@ -167,7 +170,8 @@ wire ever offers per-point options they become `RouteStop` columns, not this row
 Append-only; conflicts impossible by construction. Columns: `id` UUID PK, `orderID` FK,
 `providerEventID` INTEGER? — the journal's own `operation_id`, monotonic and unique per
 order — plus `at`, `kind`, `providerStatus`, `detail`?, `source`
-(`journal`/`search`/`claimCard`).
+(`journal`/`search`/`claimCard`), and the `signature`/`signingKeyID` pair the mirror
+carries.
 
 Dedup is **identity, not a constraint** — and it has to be: `SyncEngine` rejects every
 non-PK unique index on a synchronized table at init (`SchemaError.uniquenessConstraint`
@@ -275,6 +279,7 @@ account transfer is a re-key, not a migration.
 | `PendingDiscovery` | `id` UUID PK + `UNIQUE(providerAccountRef, claimID)` | The discovery-retry queue — a feed reported a claim whose card fetch failed; retried until the card lands. Today's `pendingClaimIDs` migrates here. Distinct from acceptance: this device saw the claim exists, it never tried to create it. A secondary UNIQUE is legal *here* precisely because the table is never synchronized — the `uniquenessConstraint` ban governs `tables:`/`privateTables:` only |
 | `PendingAcceptance` | `id` UUID PK | `providerAccountRef`, `claimID?`, `orderRef`?, `createdAt`, `lastCheckedAt`, `state` — the durable home for YD-5's unresolved *acceptance*: we POSTed, the answer was lost, the claim may exist provider-side; reconciled on launch against `claims/search`. Today's store holds no such attempts — it starts empty, which is precisely the gap YD-5 names |
 | `OrderDraft` | `id` UUID PK | The parked New Delivery draft (YD-16) — an un-placed order has no provider existence, so it is *not* an `Order` row and survives the identity boundary. Carries the options set, `due`, `comment` and the remembered `chosenTariff`; children (`DraftStop`, `DraftItem`, `DraftCustomField`) mirror the shared shape so promoting a draft to an order is a mechanical copy — a `DraftStop` with NULL point columns is an added-but-unfilled hole, which *is* draft state. Named `OrderDraft`, not `Draft`: `@Table` synthesizes a `.Draft` nested type on every model, and a table literally named `Draft` collides inside the macro (spike-verified) |
+| `OwnerKeyPin` | `orderRef` TEXT PK | The TOFU pin for `Order.ownerSigningKey` — the first key this device saw stamped on that order. A later mismatch reads as `keyChanged`; the pin never silently rewrites itself (a re-pin would bless the change it exists to catch). `orderRef` is a value, no REFERENCES — a dangling pin after a delete is harmless. Device tier because the pin is this reader's memory, not shareable state |
 
 The wire log stays a **file**, not a table: it is PII-bearing diagnostic output (YD-12)
 with rotation semantics files already give it, and it must never sync.
@@ -332,7 +337,10 @@ thin; the chat model is the real fix, and it works on three levels:
 3. **The owner remains the authority of last resort.** A forged mirror row lives only
    until the owner's next sync overwrite; and since `CKRecord` system fields expose
    `lastModifiedUserRecordID`, a later hardening pass can have reads distrust provider
-   rows the owner didn't write — noted as available, not yet designed.
+   rows the owner didn't write — landed as signed provider state (below): the mirror,
+   stops, and events carry Ed25519 signatures, readers verify and render the verdict,
+   and `lastModifiedUserRecordID`/`creatorUserRecordID` surface as row authorship
+   alongside it.
 
 One residual the layers don't remove, stated plainly: within the read-write set,
 "append-only" is convention too — record-level permissions cannot distinguish "add a
@@ -479,13 +487,15 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   both lists **landed** (Kit 0.4.7, additive DDL — see the private-tier table above).
   What stays open is *shared* tags: a tag vocabulary a team shares is the workspace-root
   question above; private tags wait until someone names a use pin doesn't cover.
-- **Signed provider state**: `signature BLOB` + `signingKeyID` on `OrderProviderState` and
-  `ProviderEvent` (owner-written), `ownerSigningKey` on `Order`; Curve25519 over a canonical
-  serialisation; the private key in the iCloud Keychain, so the owner's devices sign and
-  everyone verifies (<doc:Collaboration> → "Where this landed", 5). Additive DDL; rows
-  written before the columns exist read as *unsigned*, not *forged*. *Who* wrote a row is
-  already free from CloudKit's `lastModifiedUserRecordID`; the signature answers *whether
-  the owner's key wrote it*, which permissions cannot.
+- **Signed provider state** — **landed** (YD-21): `signature` + `signingKeyID` on
+  `OrderProviderState`, `ProviderEvent`, and `RouteStop`; `ownerSigningKey` on `Order`;
+  Ed25519 over a canonical serialisation; the private key in the iCloud Keychain;
+  per-order TOFU pin in `OwnerKeyPin`. The design note said `BLOB` — the columns are
+  base64 `TEXT`, because a `Data` column maps to a `CKAsset` round-trip per row. Rows
+  written before the columns exist read as *unsigned*, not *forged*. *Who* wrote a row
+  is CloudKit's `lastModifiedUserRecordID` (surfaced through `SyncMetadata`'s
+  `lastKnownServerRecord`, resolved against the `CKShare` participant list); the
+  signature answers *whether the owner's key wrote it*, which permissions cannot.
 - **Accountless couriers and support staff**: out of this design's reach — a private
   `CKShare` requires an iCloud account per participant, and an App Clip changes the
   install experience, not the identity requirement (Devin Review, second round — an

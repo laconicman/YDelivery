@@ -14,4 +14,10 @@ nonisolated enum SyncIdentity {
     /// The CloudKit container the shared/private tiers sync through — matches the
     /// entitlement in `YDelivery.entitlements`.
     static let cloudKitContainer = "iCloud.com.learnable.YDelivery"
+
+    /// The synchronizable Keychain service holding the owner's record-signing
+    /// key (doc:Collaboration → signed provider state) — `TokenStore`'s
+    /// `com.learnable.*` spelling, a different item: this one rides iCloud
+    /// Keychain so every owner device signs under one key.
+    static let recordSigningService = "com.learnable.YDelivery.record-signing"
 }
