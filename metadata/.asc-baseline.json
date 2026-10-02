@@ -10,7 +10,7 @@
     "id" : "e0c0e39a-c085-4d7b-93e8-a07d7c1266c8"
   },
   "digests" : {
-    "copyright.txt" : "084da6b740a5a17d2efc1c10ee4ec1b745761ed6372818868429fefd4cb2872d",
+    "copyright.txt" : "c6b3ec197bfc5eeac9368057bca6314624a9112fbc98f1cbd3da85bbaa3bc81c",
     "en-GB\/description.txt" : "e458f3d4cda1a79e8a9fc8ef7553f27bb9c0d5f172009f64b7114f23a0e2b3de",
     "en-GB\/keywords.txt" : "ac182dc8fbd7031f6702a78a038916c7b086ed7973770ec4049450301759b352",
     "en-GB\/name.txt" : "31d806ba9559460570763b0cca8dc1b3f82662952bb77b9439ae52d3b3ea3fdb",
@@ -34,7 +34,7 @@
     "ru\/support_url.txt" : "667bb0cd9f0c9bea33e8c1bf331ed0a1ef2ef45f956bd755b24a34b28e6bf653",
     "secondary_category.txt" : "2f91daa1864dff4f3d4b1ef8d5c2dcf75d687d99e55e97abee491fd472dd11cf"
   },
-  "exportedAt" : "2026-10-02T16:16:23Z",
+  "exportedAt" : "2026-10-02T16:18:11Z",
   "localizationIDs" : {
     "en-GB" : {
       "appInfo" : "27a07813-310d-4474-9fc3-d94541662371",
