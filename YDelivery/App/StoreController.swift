@@ -466,6 +466,13 @@ final class StoreController {
         }
     }
 
+    /// One draft item kept as a named template — the write both «Save as a
+    /// template» doors share (the editor's affordance and the row menu's
+    /// naming sheet), so the row→template mapping lives in one place.
+    func saveTemplate(_ item: ParcelItem, name: String) async throws {
+        try await save(ParcelTemplate(name: name, items: [item.templateItem]))
+    }
+
     /// Forgets a template — the context menu's write: nobody renders a thrown
     /// error, so a failure lands on ``templatesError`` and the chip stays.
     func deleteTemplate(_ id: ParcelTemplate.ID) async {

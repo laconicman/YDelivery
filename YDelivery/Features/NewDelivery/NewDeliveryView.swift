@@ -123,6 +123,14 @@ struct NewDeliveryView: View {
             return content
         }
 
+    /// The «Save as a template» write, gated the same way both doors need —
+    /// hoisted because a ternary producing an optional closure inside a call
+    /// is precisely what the older toolchain's solver choked on.
+    private var saveItemTemplate: ((ParcelItem, String) async throws -> Void)? {
+        guard store.canSaveTemplates else { return nil }
+        return { item, name in try await store.saveTemplate(item, name: name) }
+    }
+
     var body: some View {
         NavigationStack {
             content
@@ -249,18 +257,12 @@ struct NewDeliveryView: View {
                     stops: itemStops,
                     selectedTariff: draft.chosenTariff,
                     save: { draft.setItem($0) },
-                    saveTemplate: store.canSaveTemplates
-                        ? { item, name in
-                            try await store.save(ParcelTemplate(
-                                name: name, items: [item.templateItem]))
-                        }
-                        : nil
+                    saveTemplate: saveItemTemplate
                 )
             }
             .sheet(item: $namingTemplateItem) { item in
                 SaveTemplateSheet(item: item) { name in
-                    try await store.save(ParcelTemplate(
-                        name: name, items: [item.templateItem]))
+                    try await store.saveTemplate(item, name: name)
                 }
             }
             .sheet(item: $editingOptions) { focus in
