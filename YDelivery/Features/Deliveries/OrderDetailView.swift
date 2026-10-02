@@ -21,6 +21,8 @@ struct OrderDetailView: View {
             shareText: RecipientShareText.text(
                 for: order, orderNumber: store.orderNumber(for: order.id)),
             canChat: store.canChatOrders,
+            recordedBy: store.recordAuthorshipVisible(for: order.id)
+                ? model.authorship?.modifierDisplayName : nil,
             cancellation: model.cancellation,
             reconciling: model.isReconciling,
             retry: retryCancellation,
@@ -70,6 +72,8 @@ struct OrderDetailView: View {
             if order.isCancellable {
                 model.load(using: loadCancellation, onTerminal: recordCancelled)
             }
+            model.loadAuthorship(
+                using: { await store.providerStateAuthorship(of: order.id) })
         }
         .onDisappear { model.stop() }
     }
@@ -204,6 +208,22 @@ extension OrderDetailView {
         /// a created share meets no sheet (rule 6, review PR #56).
         private var shareAsk: Task<Void, Never>?
         var shareAskInFlight: Bool { shareAsk != nil }
+
+        /// Who CloudKit last saw writing the provider mirror — best-effort
+        /// attribution for the "recorded by" line: a `nil` stays invisible and
+        /// is never an error state (the store's authorship read cannot throw).
+        private(set) var authorship: AppDatabase.RecordAuthorship?
+        private var authorshipRead: Task<Void, Never>?
+
+        /// The attribution read — owned like ``inquiry`` so the screen leaving
+        /// cancels it. Fires on every appear: attribution is a local metadata
+        /// read, cheap enough that freshness beats caching it.
+        func loadAuthorship(
+            using fetch: @escaping () async -> AppDatabase.RecordAuthorship
+        ) {
+            authorshipRead?.cancel()
+            authorshipRead = Task { authorship = await fetch() }
+        }
 
         /// The share verb — the store's seam passed in by the view, like every
         /// verb here. Single-flight: a second tap while one runs does nothing
@@ -389,6 +409,8 @@ extension OrderDetailView {
         func stop() {
             inquiry?.cancel()
             inquiry = nil
+            authorshipRead?.cancel()
+            authorshipRead = nil
         }
 
         private static func sentence(for error: any Error) -> String {

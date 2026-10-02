@@ -27,7 +27,9 @@ struct YDeliveryApp: App {
         // One database, both consumers — orders/places on one side, the sync cursor
         // on the other. Sharing the instance shares the queue, not just the file.
         let database = Self.database()
-        let store = StoreController(database: database, republishing: Self.republication())
+        let store = StoreController(
+            database: database, republishing: Self.republication(),
+            alwaysShowRecordAuthorship: Self.showRecordAuthorship)
         let notifications = NotificationController(store: store)
         let sync = ClaimsSyncController(session: session, store: store,
                                         database: database, notifications: notifications)
@@ -85,9 +87,22 @@ struct YDeliveryApp: App {
         #endif
     }
 
+    /// `--record-authorship` is the debug/TestFlight door onto row attribution:
+    /// the "recorded by" surface renders on private orders too (production shows
+    /// it only where a share exists — YD-20 keeps the undecided prod rule).
+    private static var showRecordAuthorship: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--record-authorship")
+        #else
+        false
+        #endif
+    }
+
     /// The App Group database — or, for the fixture launch, a throwaway one in a
     /// fresh directory with a container that resolves to nothing (`startSync`
     /// degrades to a logged failure, as it does on any unentitled install).
+    /// The fixture never signs: a screenshot's provider rows carry no owner key,
+    /// which is exactly the unsigned-legacy rendering.
     private static func database() -> AppDatabase? {
         guard !isHistoryFixture else {
             return AppDatabase(
@@ -99,7 +114,8 @@ struct YDeliveryApp: App {
         return AppDatabase.inAppGroup(
             id: AppGroup.id,
             providerAccountRef: SyncIdentity.providerAccountRef,
-            containerIdentifier: SyncIdentity.cloudKitContainer)
+            containerIdentifier: SyncIdentity.cloudKitContainer,
+            signingService: SyncIdentity.recordSigningService)
     }
 
     /// The fixture launch reads a Keychain service no sign-in ever writes, so the

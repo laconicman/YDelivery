@@ -54,6 +54,9 @@ extension DeliveriesView {
         /// Why the open row's trail could not be read — rendered instead of the
         /// trail, never as «nothing reported».
         var trailError: String? = nil
+        /// Modifier names for warning rows, keyed by event id — empty for a
+        /// trail whose signatures all verify (the lookup never ran).
+        var trailModifiers: [UUID: String] = [:]
         /// Why history is missing, when it is missing for a reason rather than because
         /// nothing was sent. An unreadable store rendered as "No deliveries yet", which
         /// tells a sender with a year of orders that they have none (review, PR #22).
@@ -100,6 +103,7 @@ extension DeliveriesView {
                                             isExpanded: expandedID == row.id,
                                             trail: expandedID == row.id ? trail : nil,
                                             trailError: expandedID == row.id ? trailError : nil,
+                                            trailModifiers: expandedID == row.id ? trailModifiers : [:],
                                             toggleTrail: { toggleTrail(row.id) }
                                         )
                                     }
@@ -209,6 +213,8 @@ extension DeliveriesView.Content {
         /// A read that failed — its own row, so a storage error never reads as a
         /// fact about the provider's history.
         var trailError: String? = nil
+        /// Modifier names for signature-warning rows, keyed by event id.
+        var trailModifiers: [UUID: String] = [:]
         let toggleTrail: () -> Void
 
         var body: some View {
@@ -307,7 +313,8 @@ extension DeliveriesView.Content {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    StatusTimeline(events: trail)
+                    StatusTimeline(entries: StatusTimeline.Entry.entries(
+                        from: trail, modifierNames: trailModifiers))
                 }
             } else {
                 ProgressView()
