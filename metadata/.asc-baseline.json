@@ -11,6 +11,7 @@
   },
   "digests" : {
     "copyright.txt" : "084da6b740a5a17d2efc1c10ee4ec1b745761ed6372818868429fefd4cb2872d",
+    "en-GB\/description.txt" : "e458f3d4cda1a79e8a9fc8ef7553f27bb9c0d5f172009f64b7114f23a0e2b3de",
     "en-GB\/keywords.txt" : "ac182dc8fbd7031f6702a78a038916c7b086ed7973770ec4049450301759b352",
     "en-GB\/name.txt" : "31d806ba9559460570763b0cca8dc1b3f82662952bb77b9439ae52d3b3ea3fdb",
     "en-GB\/privacy_url.txt" : "b9569cb93702c2885eccc128b08c0735132dddeb08a9d6291630a84de983ee9a",
@@ -18,7 +19,12 @@
     "en-GB\/subtitle.txt" : "29dd8b7a7eb2724cc29862978afae92d1851f14c55156b954befb57a1b196afe",
     "en-GB\/support_url.txt" : "ee24a1014b2a73de57077f08f14dfd7c30cfe6efc7ee543d3ff8e8cdafbb04fb",
     "primary_category.txt" : "8eb6a764bc6f20a33477008670d0d4f5026ad1d95094790864e08923aef9d82a",
-    "review_information\/demo_account_required.txt" : "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+    "review_information\/demo_account_required.txt" : "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+    "review_information\/email_address.txt" : "bd3b19614f2db474331f082794ecaec5884582f3046e6b64499bbf4440284b2c",
+    "review_information\/first_name.txt" : "818b5cc5f21d3e6e4e6071c06294528d44595022218446d8b79304d2b766327a",
+    "review_information\/last_name.txt" : "7bf8f4bfd373a0e61700dfe9b40b4bda4ee3cc36a80482716159bde8d8c59d11",
+    "review_information\/notes.txt" : "c23a7b155ba7ed14743b4b16b3087665cc43f9a45b04639cd95cf4a29e46e1ae",
+    "review_information\/phone_number.txt" : "7b301f3c684c0b04b4b25958ddb3fcfb22200f7b1e85ce7b02be38e41babf300",
     "ru\/description.txt" : "6de5b514b29a56733b14986cc6ac2697fbb12e7a800bca6d7cd18aa9255a95d6",
     "ru\/keywords.txt" : "92759573c64dfc6ae8ba5ae6e4b2968df90c55bec6ee72174979ef316d01a683",
     "ru\/name.txt" : "31d806ba9559460570763b0cca8dc1b3f82662952bb77b9439ae52d3b3ea3fdb",
@@ -28,7 +34,7 @@
     "ru\/support_url.txt" : "667bb0cd9f0c9bea33e8c1bf331ed0a1ef2ef45f956bd755b24a34b28e6bf653",
     "secondary_category.txt" : "2f91daa1864dff4f3d4b1ef8d5c2dcf75d687d99e55e97abee491fd472dd11cf"
   },
-  "exportedAt" : "2026-10-02T14:52:24Z",
+  "exportedAt" : "2026-10-02T16:16:23Z",
   "localizationIDs" : {
     "en-GB" : {
       "appInfo" : "27a07813-310d-4474-9fc3-d94541662371",
