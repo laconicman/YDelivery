@@ -10,16 +10,33 @@
     "id" : "e0c0e39a-c085-4d7b-93e8-a07d7c1266c8"
   },
   "digests" : {
+    "copyright.txt" : "084da6b740a5a17d2efc1c10ee4ec1b745761ed6372818868429fefd4cb2872d",
+    "en-GB\/keywords.txt" : "ac182dc8fbd7031f6702a78a038916c7b086ed7973770ec4049450301759b352",
     "en-GB\/name.txt" : "31d806ba9559460570763b0cca8dc1b3f82662952bb77b9439ae52d3b3ea3fdb",
     "en-GB\/privacy_url.txt" : "b9569cb93702c2885eccc128b08c0735132dddeb08a9d6291630a84de983ee9a",
+    "en-GB\/promotional_text.txt" : "16264423353fb174916ed5be4095f209847e68590c144e6130d93b72a1d24018",
     "en-GB\/subtitle.txt" : "29dd8b7a7eb2724cc29862978afae92d1851f14c55156b954befb57a1b196afe",
-    "review_information\/demo_account_required.txt" : "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    "en-GB\/support_url.txt" : "ee24a1014b2a73de57077f08f14dfd7c30cfe6efc7ee543d3ff8e8cdafbb04fb",
+    "primary_category.txt" : "8eb6a764bc6f20a33477008670d0d4f5026ad1d95094790864e08923aef9d82a",
+    "review_information\/demo_account_required.txt" : "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+    "ru\/description.txt" : "6de5b514b29a56733b14986cc6ac2697fbb12e7a800bca6d7cd18aa9255a95d6",
+    "ru\/keywords.txt" : "92759573c64dfc6ae8ba5ae6e4b2968df90c55bec6ee72174979ef316d01a683",
+    "ru\/name.txt" : "31d806ba9559460570763b0cca8dc1b3f82662952bb77b9439ae52d3b3ea3fdb",
+    "ru\/privacy_url.txt" : "cdbd5791577b495feb7901f1ad3fee19eef6c41fa5a917c59d4869bb8226e6a5",
+    "ru\/promotional_text.txt" : "96818ad1a28651f8d2d682fc304c22876fab2f02a478e22b7ec8467ebb323902",
+    "ru\/subtitle.txt" : "40e0546027fcc338e86c2e9afe63f124d29b7ca95033423a23ebd96f01fde1f7",
+    "ru\/support_url.txt" : "667bb0cd9f0c9bea33e8c1bf331ed0a1ef2ef45f956bd755b24a34b28e6bf653",
+    "secondary_category.txt" : "2f91daa1864dff4f3d4b1ef8d5c2dcf75d687d99e55e97abee491fd472dd11cf"
   },
-  "exportedAt" : "2026-10-02T14:43:26Z",
+  "exportedAt" : "2026-10-02T14:52:24Z",
   "localizationIDs" : {
     "en-GB" : {
       "appInfo" : "27a07813-310d-4474-9fc3-d94541662371",
       "version" : "beb196af-2577-41a0-ab02-ec8e2093faa5"
+    },
+    "ru" : {
+      "appInfo" : "962370ed-9c41-4584-af14-427545339358",
+      "version" : "c9d90a8e-acf5-4886-a9dc-0be10d21f9f7"
     }
   },
   "reviewDetailID" : "721a6a55-f9f6-4b5c-85d9-2d29ac60cf7e",
