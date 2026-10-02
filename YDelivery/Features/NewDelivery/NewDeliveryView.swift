@@ -60,8 +60,14 @@ struct NewDeliveryView: View {
         // middle of this many arguments defeated the type checker's diagnostic
         // path on the older CI toolchain ("failed to produce diagnostic"; the
         // newer local compiler accepted it). Named types keep the call cheap.
-        let templateChips = store.parcelTemplates.map {
+        let templateChips: [Content.TemplateChip] = store.parcelTemplates.map {
             Content.TemplateChip(id: $0.id, name: $0.name)
+        }
+        let retryTemplates: () -> Void = { Task { await store.refresh() } }
+        let applyTemplate: (UUID) -> Void = { id in
+            guard let template = store.parcelTemplates
+                .first(where: { $0.id == id }) else { return }
+            draft.applyTemplate(template)
         }
         let saveTemplateItem: ((UUID) -> Void)? = store.canSaveTemplates
             ? { id in namingTemplateItem = draft.item(withID: id) }
@@ -110,12 +116,8 @@ struct NewDeliveryView: View {
                 removeItems: { draft.removeItems(at: $0) },
                 templateChips: templateChips,
                 templatesError: store.templatesError?.localizedDescription,
-                retryTemplates: { Task { await store.refresh() } },
-                applyTemplate: { id in
-                    guard let template = store.parcelTemplates
-                        .first(where: { $0.id == id }) else { return }
-                    draft.applyTemplate(template)
-                },
+                retryTemplates: retryTemplates,
+                applyTemplate: applyTemplate,
                 saveTemplateItem: saveTemplateItem,
                 setFieldValue: { draft.setFieldValue($1, for: $0) },
                 revealField: { draft.revealField($0) },
