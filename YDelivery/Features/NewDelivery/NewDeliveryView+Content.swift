@@ -105,7 +105,6 @@ extension NewDeliveryView {
         /// The CTA's words, or `nil` when the bar has no place on screen — derived on the
         /// root's side of the seam with everything else (R5; review, PR #22).
         var orderBarTitle: String? = nil
-        var canOrder: Bool = false
         let canSwap: Bool
         let canReorder: Bool
         let pick: (UUID) -> Void
@@ -181,7 +180,7 @@ extension NewDeliveryView {
                 routeCard
             }
             .safeAreaInset(edge: .bottom) {
-                OrderBar(title: orderBarTitle, canOrder: canOrder, openReview: openReview)
+                OrderBar(title: orderBarTitle, openReview: openReview)
             }
         }
 
@@ -808,13 +807,14 @@ extension NewDeliveryView.Content {
     /// The one CTA (board `1b`): named and priced once a class is chosen, visibly
     /// waiting otherwise — never confused with the estimate bar above, which informs and
     /// never acts (decision #13). Ordering itself happens behind the review sheet.
-    /// The one CTA. Plain values only: it renders a title and whether it may be pressed,
-    /// and knows nothing about offer states — the root view reduces those, since deriving
-    /// them here coupled the bar to the model's `Offers` (R1; review, PR #22).
+    /// The one CTA. Plain values only: it renders a title, and knows nothing about
+    /// offer states — the root view reduces those, since deriving them here coupled
+    /// the bar to the model's `Offers` (R1; review, PR #22). Never disabled: a blocked
+    /// order's title is «Review the order», an enabled door to what is owed (the
+    /// drive's dead-CTA finding); the review sheet's confirm button is the gate.
     struct OrderBar: View {
         /// Absent while the bar has no place on screen at all — no route, no prices asked.
         let title: String?
-        let canOrder: Bool
         let openReview: () -> Void
 
         var body: some View {
@@ -823,7 +823,6 @@ extension NewDeliveryView.Content {
                     Text(title)
                 }
                 .primaryAction()
-                .disabled(!canOrder)
                 .padding(.horizontal, Layout.Spacing.edge)
                 .padding(.vertical, Layout.Spacing.unit)
             }
@@ -1496,4 +1495,16 @@ private extension MKCoordinateRegion {
             setRole: { _ in }
         )
     }
+}
+
+#Preview("Order bar: hidden while no prices were asked") {
+    NewDeliveryView.Content.OrderBar(title: nil, openReview: {})
+}
+
+#Preview("Order bar: blocked — names its destination") {
+    NewDeliveryView.Content.OrderBar(title: "Review the order", openReview: {})
+}
+
+#Preview("Order bar: ready") {
+    NewDeliveryView.Content.OrderBar(title: "Order Express · 1 190 ₽", openReview: {})
 }

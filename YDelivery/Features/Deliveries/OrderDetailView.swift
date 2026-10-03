@@ -23,6 +23,7 @@ struct OrderDetailView: View {
             canChat: store.canChatOrders,
             cancellation: model.cancellation,
             reconciling: model.isReconciling,
+            diagnosticsURL: session.diagnosticsURL,
             retry: retryCancellation,
             confirm: { model.confirm(using: cancel) }
         )

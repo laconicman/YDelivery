@@ -23,6 +23,10 @@ extension OrderDetailView {
         /// Post-answer work is in flight — the retry stays visible but refuses a
         /// second tap, so the button says so rather than swallowing it (PR #32).
         let reconciling: Bool
+        /// The wire log's share URL — offered inline only beside failures the
+        /// provider's answer can explain (a refused ask, a lost reply), never a
+        /// local write's (DesignSystemSemantics → diagnostics rule).
+        var diagnosticsURL: URL? = nil
         let retry: () -> Void
         let confirm: () -> Void
 
@@ -106,9 +110,17 @@ extension OrderDetailView {
                                     .foregroundStyle(.secondary)
                             }
                         case .ready(let current):
-                            Text(current.terms.explanation)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            // Terms are the decision's price stated at the decision —
+                            // bound-flavored while a choice stands; `.unavailable` owes
+                            // nothing, so it stays quiet words.
+                            if current.terms == .unavailable {
+                                Text(current.terms.explanation)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Notice(.bound, current.terms.explanation)
+                                    .font(.footnote)
+                            }
                             if current.terms.isConfirmable {
                                 Button(current.terms.buttonTitle, role: .destructive) {
                                     showsConfirmation = true
@@ -119,11 +131,31 @@ extension OrderDetailView {
                                 Button("Try again", action: retry)
                                     .disabled(reconciling)
                             }
-                        case .failed(let message), .unconfirmed(let message),
-                             .unrecorded(let message):
-                            Text(message)
+                        case .failed(let message):
+                            // A definite refusal — the ask or the mutation was turned
+                            // down; retry re-asks.
+                            Notice(.error, message)
                                 .font(.footnote)
                             Button("Try again", action: retry)
+                                .disabled(reconciling)
+                            diagnosticsLink
+                        case .unconfirmed(let message):
+                            // The answer was lost — the provider may have applied it.
+                            // Uncertain is warning's seat, and the retry re-reads the
+                            // claim rather than re-sending (review, PR #32).
+                            Notice(.warning, message)
+                                .font(.footnote)
+                            Button("Check again", action: retry)
+                                .disabled(reconciling)
+                            diagnosticsLink
+                        case .unrecorded(let message):
+                            // The wire says cancelled and this install's memory
+                            // failed — the retry re-writes history, it never
+                            // re-sends (review, PR #32). A local write's failure
+                            // earns no diagnostics link.
+                            Notice(.error, message)
+                                .font(.footnote)
+                            Button("Save it again", action: retry)
                                 .disabled(reconciling)
                         case .cancelling:
                             HStack(spacing: Layout.Spacing.unit) {
@@ -132,8 +164,15 @@ extension OrderDetailView {
                                     .foregroundStyle(.secondary)
                             }
                         case .cancelled:
-                            Label("Cancelled", systemSymbol: .checkmarkCircleFill)
-                                .foregroundStyle(.secondary)
+                            // The outcome wears the status it produced — the cancelled
+                            // vocabulary (gray, circled ✕, the kit's own words), not a
+                            // green checkmark: terminal-neutral, not a triumph.
+                            Label {
+                                Text(OrderStatus.cancelled.words)
+                            } icon: {
+                                Image(systemSymbol: .xmarkCircle)
+                            }
+                            .foregroundStyle(OrderStatus.cancelled.color)
                         }
                     } header: {
                         Text("Cancellation")
@@ -149,6 +188,17 @@ extension OrderDetailView {
                     Button(current.terms.buttonTitle, role: .destructive, action: confirm)
                     Button("Keep the order", role: .cancel) {}
                 }
+            }
+        }
+
+        /// The wire log's door, seated beside the failure it can explain — the
+        /// ruling's "inline where the error is the content". Absent until the
+        /// log has anything to share.
+        @ViewBuilder
+        private var diagnosticsLink: some View {
+            if let diagnosticsURL {
+                ShareLink("Share diagnostics log", item: diagnosticsURL)
+                    .font(.footnote)
             }
         }
 
@@ -342,6 +392,57 @@ nonisolated extension Order {
             cancellation: .unconfirmed(
                 CancellationUnconfirmed(status: nil).errorDescription ?? ""
             ),
+            reconciling: false,
+            retry: {},
+            confirm: {}
+        )
+    }
+}
+
+#Preview("Cancelling — in flight") {
+    NavigationStack {
+        OrderDetailView.Content(
+            order: .previewSearching,
+            cancellation: .cancelling,
+            reconciling: true,
+            retry: {},
+            confirm: {}
+        )
+    }
+}
+
+#Preview("Cancel refused — a wire failure") {
+    NavigationStack {
+        OrderDetailView.Content(
+            order: .previewSearching,
+            cancellation: .failed("The provider refused the cancellation — the claim already moved on."),
+            reconciling: false,
+            diagnosticsURL: URL(string: "file:///tmp/wire-log.json"),
+            retry: {},
+            confirm: {}
+        )
+    }
+}
+
+#Preview("Cancelled — history refused the write") {
+    NavigationStack {
+        OrderDetailView.Content(
+            order: .previewSearching,
+            cancellation: .unrecorded("Cancelled, but saving the order to history failed — the database is unavailable."),
+            reconciling: false,
+            retry: {},
+            confirm: {}
+        )
+    }
+}
+
+#Preview("Cancelled — terminal, in its own words") {
+    NavigationStack {
+        OrderDetailView.Content(
+            // Still `searching` locally — the wire's cancelled verdict just landed
+            // and history's write is a beat behind; the section must stay visible.
+            order: .previewSearching,
+            cancellation: .cancelled,
             reconciling: false,
             retry: {},
             confirm: {}
