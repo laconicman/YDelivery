@@ -1,0 +1,2 @@
+/* The picker asks for When-In-Use first and explains why (Roadmap → Phase 2). */
+"NSLocationWhenInUseUsageDescription" = "Ваше местоположение появится на карте и станет точкой забора. Без него всё работает.";

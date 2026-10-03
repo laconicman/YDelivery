@@ -1,0 +1,146 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%1$@ → %2$@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "Also live" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тоже в пути"
+          }
+        }
+      }
+    },
+    "Delivery" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Доставка"
+          }
+        }
+      }
+    },
+    "New" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Новая"
+          }
+        }
+      }
+    },
+    "New delivery" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Новая доставка"
+          }
+        }
+      }
+    },
+    "Nothing on the way" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ничего не везут"
+          }
+        }
+      }
+    },
+    "Recipient" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Получатель"
+          }
+        }
+      }
+    },
+    "Repeat" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторить"
+          }
+        }
+      }
+    },
+    "Repeat a delivery" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторить доставку"
+          }
+        }
+      }
+    },
+    "Start a new delivery" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Начать новую доставку"
+          }
+        }
+      }
+    },
+    "Where the active delivery is, without opening the app." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Где активная доставка — без открытия приложения."
+          }
+        }
+      }
+    },
+    "Yesterday's routes, one tap from a new draft." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вчерашние маршруты — в один тап от нового черновика."
+          }
+        }
+      }
+    },
+    "as of " : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "на "
+          }
+        }
+      }
+    },
+    "№%@ " : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "№%@ "
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
