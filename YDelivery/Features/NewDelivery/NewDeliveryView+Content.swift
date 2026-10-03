@@ -207,31 +207,103 @@ extension NewDeliveryView {
         }
 
         /// One schema field as an editor: a text field or a choice picker — the
-        /// definition types it, the row renders it. The required hint lives *here*
-        /// (board `4b`: the blocker explains beside the field, not only on review)
-        /// and only while it's actually blocking — an answered field is quiet.
-        private func fieldRow(_ row: FieldRow) -> some View {
-            let value = Binding(
-                get: { row.value },
-                set: { setFieldValue(row.id, $0) }
-            )
-            return VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                switch row.kind {
-                case .text:
-                    TextField(row.name, text: value)
-                case .choice:
-                    Picker(row.name, selection: value) {
-                        Text("Not set").tag("")
-                        ForEach(row.choices, id: \.self) { choice in
-                            Text(choice).tag(choice)
+        /// definition types it, the row renders it. A required field wears a
+        /// persistent `required` caption beside the name (the schema rows' own
+        /// "… · required · …" precedent; an asterisk reads as punctuation, not
+        /// words, to VoiceOver), and the `bound` line lives *here* while the field
+        /// is actually blocking (board `4b`: the blocker explains beside the
+        /// field, not only on review) — an answered field is quiet
+        /// (DesignSystemSemantics → bounds).
+        struct SchemaFieldRow: View {
+            let row: FieldRow
+            let setFieldValue: (UUID, String) -> Void
+
+            @Environment(\.accessibilityReduceMotion) private var reduceMotion
+            /// The field shake's phase counter — incremented per transition into
+            /// unmet, so each new offense replays the nudge.
+            @State private var shakes = 0
+
+            private var value: Binding<String> {
+                Binding(get: { row.value }, set: { setFieldValue(row.id, $0) })
+            }
+            /// A required field holding only whitespace is the bound the order
+            /// blocks on.
+            private var unmet: Bool {
+                !row.isOptional && row.value.trimmingCharacters(in: .whitespaces).isEmpty
+            }
+
+            var body: some View {
+                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                    switch row.kind {
+                    case .text:
+                        HStack(spacing: Layout.Spacing.unit) {
+                            TextField(row.name, text: value)
+                            requiredCaption
+                        }
+                    case .choice:
+                        Picker(selection: value) {
+                            if row.isOptional {
+                                // Clearing *is* an answer for an optional field.
+                                Text("None").tag("")
+                            } else if row.value.isEmpty {
+                                // The unset seat — a prompt, never an offered
+                                // answer: it leaves the option list once a real
+                                // choice lands (a required field can't un-answer).
+                                Text("Not set").tag("")
+                            }
+                            ForEach(row.choices, id: \.self) { choice in
+                                Text(choice).tag(choice)
+                            }
+                        } label: {
+                            HStack(spacing: Layout.Spacing.unit) {
+                                Text(row.name) // the schema's own words, verbatim
+                                requiredCaption
+                            }
                         }
                     }
+                    if unmet {
+                        Notice(.bound, "Required — the order doesn't leave without it.")
+                            .font(.footnote)
+                    }
                 }
-                if !row.isOptional, row.value.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text("Required — the order doesn't leave without it.")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                .modifier(FieldShake(phase: CGFloat(shakes)))
+                .onChange(of: unmet) { _, nowUnmet in
+                    // Motion row 7: the ~2-frame nudge sits beside the input, and
+                    // only on the transition into unmet — a fresh draft's
+                    // already-empty fields don't rattle. Reduce Motion skips it:
+                    // the bound line's glyph + words carry the meaning still.
+                    if nowUnmet, !reduceMotion {
+                        withAnimation(.easeOut(duration: 0.3)) { shakes += 1 }
+                    }
                 }
+            }
+
+            private var requiredCaption: some View {
+                Group {
+                    if !row.isOptional {
+                        Text("required")
+                            .font(.footnote)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+
+        /// Motion row 7's field shake: a ~2-frame horizontal nudge beside the
+        /// input as a bound lands — never for wire failures.
+        private struct FieldShake: GeometryEffect {
+            var phase: CGFloat
+            var animatableData: CGFloat {
+                get { phase }
+                set { phase = newValue }
+            }
+
+            /// A nudge, not a vibration — one decaying pass, 6 pt at the most.
+            private static let distance: CGFloat = 6
+
+            func effectValue(size: CGSize) -> ProjectionTransform {
+                ProjectionTransform(CGAffineTransform(
+                    translationX: sin(phase * .pi * 3) * Self.distance * (1 - phase), y: 0))
             }
         }
 
@@ -298,8 +370,9 @@ extension NewDeliveryView {
                     if offers == .idle {
                         // Prices follow the route alone — an empty parcel rides the
                         // wire as a placeholder item, so the only precondition left
-                        // is a complete route (live evidence, 2026-09-22).
-                        Text("Prices appear when the route is complete.")
+                        // is a complete route (live evidence, 2026-09-22). A bound,
+                        // stated where the decision is.
+                        Notice(.bound, "Prices appear when the route is complete.")
                     }
                 }
 
@@ -395,7 +468,14 @@ extension NewDeliveryView {
                     // 2026-09-14).
                     Text("What's inside")
                 } footer: {
-                    Text("The declared value is what the insurance covers.")
+                    // The wire requires ≥1 item (live-verified) — the bound states
+                    // itself in the section footer, not first on the review sheet
+                    // (DesignSystemSemantics → placement rules 3–4). The insurance
+                    // sentence moved to the item editor's Value section, which is
+                    // the field it explains.
+                    if itemRows.isEmpty {
+                        Notice(.bound, "At least one item — the order needs a parcel to carry.")
+                    }
                 }
 
                 // Its own section, per board `4b` — the sender's schema, not a row
@@ -414,7 +494,7 @@ extension NewDeliveryView {
                             }
                         }
                         ForEach(fieldRows) { row in
-                            fieldRow(row)
+                            SchemaFieldRow(row: row, setFieldValue: setFieldValue)
                         }
                         if !hiddenFieldRows.isEmpty {
                             // A confirmationDialog, not a Menu: the choice is one
@@ -1214,6 +1294,9 @@ private extension MKCoordinateRegion {
             retry: {}
         )
         NewDeliveryView.Content.TariffStrip(
+            offers: .ready([]), selectedID: nil, select: { _ in }, retry: {}
+        )
+        NewDeliveryView.Content.TariffStrip(
             offers: .failed("Parse error: missing required field 'items'"), selectedID: nil, select: { _ in }, retry: {}
         )
         NewDeliveryView.Content.TariffStrip(
@@ -1293,6 +1376,33 @@ private extension MKCoordinateRegion {
     }
     .padding()
     .background(Color(.systemGroupedBackground))
+}
+
+#Preview("Field rows: required unmet, choice unset, answered quiet") {
+    List {
+        Section("Your fields") {
+            NewDeliveryView.Content.SchemaFieldRow(
+                row: .init(id: UUID(), name: "Заказ", kind: .text, choices: [],
+                           isOptional: false, value: ""),
+                setFieldValue: { _, _ in }
+            )
+            NewDeliveryView.Content.SchemaFieldRow(
+                row: .init(id: UUID(), name: "Тип груза", kind: .choice,
+                           choices: ["Документы", "Коробка"], isOptional: false, value: ""),
+                setFieldValue: { _, _ in }
+            )
+            NewDeliveryView.Content.SchemaFieldRow(
+                row: .init(id: UUID(), name: "Тип груза", kind: .choice,
+                           choices: ["Документы", "Коробка"], isOptional: true, value: ""),
+                setFieldValue: { _, _ in }
+            )
+            NewDeliveryView.Content.SchemaFieldRow(
+                row: .init(id: UUID(), name: "Заказ", kind: .text, choices: [],
+                           isOptional: false, value: "4417"),
+                setFieldValue: { _, _ in }
+            )
+        }
+    }
 }
 
 #Preview("Point rows: empty, warned, with the parcel's verbs") {

@@ -159,7 +159,7 @@ private struct FieldEditor: View {
                         // The invariant, said where it's enforced: a required
                         // field the sender cannot see is a trap — the order would
                         // block on a value nothing asked for.
-                        Text("Required fields always show by default — a hidden required field would block ordering on a value nobody sees.")
+                        Notice(.bound, "Required fields always show by default — a hidden required field would block ordering on a value nobody sees.")
                     } else {
                         Text("Fields not shown by default wait behind «Add field» in the draft.")
                     }
