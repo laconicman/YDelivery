@@ -1,0 +1,196 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Building %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Корпус %@"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отмена"
+          }
+        }
+      }
+    },
+    "Choose on the map" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выбрать на карте"
+          }
+        }
+      }
+    },
+    "Delivery point" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Точка доставки"
+          }
+        }
+      }
+    },
+    "Entrance %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подъезд %@"
+          }
+        }
+      }
+    },
+    "Flat or office %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Квартира или офис %@"
+          }
+        }
+      }
+    },
+    "Floor %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этаж %@"
+          }
+        }
+      }
+    },
+    "Found an address" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Найден адрес"
+          }
+        }
+      }
+    },
+    "Intercom %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Домофон %@"
+          }
+        }
+      }
+    },
+    "New delivery" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Новая доставка"
+          }
+        }
+      }
+    },
+    "No address found" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Адрес не найден"
+          }
+        }
+      }
+    },
+    "Pick-up point" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пункт выдачи"
+          }
+        }
+      }
+    },
+    "Reading the share…" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Читаем, что прислали…"
+          }
+        }
+      }
+    },
+    "Send to YDelivery" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отправить в YDelivery"
+          }
+        }
+      }
+    },
+    "Share a message or a map link that names a place." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поделитесь сообщением или ссылкой на карту, которая называет место."
+          }
+        }
+      }
+    },
+    "The address is guessed from the text — check the pin before ordering." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Адрес угадан из текста — проверьте метку перед заказом."
+          }
+        }
+      }
+    },
+    "The shared point is" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Присланная точка — это"
+          }
+        }
+      }
+    },
+    "the destination" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "назначение"
+          }
+        }
+      }
+    },
+    "the origin" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "отправление"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
