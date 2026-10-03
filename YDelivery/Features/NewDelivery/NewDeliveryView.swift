@@ -11,6 +11,10 @@ struct NewDeliveryView: View {
     /// the flow.
     let placed: () -> Void
     @State private var showsReview = false
+    /// A blocker's door, tapped while the review sheet is up: remembered so the
+    /// sheet can let go *before* the next sheet asks for the screen — two
+    /// presenters on one view can't share it.
+    @State private var blockerDoor: Model.Blocker.Destination?
     /// Bumped per confirm — the ordering task's id, so a retry is the same owned task
     /// run again (the Run pattern; attempt 0 no-ops through the model's queue gate).
     @State private var orderAttempt = 0
@@ -129,6 +133,27 @@ struct NewDeliveryView: View {
     private var saveItemTemplate: ((ParcelItem, String) async throws -> Void)? {
         guard store.canSaveTemplates else { return nil }
         return { item, name in try await store.saveTemplate(item, name: name) }
+    }
+
+    /// A blocker's door, once the review sheet has let go. `.field`/`.offer`/
+    /// `.fieldsSchema` want nothing presented: their bounds already speak on the
+    /// card the sheet just uncovered — the first two only need the draft left
+    /// showing, the third re-reads the schema (a read, never a write).
+    private func openBlocker(_ destination: Model.Blocker.Destination) {
+        switch destination {
+        case .point(let id), .contact(let id):
+            pickingPoint = draft.point(withID: id)
+        case .item(let id):
+            editingItem = draft.item(withID: id)
+        case .newItem:
+            editingItem = ParcelItem()
+        case .fieldsSchema:
+            Task { await store.refresh() }
+        case .field(let id):
+            draft.revealField(id)
+        case .offer:
+            break
+        }
     }
 
     var body: some View {
@@ -278,7 +303,14 @@ struct NewDeliveryView: View {
                     save: { draft.options = $0 }
                 )
             }
-            .sheet(isPresented: $showsReview) {
+            .sheet(isPresented: $showsReview, onDismiss: {
+                // The door waits for the sheet to be gone — presenting into a
+                // dismissing sheet lands the next editor nowhere.
+                if let door = blockerDoor {
+                    blockerDoor = nil
+                    openBlocker(door)
+                }
+            }) {
                 ReviewSheet(
                     stops: reviewStops,
                     itemLines: draft.items.map { item in
@@ -302,6 +334,10 @@ struct NewDeliveryView: View {
                     done: {
                         showsReview = false
                         placed()
+                    },
+                    resolveBlocker: { blocker in
+                        blockerDoor = blocker.destination
+                        showsReview = false
                     },
                     // Closes the sheet and nothing else: the draft stays parked with its
                     // token, so a later attempt reuses it rather than buying a second

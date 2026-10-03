@@ -825,63 +825,139 @@ extension NewDeliveryView {
         /// one rather than replay the dead claim (review, PR #48).
         private var orderRequestIsTerminated = false
 
-        /// Everything that must be true before the confirm button exists — every bound
-        /// stated as a sentence the review sheet renders (the wire would otherwise say
-        /// it as a 400).
-        var orderBlockers: [String] {
-            var blockers: [String] = []
-            if !isRouteComplete {
-                blockers.append(String(localized: "Every stop needs its place on the map."))
+        /// One order-level bound as a door — the sentence the review sheet reads plus
+        /// the destination that resolves it (DesignSystemSemantics → the audit's rule;
+        /// the device drive found blockers listed where nothing could be done about
+        /// them). A blocker is never words on a dead end.
+        nonisolated struct Blocker: Identifiable, Hashable {
+            /// Where the tap leads. `.field` and `.offer` need no editor — their
+            /// bounds already speak on the draft card, so the door there is just
+            /// the sheet letting go.
+            enum Destination: Hashable {
+                /// The stop's one-flow sheet — the picker answers place *and*
+                /// person (Round 5, decision #40).
+                case point(UUID)
+                /// The same sheet, meant for the "who's at the door" half.
+                case contact(UUID)
+                /// The parcel editor on the offending item.
+                case item(UUID)
+                /// The parcel editor on a fresh one.
+                case newItem
+                /// A required schema field's row on the draft card.
+                case field(UUID)
+                /// Re-read the field schema — a read, never a write.
+                case fieldsSchema
+                /// The tariff strip on the draft card.
+                case offer
             }
-            if points.contains(where: {
+            /// The bound's own identity — kind-qualified (`"route/<point>"`) so two
+            /// bounds about one subject stay two rows.
+            let id: String
+            let message: String
+            let destination: Destination
+        }
+
+        /// Everything that must be true before the confirm button exists — every bound
+        /// stated as a sentence the review sheet renders *and* the door that resolves
+        /// it (the wire would otherwise say it as a 400).
+        var orderBlockers: [Blocker] {
+            var blockers: [Blocker] = []
+            if !isRouteComplete, let point = points.first(where: { $0.place == nil }) {
+                blockers.append(.init(
+                    id: "route/\(point.id)",
+                    message: String(localized: "Every stop needs its place on the map."),
+                    destination: .point(point.id)
+                ))
+            }
+            if let point = points.first(where: {
                 // The wire's contact is `name` *and* `phone`, both required — a
                 // dialable number with nobody attached still 400s at claim time
                 // (DeepWiki consult on the spec, 2026-09-18).
                 let contact = $0.contact?.storable
                 return (contact?.phone ?? "").isEmpty || (contact?.fullName ?? "").isEmpty
             }) {
-                blockers.append(String(localized: "The courier calls ahead — every stop needs a person: a name and a phone."))
-            } else if points.contains(where: {
+                blockers.append(.init(
+                    id: "contact/\(point.id)",
+                    message: String(localized: "The courier calls ahead — every stop needs a person: a name and a phone."),
+                    destination: .contact(point.id)
+                ))
+            } else if let point = points.first(where: {
                 // The same dialability rule the editor hints with: a half-typed contact
                 // may be *saved*, but an order carries only numbers the courier can
                 // actually call (review, PR #25).
                 PhoneFormat.dialable($0.contact?.storable?.phone ?? "") == nil
             }) {
-                blockers.append(String(localized: "A phone the courier can't dial is no phone yet — finish the number."))
+                blockers.append(.init(
+                    id: "phone/\(point.id)",
+                    message: String(localized: "A phone the courier can't dial is no phone yet — finish the number."),
+                    destination: .contact(point.id)
+                ))
             }
             if items.isEmpty {
-                blockers.append(String(localized: "Say what's inside — the parcel is insured by its declared value."))
-            } else if items.contains(where: {
+                blockers.append(.init(
+                    id: "items",
+                    message: String(localized: "Say what's inside — the parcel is insured by its declared value."),
+                    destination: .newItem
+                ))
+            } else if let item = items.first(where: {
                 $0.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.cost == nil
             }) {
-                blockers.append(String(localized: "Every item needs a name and a declared value."))
-            } else if items.contains(where: { ($0.cost ?? 0) <= 0 }) {
+                blockers.append(.init(
+                    id: "itemSpec/\(item.id)",
+                    message: String(localized: "Every item needs a name and a declared value."),
+                    destination: .item(item.id)
+                ))
+            } else if let item = items.first(where: { ($0.cost ?? 0) <= 0 }) {
                 // A declared value is what the parcel is insured for, so zero is not a
                 // value — and the bound is stated here rather than discovered as a 400
                 // (review, PR #22).
-                blockers.append(String(localized: "A declared value of nothing insures nothing — say what each item is worth."))
+                blockers.append(.init(
+                    id: "itemValue/\(item.id)",
+                    message: String(localized: "A declared value of nothing insures nothing — say what each item is worth."),
+                    destination: .item(item.id)
+                ))
             }
-            if items.contains(where: { ($0.weightKg ?? 1) <= 0 }) {
-                blockers.append(String(localized: "A stated weight has to be more than zero."))
+            if let item = items.first(where: { ($0.weightKg ?? 1) <= 0 }) {
+                blockers.append(.init(
+                    id: "itemWeight/\(item.id)",
+                    message: String(localized: "A stated weight has to be more than zero."),
+                    destination: .item(item.id)
+                ))
             }
-            if items.contains(where: { $0.quantity < 1 }) {
-                blockers.append(String(localized: "Every item needs a count of at least one."))
+            if let item = items.first(where: { $0.quantity < 1 }) {
+                blockers.append(.init(
+                    id: "itemCount/\(item.id)",
+                    message: String(localized: "Every item needs a count of at least one."),
+                    destination: .item(item.id)
+                ))
             }
             if fieldsUnavailable && fieldDefinitions.isEmpty {
                 // An unread schema is not an empty one — required fields may exist
                 // that nobody is being asked about (review, PR #42).
-                blockers.append(String(localized:
-                    "Your fields couldn't load — the order waits until the schema is readable."))
+                blockers.append(.init(
+                    id: "fieldSchema",
+                    message: String(localized:
+                        "Your fields couldn't load — the order waits until the schema is readable."),
+                    destination: .fieldsSchema
+                ))
             }
             for field in fieldDefinitions where !field.isOptional {
                 if (fieldValues[field.id]?.trimmingCharacters(in: .whitespaces) ?? "").isEmpty {
-                    blockers.append(String(
-                        localized: "«\(field.name)» is required — the order doesn't leave without it."
+                    blockers.append(.init(
+                        id: "field/\(field.id)",
+                        message: String(
+                            localized: "«\(field.name)» is required — the order doesn't leave without it."
+                        ),
+                        destination: .field(field.id)
                     ))
                 }
             }
             if selectedOffer == nil {
-                blockers.append(String(localized: "Pick a delivery class once prices arrive."))
+                blockers.append(.init(
+                    id: "offer",
+                    message: String(localized: "Pick a delivery class once prices arrive."),
+                    destination: .offer
+                ))
             }
             return blockers
         }
