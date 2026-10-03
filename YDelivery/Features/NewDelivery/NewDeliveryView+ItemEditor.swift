@@ -77,6 +77,11 @@ extension NewDeliveryView {
                                 CurrencyPicker(currency: $item.currency)
                             }
                         }
+                    } footer: {
+                        // Trivia lives at the field it explains — it vacated the
+                        // items section's footer for the ≥1-item bound
+                        // (DesignSystemSemantics → placement rule 4).
+                        Text("The declared value is what the insurance covers.")
                     }
 
                     Section {
