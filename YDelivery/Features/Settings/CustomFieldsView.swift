@@ -191,7 +191,7 @@ private struct FieldEditor: View {
 
                 if let saveError {
                     Section {
-                        Text(saveError).foregroundStyle(.red)
+                        Notice(.error, saveError)
                     }
                 }
             }
@@ -228,6 +228,16 @@ private struct FieldEditor: View {
         takenCarriers: [.claimDocument],
         save: { _ in },
         saveError: nil
+    )
+}
+
+#Preview("Save refused — the field keeps its draft") {
+    FieldEditor(
+        field: CustomFieldDefinition(name: "Заказ", isOptional: false,
+                                     carrier: .orderNumber),
+        takenCarriers: [.claimDocument],
+        save: { _ in },
+        saveError: String(localized: "The field could not be stored — nothing was saved.")
     )
 }
 
