@@ -87,6 +87,34 @@ struct DeliveriesRowsTests {
         }
     }
 
+    @Test("A decision row names which wait it is — refused claims stop wearing «Not delivered»")
+    func attentionRowNamesItsWait() {
+        // The drive's litter: claims created, priced, refused at acceptance —
+        // «failed» provider-side though nothing was ever dispatched.
+        let refused = DeliveriesView.Content.Row(
+            order: order(status: .attention, created: 1, addresses: ["A, 1", "B, 2"],
+                         providerStatus: "failed"),
+            fieldValues: [])
+        #expect(refused.statusDetail == "Ended before delivery")
+
+        let parked = DeliveriesView.Content.Row(
+            order: order(status: .attention, created: 1, addresses: ["A, 1", "B, 2"],
+                         providerStatus: "pay_waiting"),
+            fieldValues: [])
+        #expect(parked.statusDetail == "Waiting for payment")
+
+        let unphrased = DeliveriesView.Content.Row(
+            order: order(status: .attention, created: 1, addresses: ["A, 1", "B, 2"]),
+            fieldValues: [])
+        #expect(unphrased.statusDetail == nil, "no wire word — the chip stands alone, never invented words")
+
+        let active = DeliveriesView.Content.Row(
+            order: order(status: .active, created: 1, addresses: ["A, 1", "B, 2"],
+                         providerStatus: "pickuped"),
+            fieldValues: [])
+        #expect(active.statusDetail == nil, "other statuses' chips already tell the whole truth")
+    }
+
     @Test("One trail open at a time — opening a second closes the first, opening the same closes it")
     func oneOpenTrail() async {
         let model = DeliveriesView.Model()

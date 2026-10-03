@@ -35,6 +35,13 @@ extension DeliveriesView {
             /// Stops between origin and destination — «+2» on the line, drawn in
             /// full only when the row expands.
             let middleStops: Int
+            /// Which wait a `.attention` row is — the provider's own phrase
+            /// («Waiting for your approval», «Ended before delivery»), so the
+            /// collapsed chip's one word never stands in for six different
+            /// decisions (the drive's D2: seven refused claims read "Not
+            /// delivered" though nothing was ever dispatched). `nil` for the
+            /// statuses whose chip already tells the whole truth.
+            var statusDetail: String? = nil
             let priceText: String?
             /// The whole route — the expanded row's `RouteLine`, contacts and door
             /// chips included (board `3e`).
@@ -268,6 +275,12 @@ extension DeliveriesView.Content {
         private var statusLine: some View {
             HStack(spacing: Layout.Spacing.unit) {
                 StatusChip(status: row.status)
+                if let statusDetail = row.statusDetail {
+                    Text(statusDetail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if let at = row.statusObservedAt {
                     Text(at, format: .dateTime.hour().minute())
                         .font(.footnote)
@@ -324,11 +337,11 @@ private extension DeliveriesView.Content.Row {
     static func fixture(
         status: OrderStatus, created: String, origin: String?, destination: String,
         middles: Int = 0, price: String?, observed: Date? = nil,
-        route: [RoutePoint] = []
+        detail: String? = nil, route: [RoutePoint] = []
     ) -> Self {
         .init(id: UUID(), status: status, statusObservedAt: observed, createdText: created,
               destinationText: destination, originText: origin, middleStops: middles,
-              priceText: price, route: route)
+              statusDetail: detail, priceText: price, route: route)
     }
 }
 
@@ -348,7 +361,8 @@ private let previewSections: [DeliveriesView.Content.Section] = [
                  destination: "Арбат, 10", middles: 1, price: "3 400 ₽"),
         .fixture(status: .attention, created: "14 Jan, 07:13", origin: "Никольская, 10",
                  destination: "Пятницкая, 25", price: "890 ₽",
-                 observed: .init(timeIntervalSince1970: 1_799_950_000)),
+                 observed: .init(timeIntervalSince1970: 1_799_950_000),
+                 detail: "Ended before delivery"),
     ]),
     .init(id: .past, rows: [
         .fixture(status: .done, created: "4 Sep", origin: "Тверская, 1", destination: "Арбат, 10",
