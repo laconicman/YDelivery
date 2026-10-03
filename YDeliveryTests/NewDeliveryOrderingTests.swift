@@ -68,7 +68,9 @@ struct NewDeliveryOrderingTests {
         #expect(empty.orderBlockers.count == 4, "route, phones, parcel, class — all missing")
 
         let model = readyDraft()
-        #expect(model.orderBlockers == [String(localized: "Pick a delivery class once prices arrive.")])
+        #expect(model.orderBlockers.map(\.message) == [String(localized: "Pick a delivery class once prices arrive.")])
+        #expect(model.orderBlockers.map(\.destination) == [.offer],
+                "every blocker is a door — the class bound points at the tariff strip")
 
         await priced(model)
         #expect(model.orderBlockers.isEmpty)
@@ -82,9 +84,11 @@ struct NewDeliveryOrderingTests {
         // Saving unfinished contacts is allowed (the editor only hints) — the order
         // gate is where dialability is enforced, with the same rule (review, PR #25).
         model.setContact(Contact(givenName: "Анна", phone: "домофон 12"), for: model.points[1].id)
-        #expect(model.orderBlockers == [
+        #expect(model.orderBlockers.map(\.message) == [
             String(localized: "A phone the courier can't dial is no phone yet — finish the number.")
         ])
+        #expect(model.orderBlockers.first?.destination == .contact(model.points[1].id),
+                "the bound's door is the stop's own editor")
         #expect(model.orderRequest == nil)
 
         model.setContact(Contact(givenName: "Анна", phone: "+7 998 765-43-21"), for: model.points[1].id)
@@ -98,7 +102,7 @@ struct NewDeliveryOrderingTests {
         // `Contact` on the wire is `name` *and* `phone`, both required (DeepWiki
         // consult on the spec, 2026-09-18) — a nameless phone would 400 at claim.
         model.setContact(Contact(phone: "+7 998 765-43-21"), for: model.points[1].id)
-        #expect(model.orderBlockers == [
+        #expect(model.orderBlockers.map(\.message) == [
             String(localized: "The courier calls ahead — every stop needs a person: a name and a phone.")
         ])
         #expect(model.orderRequest == nil)
@@ -114,9 +118,11 @@ struct NewDeliveryOrderingTests {
             name: "Заказ", isOptional: false, carrier: .orderNumber)
         model.fieldDefinitions = [field]
 
-        #expect(model.orderBlockers == [
+        #expect(model.orderBlockers.map(\.message) == [
             String(localized: "«Заказ» is required — the order doesn't leave without it.")
         ])
+        #expect(model.orderBlockers.first?.destination == .field(field.id),
+                "the bound's door is the field's own row")
         #expect(model.orderRequest == nil)
 
         model.setFieldValue("4417", for: field.id)
