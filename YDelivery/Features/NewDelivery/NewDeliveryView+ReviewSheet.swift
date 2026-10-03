@@ -23,11 +23,15 @@ extension NewDeliveryView {
         let whenLine: String
         let tariffName: String
         let priceText: String?
-        let blockers: [String]
+        let blockers: [Model.Blocker]
         let ordering: Model.Ordering
         let recordWarning: String?
         let confirm: () -> Void
         let done: () -> Void
+        /// A blocker tapped — each bound is a door to the place that resolves it,
+        /// never a dead end (the device drive's discoverability finding). The root
+        /// routes the destination once this sheet has let go.
+        var resolveBlocker: (Model.Blocker) -> Void = { _ in }
         /// Leaving an unresolved acceptance. Deliberately *not* `done`: nothing has been
         /// confirmed or recorded, so the draft, its idempotency token and its claim
         /// context all have to survive — retiring the draft here would let the next
@@ -49,9 +53,24 @@ extension NewDeliveryView {
                 List {
                     if !blockers.isEmpty {
                         Section("Before ordering") {
-                            ForEach(blockers, id: \.self) { blocker in
-                                Label(blocker, systemSymbol: .exclamationmarkCircle)
-                                    .font(.subheadline)
+                            ForEach(blockers) { blocker in
+                                Button {
+                                    resolveBlocker(blocker)
+                                } label: {
+                                    HStack(spacing: Layout.Spacing.gutter) {
+                                        Notice(.bound, blocker.message)
+                                        Spacer()
+                                        // The door reads as a door — the chevron is
+                                        // the summary row's own trailing convention.
+                                        Image(systemSymbol: .chevronForward)
+                                            .font(.footnote.weight(.semibold))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .font(.subheadline)
+                                .accessibilityHint(Text(blocker.destination.doorHint))
                             }
                         }
                     }
@@ -252,6 +271,19 @@ extension NewDeliveryView {
     }
 }
 
+private extension NewDeliveryView.Model.Blocker.Destination {
+    /// What the tap does, for the rotor — a bound's door says where it goes.
+    var doorHint: LocalizedStringKey {
+        switch self {
+        case .point, .contact: "Opens this stop's editor."
+        case .item, .newItem: "Opens the parcel editor."
+        case .fieldsSchema: "Reads your fields again."
+        case .field: "Back to the draft — the field waits there."
+        case .offer: "Back to the draft — the delivery classes wait there."
+        }
+    }
+}
+
 #Preview("Blocked — every bound stated") {
     Color.clear.sheet(isPresented: .constant(true)) {
         NewDeliveryView.ReviewSheet(
@@ -265,8 +297,10 @@ extension NewDeliveryView {
             tariffName: "Courier",
             priceText: "749 ₽",
             blockers: [
-                "The courier calls ahead — every stop needs a person with a phone.",
-                "Say what's inside — the parcel is insured by its declared value.",
+                .init(id: "contact", message: "The courier calls ahead — every stop needs a person with a phone.",
+                      destination: .contact(UUID())),
+                .init(id: "items", message: "Say what's inside — the parcel is insured by its declared value.",
+                      destination: .newItem),
             ],
             ordering: .idle,
             recordWarning: nil,
