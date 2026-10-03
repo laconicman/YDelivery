@@ -70,6 +70,25 @@ struct LocalizationTests {
         #expect(fmt.map { String.localizedStringWithFormat($0, 1) } == "1 грузчик")
     }
 
+    @Test("Unindexed interpolation keys resolve — String(localized:) looks those up")
+    func unindexedAliases() {
+        // `Text` looks keys up indexed (`%1$@`); `String(localized:)` looks them up
+        // unindexed (`%@`). The catalog carries both, or direct strings stay English.
+        #expect(ru("Order %@ · %@") == "Заказ %1$@ · %2$@")
+        #expect(ru("%@ · ~%@") == "%1$@ · ~%2$@")
+        #expect(ru("%@, ext. %@") == "%1$@, доб. %2$@")
+        #expect(ru("Fits %@: up to %@.") == "Влезает в %1$@: до %2$@.")
+        #expect(ru("Doesn't fit %@ — its bound is %@. Pick a larger class, or it may be refused at the door.")
+                == "Не влезает в %1$@ — предел %2$@. Выберите класс побольше, иначе могут отказать у двери.")
+    }
+
+    @Test("The provider's extra classes have sender words")
+    func extraClassesResolve() {
+        #expect(ru("Same-day") == "День в день")
+        #expect(ru("Super-express") == "Быстрее")
+        #expect(ru("Signed in") == "Вход выполнен")
+    }
+
     @Test("English falls back to the key")
     func englishFallback() {
         #expect(Bundle.main.localizedString(forKey: "New delivery",

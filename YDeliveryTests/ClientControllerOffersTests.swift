@@ -100,10 +100,18 @@ struct ClientControllerOffersTests {
         #expect(offer.pickupInterval?.lowerBound == Date(timeIntervalSince1970: 500))
     }
 
+    @Test("The documented extra classes map to named cases, not the raw wire value")
+    func documentedClassesMapToNames() {
+        #expect(TariffClass(.sddLong) == .sddLong)
+        #expect(TariffClass(wireSpelling: "sdd_long") == .sddLong)
+        // `superexpress_d2d` predates the pinned spec; stored orders spell it anyway.
+        #expect(TariffClass(wireSpelling: "superexpress_d2d") == .superexpressD2D)
+        #expect(TariffClass.superexpressD2D.wireValue == "superexpress_d2d")
+    }
+
     @Test("An unknown class stays visible by its wire name rather than being dropped")
     func unknownClassStaysVisible() {
-        #expect(TariffClass(.sddLong) == .other("sdd_long"))
-        #expect(TariffClass.other("sdd_long").words == "sdd_long")
+        #expect(TariffClass.other("future_class").words == "future_class")
     }
 
     @Test("An unmarked item's journey ends at the last drop-off, not the return leg")

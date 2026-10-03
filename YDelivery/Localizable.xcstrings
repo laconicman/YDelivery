@@ -81,12 +81,52 @@
         }
       }
     },
+    "%@ %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
     "%@ cm" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ см"
+          }
+        }
+      }
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · ~%@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · ~%2$@"
+          }
+        }
+      }
+    },
+    "%@, ext. %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, доб. %2$@"
           }
         }
       }
@@ -171,6 +211,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "В карточке объявления нет координат, а маршрут с нечитаемой точкой поставит метку не туда. Откройте его и скопируйте адрес."
+          }
+        }
+      }
+    },
+    "A longer run, still within the day" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дальняя поездка — в тот же день"
           }
         }
       }
@@ -915,6 +965,16 @@
         }
       }
     },
+    "Doesn't fit %@ — its bound is %@. Pick a larger class, or it may be refused at the door." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не влезает в %1$@ — предел %2$@. Выберите класс побольше, иначе могут отказать у двери."
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "ru" : {
@@ -941,6 +1001,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Детали у двери"
+          }
+        }
+      }
+    },
+    "Door to door in the least time" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "От двери до двери за минимальное время"
           }
         }
       }
@@ -1176,6 +1246,16 @@
       }
     },
     "Fits %1$@: up to %2$@." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Влезает в %1$@: до %2$@."
+          }
+        }
+      }
+    },
+    "Fits %@: up to %@." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -2063,6 +2143,16 @@
         }
       }
     },
+    "Order %@ · %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Заказ %1$@ · %2$@"
+          }
+        }
+      }
+    },
     "Order for %@" : {
       "localizations" : {
         "ru" : {
@@ -2523,6 +2613,16 @@
         }
       }
     },
+    "Same-day" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "День в день"
+          }
+        }
+      }
+    },
     "Save" : {
       "localizations" : {
         "ru" : {
@@ -2823,6 +2923,16 @@
         }
       }
     },
+    "Signed in" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вход выполнен"
+          }
+        }
+      }
+    },
     "Skipped by the courier" : {
       "localizations" : {
         "ru" : {
@@ -2869,6 +2979,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Статус"
+          }
+        }
+      }
+    },
+    "Super-express" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Быстрее"
           }
         }
       }
