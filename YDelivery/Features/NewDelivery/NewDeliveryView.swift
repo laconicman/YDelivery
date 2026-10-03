@@ -180,7 +180,10 @@ struct NewDeliveryView: View {
             .task(id: Run(inputs: draft.routeWaypoints, attempt: estimateAttempt)) {
                 await draft.calculateEstimate()
             }
-            .task(id: Run(inputs: draft.pricingInputs, attempt: offersAttempt)) {
+            // `repriceRequests` rides the id too: a stale-requirements refusal
+            // invalidates the held quote inside `placeOrder`, and the bump is what
+            // makes this task refire — same seam, no new wiring (the drive's fix).
+            .task(id: Run(inputs: draft.pricingInputs, attempt: offersAttempt + draft.repriceRequests)) {
                 await draft.loadOffers { request in
                     #if DEBUG
                     if YDeliveryApp.isOffersFixture { return Offer.listingStrip }
@@ -349,6 +352,8 @@ struct NewDeliveryView: View {
                     priceText: draft.selectedOffer?.priceText,
                     blockers: draft.orderBlockers,
                     ordering: draft.ordering,
+                    reprice: reviewReprice,
+                    retryPrices: { offersAttempt += 1 },
                     recordWarning: draft.recordWarning,
                     confirm: {
                         draft.confirmOrder()
@@ -485,8 +490,30 @@ private extension NewDeliveryView {
         }
     }
 
-    /// Every class the app knows, priced where the strip has a price — the explainer
-    /// teaches the vocabulary even for classes the route was not offered.
+    /// What became of the reprice a stale-requirements refusal kicked off — `.none`
+    /// while no quote was ever invalidated, `.inFlight` while prices are re-asked,
+    /// and the was/now pair once a fresh offer exists to compare against.
+    private var reviewReprice: ReviewSheet.Reprice {
+        guard let stale = draft.staleQuotedPrice else { return .none }
+        switch draft.offers {
+        case .idle, .loading:
+            return .inFlight
+        case .ready:
+            guard let offer = draft.selectedOffer else {
+                // Priced, but nothing to spend — the strip's empty-ready state
+                // already says it; on the sheet it is the reprice that failed.
+                return .failed(String(localized: "No delivery classes for this route yet"))
+            }
+            return offer.priceText == stale
+                ? .unchanged
+                : .moved(was: stale, now: offer.priceText)
+        case .failed(let reason):
+            return .failed(reason)
+        case .signedOut:
+            return .failed(String(localized: "Signed out — prices need your token."))
+        }
+    }
+
     /// The CTA's words. `nil` while the bar has no place on screen at all — no route,
     /// no prices asked for yet. When the order cannot yet be placed, the title names
     /// the destination the tap actually opens — the review sheet, which lists what is
@@ -500,6 +527,8 @@ private extension NewDeliveryView {
         return String(localized: "Order \(offer.tariff.words) · \(offer.priceText)")
     }
 
+    /// Every class the app knows, priced where the strip has a price — the explainer
+    /// teaches the vocabulary even for classes the route was not offered.
     var explainerCards: [TariffExplainer.Card] {
         let offers: [Offer] = if case .ready(let offers) = draft.offers { offers } else { [] }
         let known: [TariffClass] = [.courier, .express, .cargo]
