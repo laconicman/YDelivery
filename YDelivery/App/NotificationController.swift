@@ -116,6 +116,19 @@ final class NotificationController: NSObject {
         return await task.value
     }
 
+    /// The system's answer for this app, read live — the Settings row reflects
+    /// a permission changed outside the app.
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        await center.notificationSettings().authorizationStatus
+    }
+
+    /// Asks for authorization on demand — the Settings «Turn on» row shares the
+    /// lazy prompt's single flight, so a tap and a first announce-worthy event
+    /// still produce one system prompt.
+    func requestAuthorization() async -> Bool {
+        await ensureAuthorized()
+    }
+
     /// Reads and clears the tap-through — `RootView`'s consume step, so the
     /// same banner can't re-navigate on the next view rebuild.
     func consumeRequest() -> UUID? {
