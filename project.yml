@@ -71,9 +71,11 @@ packages:
     # 0.4.12 adds Notice(.success) — free terms take the ruble glyph — and
     # carries the entitlement gate, `building`, and the sender's library
     # (`ParcelTemplate`/`parcelTemplateItems`, `SavedPlace.pinned`) the schema
-    # seed writes. (0.4.10's kit-side string catalogs for ru, 0.4.8's feedback
-    # roles, 0.4.7's sender's library, 0.4.6's nonisolated vocabulary, 0.4.5's
-    # ShareError stay requirements.)
+    # seed writes. (0.4.10's kit-side string catalogs for ru, 0.4.9's status
+    # words — «attention» speaks as a decision, «failed» stops presuming a
+    # delivery; 0.4.8's feedback roles — bound/warning/error tokens and
+    # Notice; 0.4.7's sender's library, 0.4.6's nonisolated vocabulary,
+    # 0.4.5's ShareError stay requirements.)
     minorVersion: 0.4.12
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
