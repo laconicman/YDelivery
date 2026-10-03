@@ -218,6 +218,10 @@ extension DeliveriesView.Content {
         var trailError: String? = nil
         let toggleTrail: () -> Void
 
+        /// Reduce Motion turns the trail's slide-in into a plain fade — the
+        /// reveal is motion, so the preference swaps it out whole.
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
         var body: some View {
             VStack(alignment: .leading, spacing: Layout.Spacing.chip) {
                 HStack(alignment: .firstTextBaseline) {
@@ -234,9 +238,19 @@ extension DeliveriesView.Content {
                 statusLine
                 if isExpanded {
                     expandedBody
+                        .transition(revealTransition)
                 }
             }
             .padding(.vertical, Layout.Spacing.tight)
+        }
+
+        /// How the opened trail enters: slides down out of the status line as the
+        /// row grows — without it the block lands fully formed at its final
+        /// position while the cell is still stretching. `matchedGeometryEffect`
+        /// is the wrong tool for this: it morphs one element across two states,
+        /// and nothing here exists while the row is collapsed.
+        private var revealTransition: AnyTransition {
+            reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)
         }
 
         /// «from → to», the destination in the primary weight, middles counted.
@@ -281,6 +295,7 @@ extension DeliveriesView.Content {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                Spacer()
                 if let at = row.statusObservedAt {
                     Text(at, format: .dateTime.hour().minute())
                         .font(.footnote)
