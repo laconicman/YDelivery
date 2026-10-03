@@ -208,6 +208,9 @@ targets:
         # NSExtension + NSSupportsLiveActivities ride a partial plist — the same
         # merge pattern as the app's INFOPLIST_FILE.
         INFOPLIST_FILE: YDeliveryWidgets-Info.plist
+        # App Store upload requires a display name on every appex (the widget
+        # gallery credits the host by it); Share carries the same key.
+        INFOPLIST_KEY_CFBundleDisplayName: YDelivery
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
         SKIP_INSTALL: YES
         STRING_CATALOG_GENERATE_SYMBOLS: NO
