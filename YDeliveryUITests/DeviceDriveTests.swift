@@ -9,6 +9,19 @@ import XCTest
 /// text is also dumped to the test log.
 final class DeviceDriveTests: XCTestCase {
 
+    /// A manual harness, not a CI citizen: it drives the *real* app — parked
+    /// draft, real store, live provider session — which exists only on a paired
+    /// device the owner steers. CI has none of those (its run proved it: three
+    /// timeouts waiting on wire-backed affordances), so the drive stays opt-in —
+    /// set `YD_DEVICE_DRIVE=1` on the test run to take it.
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["YD_DEVICE_DRIVE"] == "1",
+            "Device drive is manual — set YD_DEVICE_DRIVE=1 to run it"
+        )
+    }
+
     @MainActor
     private func snap(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
