@@ -136,6 +136,15 @@ struct PointPickerView: View {
                 )
                 .navigationTitle("Refine the point")
                 .navigationBarTitleDisplayMode(.inline)
+                // The pushed stages offer the same leave-the-flow affordance the
+                // search stage does — «Cancel» dismisses the whole sheet; Back still
+                // means one step up. Editing an existing point opens straight here,
+                // so without it that flow had no way out but the chevron.
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                }
                 // The flow's end, stacked on the map: door details and the person on
                 // one screen, Back returning to the address (Round 5, decision #40;
                 // author, 2026-09-14 — one navigation stack, not two sheets).
@@ -162,6 +171,11 @@ struct PointPickerView: View {
                     )
                     .navigationTitle("The point")
                     .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { dismiss() }
+                        }
+                    }
                 }
             }
             .task { await model.streamSuggestions() }
