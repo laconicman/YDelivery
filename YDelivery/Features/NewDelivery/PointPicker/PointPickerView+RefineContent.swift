@@ -188,9 +188,11 @@ extension PointPickerView.RefineContent {
                         .foregroundStyle(.secondary)
                 }
                 if let errorText {
-                    Text(errorText)
+                    // A geocode miss is a failed read, not an error — quiet words,
+                    // and the address field above stays the retry.
+                    Label(errorText, systemSymbol: .exclamationmarkTriangle)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.secondary)
                 }
 
                 Button(action: continueToDescribe) {
