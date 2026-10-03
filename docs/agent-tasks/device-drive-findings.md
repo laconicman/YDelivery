@@ -41,6 +41,9 @@ like. Reported by the owner as the primary "can't order" complaint.
 **Fix shipped (uncommitted→`feat/record-signing`):** the CTA is back, disabled,
 inside the "Before ordering" section beside the blockers it answers to.
 
+**Discharged:** #100 landed that fix; #103 made the blockers doors back to their
+editors; #105 kept the bar honest about readiness so the sheet opens at all.
+
 ### A2. Blockers are names, not doors
 
 The sheet *states* bounds — «Заказ» is required, every stop needs a contact, every
@@ -50,6 +53,9 @@ Save → back → back → draft). A sender should tap the blocker and land on t
 editor that unblocks it. This is the plan's **required-field discoverability**
 question sharpened: bounds need affordances, not just text.
 
+**Discharged:** #103 — `orderBlockers` carries a destination per blocker and the
+sheet's rows route to the editor that unblocks them.
+
 ### A3. The Order bar is a dead control while pricing
 
 `Order Courier` exists and is hittable while offers load; tapping it does nothing.
@@ -57,6 +63,10 @@ A sender cannot tell "pricing" from "ready" from "blocked" — three states, one
 rendering. The bar must show its state: spinner/placeholder while pricing, the
 destination-named title once blocked (per the plan's OrderBar ruling), and the
 priced CTA only when a tap can actually do something.
+
+**Discharged:** #105 — three renderings for three truths: a non-interactive
+pricing indicator, "Review the order" while blocked (enabled), the priced CTA
+when ready.
 
 ### A4. The floating Order bar eats the last rows
 
@@ -66,6 +76,10 @@ inviting taps that land on the bar instead (this is how the review sheet kept
 opening when a test aimed at a row). `safeAreaInset` exists for exactly this;
 content under a floating CTA is a classic own goal. Also a **scroll-margin**
 issue: `isHittable` returns true for a sliver of a row.
+
+**Discharged:** #105 — the bar keeps its `.bar` material but a top-edge
+`Divider` now marks where rows end, so a scroll-under no longer reads as
+belonging to the bar.
 
 ## B. The route nobody can take
 
@@ -80,6 +94,8 @@ invests contact details and item values into a route that can never be ordered.
 minimum translate this error — "point 2" is provider jargon; the user knows it as
 "the Земляной Вал stop".
 
+**Registered:** TechDebt YD-19.
+
 ### B2. Fewer offers is information, not a bug — but it looks like one
 
 The 3-stop route got one offer; the same two endpoints got five. Provider-side
@@ -87,11 +103,18 @@ filtering (class capability × route × requirements) is legitimate — but a se
 watching the strip shrink from five cards to one has no idea why. An honest
 caption ("only Courier serves this route") costs one line.
 
+**Registered:** TechDebt YD-20.
+
 ### B3. Placeholder prices that look real
 
 While offers loaded, the strip rendered **999 ₽** on every card — a real-looking
 number, not a skeleton. One accept at a placeholder price would be a real claim at
 a fake price. Redacted/skeleton treatment, per the plan's loading-state grammar.
+
+**Checked:** `main` has redacted those placeholders since PR #20
+(`TariffClass.placeholders` + `.redacted`) — so either the drive's build predates
+the merge or redaction isn't surviving the card's composition; the verification is
+registered as TechDebt YD-21.
 
 ### B4. Every failed accept reprices upward — silently
 
@@ -99,6 +122,9 @@ Observed across one evening: 1,659 → 1,733 → 1,803 → 1,888 ₽ for the sam
 Each "Try again" re-prices; surge made every retry more expensive than the last.
 Money-adjacent surface (plan §cancellation/money): when the retry's price differs
 from the failed attempt's, say so — "was 1,803 ₽, now 1,888 ₽ — order anyway?"
+
+**Discharged:** #106 — a documented refusal invalidates the held quote, reprices,
+and the sheet discloses "was ₽X, now ₽Y" before the sender reconfirms.
 
 ## C. The option that could not be changed — this session's deepest cut
 
@@ -119,12 +145,20 @@ placebo button. The deeper question — why the provider prices an option it the
 refuses, on every attempt — is a provider ticket candidate (wire log has the
 payloads).
 
+**Discharged:** #106 — a documented `ProviderRefusal` is now read back on the wire
+(a live claim is never re-accepted), a stale claim marks the held offer invalid,
+and "Try again" waits for the reprice instead of re-sending identical
+requirements.
+
 ### C2. The error names the option but not the fix
 
 «От двери до двери» is a provider phrase. The app's UI calls the same thing
 "To the door." A sender matching error-text to switch-label needs a translation
 they shouldn't need. Either echo the wire phrase in the error with the app's
 term, or deep-link straight to the option.
+
+**Discharged:** #106 — a refusal that names a known option gets the app's term
+appended («От двери до двери» — "to the door").
 
 ### C3. The switch that would not flip *(test-infra, but an a11y smell)*
 
@@ -135,6 +169,8 @@ seconds later. `value` reports as Int NSNumber, not the documented "1"/"0"
 String. If automation can't toggle it centre-tap, VoiceOver's double-tap
 deserves a manual check — the element may be exposing row-level geometry with
 a dead middle.
+
+**Registered:** TechDebt YD-22.
 
 ## D. Claims that exist but shouldn't, and status words that lie
 
@@ -149,6 +185,9 @@ can exist while the user is told the order failed. Reconciliation saved us;
 the UX is a landmine (the user might order again and pay twice). And the
 account is littered with refused claims a sender cannot clean up.
 
+**Registered:** TechDebt YD-23 — the cleanup story (hide never-dispatched claims
+from the running history; keep the audit trail).
+
 ### D2. "Not delivered" is the wrong word for a claim never dispatched
 
 Owner's words: *"'Not delivered' is not the right status for a claim that was
@@ -158,6 +197,11 @@ The row currently reads like a failed delivery of a real parcel. Honest
 vocabulary: "Not placed" / "Refused" / "Cancelled before dispatch". This is the
 plan's status-vocabulary section — now with a live specimen.
 
+**Discharged:** kit #38 (tagged `0.4.9`) — the collapsed `.attention` chip reads
+"Needs a decision" and `failed`'s provider phrase is "Ended before delivery";
+app #107 — `.attention` rows and the order detail show the provider's own phrase
+beside the chip, so a refused claim reads as refused, never as a failed parcel.
+
 ### D3. Scheduled pickup is the safety rail — and it's capped at hours
 
 Owner's instruction: future-date claims so cancel-before-dispatch is always free.
@@ -165,6 +209,8 @@ The options ceiling is +4 h for Courier, 5 days for Cargo — the user's "next
 week" isn't reachable for the class a small parcel needs. The bound is honestly
 stated in the footer (good), but a sender wanting next-week delivery discovers
 the ceiling only inside the editor. Provider ceiling, not ours — record it.
+
+**Registered:** TechDebt YD-24.
 
 ### D4. A claimed draft retires itself
 
@@ -176,6 +222,8 @@ placed order the sender more likely wants the Deliveries list than a blank
 compose. Destination after `Done`/`Close` on a placed order is a navigation
 decision worth a ruling.
 
+**Registered:** TechDebt YD-25.
+
 ## E. Draft hygiene — how the draft got dirty
 
 ### E1. Fixture litter blocks real orders
@@ -185,6 +233,8 @@ left "Schema seed". Both blocked a real order and both survive sync — they are
 real rows, not ghosts. Fixture writes need a quarantine prefix or a cleanup
 hook; a real order must never be hostage to test residue.
 
+**Registered:** TechDebt YD-26.
+
 ### E2. A pin drifted: "90 m · ~0m route estimate"
 
 At one point the 2.8 km route read 90 m — a point's coordinates moved through
@@ -193,12 +243,16 @@ points: the describe screen persists position on save even when the user only
 meant to save the contact. Confirm-before-writing the geo half, or split
 "Save the point" (geo) from "Save" (contact).
 
+**Registered:** TechDebt YD-27.
+
 ### E3. Identical rows, ambiguous target
 
 Every stop offers a "Who receives" row with the same label. A UI test (and a
 VoiceOver user) cannot tell stop 1's row from stop 3's without reading the
 address above it — the row label itself should carry its stop: "Who receives —
 pickup". A one-word change; a real a11y fix.
+
+**Registered:** TechDebt YD-28.
 
 ### E4. Fields mutate silently
 
@@ -207,11 +261,15 @@ stray tap on a choice field writes immediately. Not a defect, but the class of
 thing that makes a draft feel haunted. Undo or dirty-marking would help; at
 minimum the review sheet's field summary is the last honest readback.
 
+**Registered:** TechDebt YD-29.
+
 ### E5. Phone digits landed in the floor field
 
 During contact entry, typed phone digits once went into a door-details pill
 instead of the phone box — the pill row sits adjacent and focus/targeting is
 easy to miss. Minor; worth one pass on hit-targets in the describe form.
+
+**Registered:** TechDebt YD-30.
 
 ## F. What demonstrably works — the credit side
 
@@ -246,8 +304,13 @@ easy to miss. Minor; worth one pass on hit-targets in the describe form.
 ## H. Feeds
 
 - `DesignSystemSemantics` — bound tint, OrderBar blocked naming, error chrome,
-  status vocabulary, money-adjacent surfaces: every ruling now has a live case.
-- TD register candidates: C1 (stale-requirement retry), D2 (status vocabulary),
-  A4 (bar overlay), B3 (placeholder prices), B4 (reprice silence).
-- `DeviceDriveTests` — now documents the real journey including workarounds;
-  each workaround above names the app fix that would retire it.
+  status vocabulary, money-adjacent surfaces: every ruling got a live case here,
+  and every adopted ruling is now recorded in `DesignSystem` ("Feedback roles"
+  and the grammar sections it gained).
+- Every entry above names its landing: a `**Discharged:**` line for the PR that
+  shipped the fix, a `**Registered:**` line for the TechDebt number (YD-19 …
+  YD-30) holding what was out of scope.
+- `DeviceDriveTests` — documents the real journey including workarounds; each
+  workaround above names the app fix that would retire it. The suite is a manual
+  harness gated on `YD_DEVICE_DRIVE=1` — a paired device and a live provider are
+  things CI does not have.

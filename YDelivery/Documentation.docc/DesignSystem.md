@@ -16,8 +16,11 @@ widget's green drifts from the app's within two releases.
 | `statusSearching` | waiting for a courier | ◌ variable color · «Ищем курьера» |
 | `statusActive` | en route, on plan | ◉ · «Курьер едет» |
 | `statusDone` | delivered | ✓ · «Доставлено» |
-| `statusAttention` | needs a decision | ⚠ · «Не вручили» |
+| `statusAttention` | needs a decision | ⚠ · "Needs a decision" |
 | `statusCancelled` | closed, undelivered | ✕ · «Отменён» |
+| `feedbackBound` | a precondition owed — the `bound` role's glyph and words | `exclamationmark.circle` · bound line |
+| `feedbackWarningText` | words for the `warning` role — its glyph keeps `.orange` | `exclamationmark.triangle` |
+| `feedbackErrorText` | words for the `error` role — its glyph keeps `.red` | `exclamationmark.triangle` or the cause's own glyph |
 | `pointStart` | pickup | concentric ring |
 | `pointEnd` | drop-off | teardrop |
 | `scanConfident` | recognised — UI text and outlines | ✓ solid outline |
@@ -26,7 +29,13 @@ widget's green drifts from the app's within two releases.
 | `scanOverlayUncertain` | check this — viewfinder overlay only | dashed outline |
 
 Two rules: **a status color never appears without glyph and words**; and `statusAttention`
-is for *decisions* — a network failure is a retry, not attention. Values run deliberately
+is for *decisions* — a network failure is a retry, not attention. The chip's words name
+the family's truth, so where the collapsed family hides a materially different provider
+state, the provider's own phrase rides beside the chip: a claim parked at
+`ready_for_approval`, one refused before dispatch, and a delivery that failed en route
+are all `statusAttention` — only `ProviderStatusPhrase`'s words tell them apart (the
+`.attention` rows render `Order.statusDetail`; collapsed status alone was the device
+drive's D2 finding). Values run deliberately
 darker than `.systemGreen`/`.systemRed` where text sits on them; verify AA at 13 px, the
 tight case, **measured against the surface the words actually sit on** — the chip's 12%
 tint, not the naked background (designer confirmation, 2026-08-30).
@@ -57,6 +66,74 @@ namespace mechanism is the growth path if theming ever becomes a feature — the
 project shows that shape working, `ThemeManager` modernizing to an `@Observable` controller
 per this app's rules.
 
+## Feedback roles (semantics session, 2026-10)
+
+Status colors describe *orders*; feedback roles describe *sentences the UI says to the
+sender*. Six roles, named by meaning; each owns a chrome shape, and the hue-bearing ones
+split the way the scan pair already did — the glyph keeps the bright system hue (non-text
+graphics clear at 3:1), the words take the AA-darkened text token. **A role's color never
+appears without its glyph or its words** — the chip's rule generalized.
+
+| Role | Means | Chrome |
+|---|---|---|
+| `info` | guidance, provenance, invitations, empty states | footnote `.secondary`; glyph only where scanning needs it — carries no hue |
+| `bound` | a precondition, visible *before* it is broken — never an error | `Notice(.bound)` — attention-family `exclamationmark.circle` + words beside the field, in the section footer, or on the review-sheet row |
+| `warning` | proceedable-but-risky; an outcome that came back uncertain | `Notice(.warning)` — triangle + `feedbackWarningText` words |
+| `error` | an action tried and failed — a write, a command, a refusal | `Notice(.error)` — triangle or the cause's own glyph + `feedbackErrorText` words; the action sits beside it |
+| `success` | the outcome the sender wanted | `checkmark.circle.fill` + status words — or the status the outcome enters (`ReviewSheet.placed` wears `statusSearching`; a landed cancellation wears `statusCancelled`, never a green ✓) |
+| `destructive` | a verb, never a message | `Button(role: .destructive)` only — system red lives on controls and never tints text |
+
+The boundary that does the work is `bound` vs `error`: a bound is the shape of the form,
+true whether or not the sender has looked; an error is something that *happened*. Red for
+"you haven't typed yet" is alarm fatigue — and `.red` text fails AA at footnote size
+(≈3.6:1, measured; the dark variants pass, so the text tokens exist).
+
+**The read/write split.** A failed *read* is not an `error`: the surface keeps its shape,
+the message stays `.secondary`, an in-place Retry sits beside it, and the triangle — kept,
+a failed read must not read as an empty one — stays quiet. Where the whole surface is the
+content, `ContentUnavailableView` carries it. A failed *write* or command is `error` and
+gets the chrome row. An *unknown* answer is `warning` — the provider may have applied it,
+so the retry is a read ("Check again"), never a resend. A terminal refusal that must
+interrupt takes `.alert(error:)`, sparingly; the row is for failures the sender can act
+on in place.
+
+### Placement grammar — whose bound it is decides where the sentence sits
+
+1. **A bound states itself where the decision is made** — the field that carries it, the
+   footer of the section whose membership it constrains, the review sheet when the bound
+   spans sections. A blocker first discoverable at review is a design bug.
+2. Per-field bounds sit beside the field; per-section bounds sit in the section footer
+   ("Prices appear when the route is complete." is the model); order-level bounds list on
+   the review sheet.
+3. **The review sheet is the union, not the source.** Every blocker it lists also exists,
+   quietly, at its owning surface — and each row is a door back to it.
+4. **Footers state bounds and consequences; trivia lives at the field it explains.**
+5. **An unavailable option stays visible and names its reason.**
+6. **An answered bound is quiet** — silence is the answered state; the marker persists,
+   the bound line leaves.
+7. **Trailing edge: timestamps and accessories trail, content leads.**
+
+### The canonical failure row
+
+`Notice` (`YDeliveryKit`) owns the row: cause-specific glyph where one exists
+(`.wifiSlash` for a dead connection), words stating plainly what failed — the
+`LocalizedError` contract guarantees a filled `errorDescription` — and the honest next
+step beside it: "Try again" for a retryable write, "Check again" for a re-read, "Open
+Settings" for a refusal only Settings can fix, nothing for a bound. **"Share diagnostics"
+attaches where a wire exchange is implicated** — inline where the error is the content,
+a "details in Settings → Diagnostics" footnote elsewhere; never to local validation or
+pure storage failures (the log holds requests and responses, nothing about a disk write).
+Chrome localizes to the app's language; user and provider vocabulary stays verbatim,
+quoted where interpolated.
+
+### Order bar and CTAs
+
+The bar's title names the destination its tap opens: while pricing it is a non-interactive
+indicator (a bar that cannot accept a tap must not look like a button), while blocked it
+reads "Review the order" and stays enabled — the sheet is where the blockers explain
+themselves — and when ready it names the priced promise. A CTA must never look reachable
+while a tap dead-ends, nor dead while a door exists.
+
 ## Pin & badge taxonomy (board `2c`)
 
 Shape and glyph carry the role; **color only reinforces**. The grayscale column is the test:
@@ -84,7 +161,7 @@ the catalog.
 
 ## Field taxonomy → UI (handoff §4; dossier Part II §6)
 
-Three rules, drawn in board `3d`:
+Four rules — three drawn in board `3d`, the fourth ruled at the semantics session:
 
 1. **One summary line per group, expanding to typed rows.** The draft reads in three
    seconds; density lives one tap down. The demo shows every field because it is a demo;
@@ -95,6 +172,14 @@ Three rules, drawn in board `3d`:
 3. **Units belong to the field.** Centimetres and kilograms in the UI, metres on the wire.
    Currency is a picker. The phone extension is its own field. No free-text number ever
    means two things.
+4. **Required is marked before it is broken.** A `.tertiary` "required" caption rides
+   beside the field name — explicit beats symbolic, and VoiceOver reads it for free (the
+   schema editor's "Text · required · Claim document" subtitle is the precedent). Unmet
+   adds the `bound` line, which leaves on answer; answered stays quiet. A required choice
+   picker carries no fake `""` answer — the collapsed row shows the prompt, visibly
+   *un*answered; optional pickers may keep an explicit "None" row, because there clearing
+   *is* an answer. An empty required section states its bound ("at least one item — the
+   order needs a parcel to carry") rather than spending the footer on trivia.
 
 Interdependencies the UI enforces up front — never discovered via API errors:
 
@@ -135,6 +220,7 @@ never justifies raising the floor.
 | Заказ создан | `.bounce` + success haptic | the one irreversible action; no confetti — money just moved | haptic only |
 | Курьер двигается | `withAnimation(.linear)` on coordinate | interpolate between polls; a teleporting scooter reads as a bug | jump |
 | Ошибка поля | shake (~2-frame offset) | only where the error sits beside the input; never for network failures | color + text |
+| Content reveal | `.move(edge: .top)` + `.opacity` inside an animating container | insert/remove is not a morph — `matchedGeometryEffect` is wrong for an element that exists in only one state (the trail-expansion fix is the precedent) | `.opacity` whole |
 
 On Pow: two effects would be taken (`.shake`, a price-change effect), both ≈20 lines —
 **skip the dependency** and keep the vocabulary in the app, where each Reduce Motion branch
@@ -143,5 +229,6 @@ is visible in the same file. Adopt Pow only if its transition set is wanted broa
 ## See Also
 
 - <doc:Design>
+- <doc:DesignSystemSemantics>
 - <doc:LinkGrammars>
 - <doc:Vision>

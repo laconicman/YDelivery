@@ -303,6 +303,157 @@ the new identity's shareable log.
   (`finishTasksAndInvalidate` plus settling) was rejected in the register: paying
   latency on every sign-in to fence a one-line leak is the wrong trade.
 
+## YD-19 — The provider prices routes it will not carry — **open**
+
+Device-drive finding B1: a three-stop route priced exactly one offer, and the
+accept refused outright — «Для точки назначения 2 нет отправлений», no shipments
+for the middle point. Pricing promised what the claim stage refuses; the sender
+invests contacts and item values into a route that can never be ordered.
+
+- **Cost:** a dead route reads as a priced route until the refusal — and the
+  refusal names "point 2" in provider jargon, not the stop the sender knows.
+- **Discharge:** surface per-point serviceability at pricing time if the API
+  exposes it (check `offers/calculate`'s per-point fields); at minimum translate
+  the refusal — map the point index back to the draft's own stop name.
+
+## YD-20 — A shrinking offer count explains itself nowhere — **open**
+
+Device-drive finding B2: the three-stop route priced one offer; the same two
+endpoints priced five. Provider-side filtering (class capability × route ×
+requirements) is legitimate — but the strip just shows fewer cards. The explainer
+names *item* misfits; nothing says why a class is absent entirely.
+
+- **Cost:** a sender watching five cards become one can't tell provider filtering
+  from a bug, and may re-enter data to coax offers that cannot exist.
+- **Discharge:** one honest caption when known classes go unpriced — "only Courier
+  serves this route" — derived from the classes the explainer already knows about.
+
+## YD-21 — The loading strip's skeleton may not read as redacted — **open**
+
+Device-drive finding B3: while offers loaded, the tester read **999 ₽** as real
+prices on every card. The code has redacted those placeholders since PR #20
+(`TariffClass.placeholders` + `.redacted(reason: .placeholder)`) — so either the
+drive's build predates the merge, or `.redacted` is not surviving the card's
+composition (custom `Button` label, `.contentTransition(.numericText())`).
+
+- **Cost:** if the skeleton does not render, one accept at a placeholder price is
+  a real claim at a fake price — money moves on a number that never existed.
+- **Discharge:** reproduce on device or sim; if redaction is being neutralised,
+  drop the numeric transition in placeholder state or draw the card's own
+  skeleton shape. Verify with the strip's loading preview, not the code's intent.
+
+## YD-22 — An options toggle's centre tap lands dead — **open**
+
+Device-drive finding C3: `To the door`/`Scheduled pickup` switches would not flip
+on a centre `.tap()` — the element spans the whole row and the knob sits at its
+right edge. The drive worked around it by aiming at the knob (a11y smell, surfaced
+through test-infra).
+
+- **Cost:** a control that ignores a centre tap is a control VoiceOver and
+  switch-control users may not be able to operate — the workaround required
+  knowing where the knob lives.
+- **Discharge:** an a11y pass on the options rows — confirm the toggle's
+  hit-target frame covers the row, or the row's tap forwards to the switch; then
+  drop the test's coordinate-aimed workaround.
+
+## YD-23 — Claims created-but-never-carried litter the history — **open**
+
+Device-drive finding D1: every failed accept still created a provider-side claim
+(seven across one evening). Reconciliation correctly ingested each as terminal —
+the machinery worked; the landmine is that a claim can exist while the sender is
+told the order failed, and the account accumulates refused claims a sender cannot
+remove.
+
+- **Cost:** "order again" can mean "pay twice" — the litter is real claims with
+  real claim IDs, indistinguishable in count from orders the sender meant.
+- **Discharge:** a cleanup story — provider-side archive/cancel for terminal
+  refused claims if the API offers one, or a list affordance that hides
+  never-dispatched claims from the running history (keep the audit trail;
+  stop counting them as orders).
+
+## YD-24 — The scheduled-pickup safety rail is capped at hours — **open**
+
+Device-drive finding D3: the owner's rule is future-date claims so
+cancel-before-dispatch stays free — but the provider ceiling is +4 h for Courier
+(5 days for Cargo). A sender wanting next-week delivery on the class a small
+parcel needs has no rail; the bound is honestly stated, the ceiling is the
+provider's.
+
+- **Cost:** the free-cancel window strategy doesn't reach the common "send it
+  next week" ask for Courier.
+- **Discharge:** provider-side — confirm whether the API exposes a longer
+  window on other parameters; if not, record it in the package's TechDebt and
+  keep the footer honest about the ceiling (it already is).
+
+## YD-25 — A placed order retires the draft into a blank compose — **open**
+
+Device-drive finding D4: when the parked draft's claim resolved, "New Delivery"
+reopened a blank two-stop draft — empty points for a sender who never asked for
+a second order. Retiring the draft on success is right; the *destination* after
+Done is not.
+
+- **Cost:** after placing an order the sender more likely wants the Deliveries
+  list (or the new order's detail) than a fresh compose — the current default
+  invites an accidental second draft.
+- **Discharge:** a navigation ruling — land on Deliveries (or the placed order's
+  detail) after a successful place, keeping "New Delivery" for a deliberate ask.
+
+## YD-26 — Fixture writes live in the sender's real store — **open**
+
+Device-drive finding E1: `--uitest-fields` left «Заказ» as a stored *required*
+field and an earlier seed left "Schema seed" — real rows that blocked a real
+order and survive sync. Test fixtures and production data share one store.
+
+- **Cost:** a real order can be hostage to test residue — the blockers were
+  accurate, which is exactly what makes fixture litter dangerous.
+- **Discharge:** a fixture quarantine — prefix-marked writes the seeded paths
+  recognise and a cleanup hook that purges them, or a fixture-scoped store the
+  seeds can target without touching the sender's data.
+
+## YD-27 — A point's coordinates can drift on a contact-only save — **open**
+
+Device-drive finding E2: a 2.8 km route once read 90 m — a point's geo moved
+through describe→"Save the point" cycles where the sender only meant to save a
+contact. The save persists the whole point, position included.
+
+- **Cost:** silent geo drift prices and routes a parcel to a place nobody
+  chose — the class of wrong that reads plausible, not broken.
+- **Discharge:** confirm-before-writing the geo half — a save that notices the
+  pin moved asks first — or split "Save the point" (geo) from "Save" (contact).
+
+## YD-28 — "Who receives" rows are indistinguishable across stops — **open**
+
+Device-drive finding E3: every stop offers the same "Who receives" label; a UI
+test (and a VoiceOver user) cannot tell stop 1's row from stop 3's without
+reading the address above it.
+
+- **Cost:** a real a11y defect on multi-stop routes — the label is the handle,
+  and the handle names nothing.
+- **Discharge:** a one-word change — the row label carries its stop ("Who
+  receives — pickup"), matching the placeholder variants already per-stop.
+
+## YD-29 — Choice fields write on stray taps — **open**
+
+Device-drive finding E4: «Тип груза» acquired "Коробка" mid-session with no
+deliberate edit — a stray tap on a choice field writes immediately. Not a defect,
+but the class of thing that makes a draft feel haunted.
+
+- **Cost:** the review sheet's summary is the only honest readback; silent
+  writes between visits erode trust in what the draft says.
+- **Discharge:** undo or dirty-marking for choice fields — at minimum a visible
+  diff cue on fields changed since the sheet was last reviewed.
+
+## YD-30 — Describe-form hit targets misroute typed digits — **open**
+
+Device-drive finding E5: typed phone digits once landed in a door-details pill
+instead of the phone box — the pill row sits adjacent and focus/targeting is
+easy to miss.
+
+- **Cost:** nonsense rides to a courier (a floor that reads like a phone
+  number) unless a second pass catches it — the drive cleared exactly that.
+- **Discharge:** one hit-target pass on the describe form — target frames and
+  focus order verified where pills sit beside the contact fields.
+
 ## See Also
 
 - <doc:Design>
