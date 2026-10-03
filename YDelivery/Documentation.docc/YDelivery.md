@@ -33,4 +33,5 @@ package's `WorkingWithYandex` article outranks every assumption.
 ### Specifications
 
 - <doc:DesignSystem>
+- <doc:DesignSystemSemantics>
 - <doc:LinkGrammars>
