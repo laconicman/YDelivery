@@ -280,6 +280,7 @@ nonisolated extension Order {
     }
 }
 
+#if DEBUG
 #Preview("Cancellable — free terms") {
     NavigationStack {
         OrderDetailView.Content(
@@ -374,7 +375,6 @@ nonisolated extension Order {
     }
 }
 
-#if DEBUG
 extension Order {
     /// Preview fixtures — a claim still being worked, and one long done.
     static var previewSearching: Order {
