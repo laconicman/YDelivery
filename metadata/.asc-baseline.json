@@ -1,0 +1,31 @@
+{
+  "app" : {
+    "bundleId" : "com.learnable.YDelivery",
+    "id" : "6818196668",
+    "primaryLocale" : "en-GB",
+    "sku" : "ydelivery"
+  },
+  "appInfo" : {
+    "appStoreState" : "PREPARE_FOR_SUBMISSION",
+    "id" : "e0c0e39a-c085-4d7b-93e8-a07d7c1266c8"
+  },
+  "digests" : {
+    "en-GB\/name.txt" : "31d806ba9559460570763b0cca8dc1b3f82662952bb77b9439ae52d3b3ea3fdb",
+    "review_information\/demo_account_required.txt" : "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+  },
+  "exportedAt" : "2026-10-01T15:02:53Z",
+  "localizationIDs" : {
+    "en-GB" : {
+      "appInfo" : "27a07813-310d-4474-9fc3-d94541662371",
+      "version" : "beb196af-2577-41a0-ab02-ec8e2093faa5"
+    }
+  },
+  "reviewDetailID" : "721a6a55-f9f6-4b5c-85d9-2d29ac60cf7e",
+  "schemaVersion" : 2,
+  "version" : {
+    "appStoreState" : "PREPARE_FOR_SUBMISSION",
+    "id" : "1c427978-0d7e-4712-846a-2763d8ad7c03",
+    "platform" : "IOS",
+    "versionString" : "1.0"
+  }
+}
