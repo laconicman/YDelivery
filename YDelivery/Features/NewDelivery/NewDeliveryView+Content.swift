@@ -105,7 +105,6 @@ extension NewDeliveryView {
         /// The CTA's words, or `nil` when the bar has no place on screen — derived on the
         /// root's side of the seam with everything else (R5; review, PR #22).
         var orderBarTitle: String? = nil
-        var canOrder: Bool = false
         let canSwap: Bool
         let canReorder: Bool
         let pick: (UUID) -> Void
@@ -175,7 +174,7 @@ extension NewDeliveryView {
                 routeCard
             }
             .safeAreaInset(edge: .bottom) {
-                OrderBar(title: orderBarTitle, canOrder: canOrder, openReview: openReview)
+                OrderBar(title: orderBarTitle, openReview: openReview)
             }
         }
 
@@ -775,7 +774,6 @@ extension NewDeliveryView.Content {
     struct OrderBar: View {
         /// Absent while the bar has no place on screen at all — no route, no prices asked.
         let title: String?
-        let canOrder: Bool
         let openReview: () -> Void
 
         var body: some View {
@@ -787,10 +785,13 @@ extension NewDeliveryView.Content {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(!canOrder)
                 .padding(.horizontal, Layout.Spacing.edge)
                 .padding(.vertical, Layout.Spacing.unit)
                 .background(.bar)
+                // The bar's own top edge: rows scroll under the translucent
+                // material, and the hairline is what marks where they end —
+                // the drive found them bleeding through it.
+                .overlay(alignment: .top) { Divider() }
             }
         }
     }
@@ -1461,4 +1462,16 @@ private extension MKCoordinateRegion {
             setRole: { _ in }
         )
     }
+}
+
+#Preview("Order bar: hidden while no prices were asked") {
+    NewDeliveryView.Content.OrderBar(title: nil, openReview: {})
+}
+
+#Preview("Order bar: blocked — names its destination") {
+    NewDeliveryView.Content.OrderBar(title: "Review the order", openReview: {})
+}
+
+#Preview("Order bar: ready") {
+    NewDeliveryView.Content.OrderBar(title: "Order Express · 1 190 ₽", openReview: {})
 }
