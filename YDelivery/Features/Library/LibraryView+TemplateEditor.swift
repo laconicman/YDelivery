@@ -95,9 +95,8 @@ extension LibraryView {
                     }
                     if let failure {
                         Section {
-                            Text(failure)
+                            Notice(.error, failure)
                                 .font(.footnote)
-                                .foregroundStyle(.red)
                         }
                     }
                 }
@@ -161,5 +160,13 @@ extension LibraryView {
                                     sizeLengthCm: 45, sizeWidthCm: 15, sizeHeightCm: 3)])
     Color.clear.sheet(isPresented: .constant(true)) {
         LibraryView.ParcelTemplateEditor(template: template) { _ in }
+    }
+}
+
+#Preview("The store could not keep it") {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        LibraryView.ParcelTemplateEditor { _ in
+            throw StoreController.StoreUnavailable()
+        }
     }
 }
