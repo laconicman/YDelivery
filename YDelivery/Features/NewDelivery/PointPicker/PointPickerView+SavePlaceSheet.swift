@@ -56,8 +56,7 @@ extension PointPickerView {
 
                     if let failure {
                         Section {
-                            Label(failure, systemSymbol: .exclamationmarkTriangle)
-                                .foregroundStyle(.secondary)
+                            Notice(.error, failure)
                         } footer: {
                             Text("The place was not kept. Try again, or close and carry on — the point is still on the map.")
                         }

@@ -1,4 +1,5 @@
 import SwiftUI
+import YDeliveryKit
 
 extension SettingsView {
     /// Pure presentation: plain values in, intents out (R1/R2). Previews are literals.
@@ -30,7 +31,7 @@ extension SettingsView {
                     Text("Yandex Delivery account")
                 } footer: {
                     if let errorText {
-                        Text(errorText).foregroundStyle(.red)
+                        Notice(.error, errorText)
                     } else if !isSignedIn {
                         Text("The long-lived OAuth token from your Yandex Delivery profile. Stored in the Keychain, on this device only.")
                     }
