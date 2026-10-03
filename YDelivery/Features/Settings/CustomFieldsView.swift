@@ -1,3 +1,4 @@
+import SFSafeSymbols
 import SwiftUI
 import YDeliveryKit
 
@@ -16,8 +17,16 @@ struct CustomFieldsView: View {
     var body: some View {
         List {
             if let fieldsError = store.fieldsError {
-                Text(fieldsError.localizedDescription)
-                    .foregroundStyle(.secondary)
+                // A schema that failed to read is a retry, not an absence — the
+                // same quiet read-failure shape the draft's fieldsError wears
+                // (placement rule 5: it names its reason *and* offers the fix).
+                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                    Label(fieldsError.localizedDescription, systemSymbol: .exclamationmarkTriangle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("Retry") { Task { await store.refresh() } }
+                        .font(.footnote)
+                }
             }
             ForEach(store.fieldDefinitions) { field in
                 Button {

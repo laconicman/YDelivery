@@ -406,10 +406,12 @@ extension NewDeliveryView {
 
                 Section {
                     if let templatesError {
+                        // A failed read stays quiet — glyph + words + the in-place
+                        // retry, never the error hue (the `EstimateBar` convention).
                         VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                            Text(templatesError)
+                            Label(templatesError, systemSymbol: .exclamationmarkTriangle)
                                 .font(.footnote)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(.secondary)
                             Button("Retry", action: retryTemplates)
                                 .font(.footnote)
                         }
@@ -485,10 +487,11 @@ extension NewDeliveryView {
                 if fieldsError != nil || !fieldRows.isEmpty || !hiddenFieldRows.isEmpty {
                     Section {
                         if let fieldsError {
+                            // Same read-failure convention as the templates row.
                             VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                                Text(fieldsError)
+                                Label(fieldsError, systemSymbol: .exclamationmarkTriangle)
                                     .font(.footnote)
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(.secondary)
                                 Button("Retry", action: retryFields)
                                     .font(.footnote)
                             }
