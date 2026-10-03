@@ -35,7 +35,8 @@ extension PointPickerView {
                     Text("Address")
                 } footer: {
                     if addressLacksBuilding {
-                        Text("No building number — the courier may have trouble finding the door.")
+                        // Proceedable-but-risky — a warning, not a bound.
+                        Notice(.warning, "No building number — the courier may have trouble finding the door.")
                     }
                 }
 
@@ -65,7 +66,7 @@ extension PointPickerView {
                     // The hint states the bound without blocking: a point may be kept
                     // half-typed, and ordering's blockers say the rest.
                     if !contact.phone.isEmpty, PhoneFormat.dialable(contact.phone) == nil {
-                        Text("This isn't a dialable number yet — the courier calls it on arrival.")
+                        Notice(.bound, "This isn't a dialable number yet — the courier calls it on arrival.")
                     } else {
                         // Steering, not a gate (author, 2026-09-18): prices need only
                         // the address, so someone pricing options may skip this — but
@@ -98,9 +99,10 @@ extension PointPickerView {
                         .accessibilityHint(saveUnavailableReason.map(Text.init) ?? Text(""))
                     }
                     if let saveUnavailableReason {
-                        Text(saveUnavailableReason)
+                        // The disabled bookmark states its reason — a precondition,
+                        // not a failure, so it speaks `bound`.
+                        Notice(.bound, saveUnavailableReason)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding()
