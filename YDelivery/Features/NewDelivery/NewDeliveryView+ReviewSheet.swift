@@ -17,6 +17,22 @@ extension NewDeliveryView {
             let contact: String
         }
 
+        /// How the reprice after a stale-requirements refusal stands — the refusal
+        /// proved the held offer's payload dead, so the strip refetches and the
+        /// sheet reports the outcome instead of offering a blind retry.
+        nonisolated enum Reprice: Hashable {
+            /// No quote was invalidated — an ordinary failure.
+            case none
+            /// Prices are being re-asked; there is nothing to re-confirm yet.
+            case inFlight
+            /// The fresh quote moved — the re-confirm's consent is the numeral.
+            case moved(was: String, now: String)
+            /// Fresh requirements, same price — nothing to disclose.
+            case unchanged
+            /// The reprice itself failed — its retry re-reads, never re-sends.
+            case failed(String)
+        }
+
         let stops: [Stop]
         let itemLines: [String]
         let optionsLine: String
@@ -25,6 +41,9 @@ extension NewDeliveryView {
         let priceText: String?
         let blockers: [Model.Blocker]
         let ordering: Model.Ordering
+        var reprice: Reprice = .none
+        /// Re-asks the prices when the reprice itself failed — a read, not a write.
+        var retryPrices: () -> Void = {}
         let recordWarning: String?
         let confirm: () -> Void
         let done: () -> Void
@@ -206,9 +225,38 @@ extension NewDeliveryView {
                 case .failed(let reason):
                     // A definite refusal — the error role: retrying re-asks.
                     VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
-                        Notice(.error, reason)
+                        Notice(.error, reason.namingKnownRequirements)
                             .font(.subheadline)
-                        Button("Try again", action: confirm)
+                        switch reprice {
+                        case .inFlight:
+                            // The stale payload is already being re-priced — a retry
+                            // pressed now would replay nothing new, so it stays away.
+                            HStack(spacing: Layout.Spacing.unit) {
+                                ProgressView()
+                                Text("Re-pricing the run — the provider's requirements moved.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        case .moved(let was, let now):
+                            // The re-confirm's consent: the price it will pay is said
+                            // in numbers, where the decision is made.
+                            Notice(.bound, "The price moved — was \(was), now \(now).")
+                                .font(.footnote)
+                            Button("Try again", action: confirm)
+                        case .unchanged:
+                            Text("Requirements re-checked — the price stands.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Button("Try again", action: confirm)
+                        case .failed(let repriceReason):
+                            // The reprice is a read — its failure stays a warning
+                            // with its own retry, never a second order attempt.
+                            Notice(.warning, "Re-pricing failed — \(repriceReason)")
+                                .font(.footnote)
+                            Button("Check prices again", action: retryPrices)
+                        case .none:
+                            Button("Try again", action: confirm)
+                        }
                     }
                 case .unresolved(let reason, _):
                     // No retry here on purpose: acceptance was attempted, so ordering
@@ -272,6 +320,18 @@ extension NewDeliveryView {
             confirm: {},
             done: {}
         )
+    }
+}
+
+private extension String {
+    /// The provider's refusal beside the app's own term — «От двери до двери» is
+    /// this draft's «to the door» option (C2: the provider's phrase and the
+    /// sender's vocabulary name the same switch). Unrecognized refusals pass
+    /// through verbatim.
+    var namingKnownRequirements: String {
+        let lowered = lowercased()
+        guard lowered.contains("двер") || lowered.contains("door") else { return self }
+        return String(localized: "\(self) — the «to the door» option in your draft.")
     }
 }
 
@@ -373,6 +433,50 @@ private extension NewDeliveryView.Model.Blocker.Destination {
                 reason: "No answer came back for the acceptance — the provider may have taken the order.",
                 claimID: "claim-preview"
             ),
+            recordWarning: nil,
+            confirm: {},
+            done: {}
+        )
+    }
+}
+
+#Preview("Failed — requirements moved, price followed") {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        NewDeliveryView.ReviewSheet(
+            stops: [
+                .init(id: UUID(), badge: .start, address: "Москва, ул Москворечье, 6", contact: "Иван Петров"),
+                .init(id: UUID(), badge: .end, address: "Москва, Каширское шоссе, 52", contact: "Анна Сидорова"),
+            ],
+            itemLines: ["Ноутбук — 1 pcs · 60 000 ₽"],
+            optionsLine: "to the door",
+            whenLine: "as soon as possible",
+            tariffName: "Express",
+            priceText: "1 240 ₽",
+            blockers: [],
+            ordering: .failed("The door-to-door option changed."),
+            reprice: .moved(was: "1 190 ₽", now: "1 240 ₽"),
+            recordWarning: nil,
+            confirm: {},
+            done: {}
+        )
+    }
+}
+
+#Preview("Failed — still re-pricing") {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        NewDeliveryView.ReviewSheet(
+            stops: [
+                .init(id: UUID(), badge: .start, address: "Москва, ул Москворечье, 6", contact: "Иван Петров"),
+                .init(id: UUID(), badge: .end, address: "Москва, Каширское шоссе, 52", contact: "Анна Сидорова"),
+            ],
+            itemLines: ["Ноутбук — 1 pcs · 60 000 ₽"],
+            optionsLine: "to the door",
+            whenLine: "as soon as possible",
+            tariffName: "Express",
+            priceText: nil,
+            blockers: [],
+            ordering: .failed("The door-to-door option changed."),
+            reprice: .inFlight,
             recordWarning: nil,
             confirm: {},
             done: {}

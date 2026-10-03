@@ -295,6 +295,132 @@ struct NewDeliveryOrderingTests {
         }
     }
 
+    @Test("A refused accept re-reads the claim — a dead one reprices the stale quote")
+    func refusedAcceptRepricesStaleQuote() async {
+        let model = readyDraft()
+        await priced(model)
+        let quoted = model.selectedOffer?.priceText
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            // The claim answered the re-read provider-terminal — the refusal was real.
+            watch: { id in PlacedClaim(id: id, version: 2, status: .failed, failureText: nil) },
+            accept: { _, _ in throw ProviderRefusal(message: "The door-to-door option changed") },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("a documented refusal is .failed, not .unresolved: \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer == nil, "the stale offer is dropped, not replayed")
+        #expect(model.offers == .idle, "the strip is sent back through loading")
+        #expect(model.staleQuotedPrice == quoted, "the refused quote is kept for the was/now line")
+        #expect(model.repriceRequests == 1, "the offers task's id is bumped to refire")
+    }
+
+    @Test("A refused accept whose claim went through is placed, never repriced")
+    func refusedAcceptSearchingClaimIsPlaced() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            // «Заявка уже подтверждена» — the re-read proves the order exists.
+            watch: { id in PlacedClaim(id: id, version: 2, status: .searching, failureText: nil) },
+            accept: { _, _ in throw ProviderRefusal(message: "already confirmed") },
+            clock: TestClock()
+        )
+
+        #expect(model.ordering == .placed, "the order went through — recording is the answer, not a retry")
+        #expect(model.selectedOffer != nil && model.repriceRequests == 0,
+                "a confirmed claim keeps the quote — nothing was stale")
+    }
+
+    @Test("A refused accept on a still-waiting claim reprices — re-confirm, never re-send")
+    func refusedAcceptWaitingClaimReprices() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { id in PlacedClaim(id: id, version: 2, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in throw ProviderRefusal(message: "requirements changed") },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("a clean refusal on a live claim is re-priced, not guessed: \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer == nil && model.repriceRequests == 1)
+    }
+
+    @Test("A transport failure at accept keeps the quote — and the unresolved truth")
+    func lostAnswerAtAcceptKeepsQuote() async {
+        struct Offline: Error {}
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in throw Offline() },
+            clock: TestClock()
+        )
+
+        guard case .unresolved = model.ordering else {
+            Issue.record("an answer never received is unknown, not refused: \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer != nil && model.repriceRequests == 0,
+                "a lost answer proves nothing about the quote — nothing is re-priced")
+    }
+
+    @Test("A refused create drops the held quote the same way")
+    func refusedCreateInvalidatesQuote() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in throw ProviderRefusal(message: "no shipments for destination point 2") },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in Issue.record("never reached"); return PlacedClaim(id: "x", version: 1, status: .searching, failureText: nil) },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("a documented create refusal is failed: \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer == nil && model.repriceRequests == 1)
+    }
+
+    @Test("A claim the provider ends mid-estimate reprices the stale quote")
+    func failedClaimInvalidatesQuote() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .failed, failureText: "the door-to-door option changed") },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .failed, failureText: nil) },
+            accept: { _, _ in Issue.record("never reached"); return PlacedClaim(id: "x", version: 1, status: .searching, failureText: nil) },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("a provider-terminal claim is failed: \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer == nil && model.repriceRequests == 1)
+    }
+
     @Test("A status this app has no rule for is neither accepted nor called placed")
     func unknownStatusIsUnresolved() async {
         let model = readyDraft()
@@ -667,7 +793,7 @@ struct NewDeliveryOrderingTests {
         #expect(model.ordering == .failed("Оффер истёк"))
     }
 
-    @Test("Try again after a provider-terminal failure mints a fresh token")
+    @Test("Try again after a provider-terminal failure re-prices, then mints a fresh token")
     func requestIDRenewsAfterProviderFailure() async {
         let model = readyDraft()
         await priced(model)
@@ -684,7 +810,11 @@ struct NewDeliveryOrderingTests {
             PlacedClaim(id: "claim-1", version: 1, status: .failed, failureText: "Оффер истёк")
         })
         #expect(model.ordering == .failed("Оффер истёк"))
+        #expect(model.selectedOffer == nil, "the dead claim's quote is invalidated first")
 
+        // The retry waits for the reprice — even an identical payload rotates,
+        // because the claim that carried it is provider-terminal.
+        await priced(model)
         model.confirmOrder()
         #expect(model.ordering == .queued)
         #expect(model.orderRequestID != first, "the dead claim's token must not be replayed")
