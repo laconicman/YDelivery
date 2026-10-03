@@ -1,6 +1,7 @@
 import Foundation
 import MapKit
 import Observation
+import OSLog
 import YDeliveryKit
 // SwiftUI supplies `remove(atOffsets:)` / `move(fromOffsets:toOffset:)` — the exact
 // semantics `onDelete`/`onMove` hand this model; reimplementing them here would be the
@@ -578,6 +579,16 @@ extension NewDeliveryView {
             }
         }
 
+        /// The estimate call's ceiling: `MKDirections.calculate()` has no built-in
+        /// timeout, and a stalled request parks the bar at «Estimating…» forever —
+        /// the device-drive «route never builds» symptom. Fifteen seconds is far
+        /// past a healthy multi-leg lookup (~1–2 s each). Internal, not private, so
+        /// tests can shrink it without waiting the real deadline.
+        var estimateTimeout: TimeInterval = 15
+        private static let estimateLog = Logger(
+            subsystem: "YDelivery", category: "route-estimate"
+        )
+
         /// Estimates the current route, publishing every state the bar renders. An
         /// incomplete route clears to `.idle` — no bar, not a stale number. Cancellation
         /// (a route edit mid-flight) leaves the state to the next run.
@@ -588,16 +599,48 @@ extension NewDeliveryView {
                 return
             }
             estimate = .calculating
+            let run = estimateRoute
             do {
-                let result = try await estimateRoute(waypoints)
+                let result = try await Self.withTimeout(estimateTimeout) {
+                    try await run(waypoints)
+                }
                 guard !Task.isCancelled else { return }
                 estimate = .ready(result)
             } catch is CancellationError {
             } catch {
                 guard !Task.isCancelled else { return }
+                // The bar only says «Couldn't estimate» — the actual MKError (throttle,
+                // no-route, auth) must reach the device log or failures are invisible.
+                Self.estimateLog.warning(
+                    "Route estimate failed for \(waypoints.count) waypoints: \(error)"
+                )
                 estimate = .failed
             }
         }
+
+        /// Races an operation against a deadline — Swift concurrency has no
+        /// `withTimeout`; the task-group form is the idiom. Loser is cancelled either
+        /// way, so a hung `MKDirections` await cannot outlive the deadline.
+        private nonisolated static func withTimeout<T: Sendable>(
+            _ seconds: TimeInterval,
+            operation: @escaping @Sendable () async throws -> T
+        ) async throws -> T {
+            try await withThrowingTaskGroup(of: T.self) { group in
+                group.addTask { try await operation() }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                    throw EstimateTimeout()
+                }
+                defer { group.cancelAll() }
+                guard let result = try await group.next() else {
+                    throw EstimateTimeout()
+                }
+                return result
+            }
+        }
+
+        /// The deadline lost the race — renders as `.failed`, retryable like any error.
+        struct EstimateTimeout: Error {}
 
         // MARK: Parcel
 

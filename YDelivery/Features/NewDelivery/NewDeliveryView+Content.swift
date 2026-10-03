@@ -294,6 +294,17 @@ extension NewDeliveryView {
                     .onMove(perform: moveRows)
 
                     actions
+                        .frame(maxWidth: .infinity)
+                        // The action strip is part of the route card, not a row —
+                        // a card-colored row below it read as «the last row of a
+                        // missing List» (device drive, 2026-10). Clear background
+                        // and no separator anchor it to the section instead.
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                } header: {
+                    // The card's stops read under a title — without one the last
+                    // row floated, attached to nothing (device drive, 2026-10).
+                    Text("Route")
                 } footer: {
                     if offers == .idle {
                         // Prices follow the route alone — an empty parcel rides the

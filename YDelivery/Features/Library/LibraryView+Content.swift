@@ -72,6 +72,10 @@ extension LibraryView {
         var pinParcel: (ParcelRow.ID) -> Void = { _ in }
         var editParcel: (ParcelRow.ID) -> Void = { _ in }
         var deleteParcel: (ParcelRow.ID) -> Void = { _ in }
+        /// The «+» on the Places half — same idiom as parcels: a place can be
+        /// authored here too, not only earned while composing (device drive,
+        /// 2026-10 — «Add to list» is Apple's standard affordance for these).
+        var addPlace: () -> Void = {}
         /// The «+» on the Parcels half — the one place a template is authored
         /// without a draft under it.
         var addParcel: () -> Void = {}
@@ -126,13 +130,6 @@ extension LibraryView {
                         ForEach(visiblePlaceRows) { row in
                             placeRow(row)
                         }
-                        // Curate-only is stated where the list ends — places are
-                        // earned in the draft, and the footer says so where a
-                        // sender looking for «+» will look.
-                        Text("Places are saved from a stop while composing a delivery.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .listRowSeparator(.hidden)
                     }
                 } else if !searchText.isEmpty {
                     ContentUnavailableView.search(text: searchText)
@@ -140,7 +137,14 @@ extension LibraryView {
                     ContentUnavailableView {
                         Label("No places yet", systemSymbol: .star)
                     } description: {
-                        Text("Star a stop while composing a delivery and it waits here.")
+                        Text("Star a stop while composing a delivery, or add one with «+».")
+                    }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { addPlace() } label: {
+                        Label("New place", systemSymbol: .plus)
                     }
                 }
             }

@@ -66,6 +66,18 @@ struct NewDeliveryEstimateTests {
         #expect(before == after.reversed(), "the id change is what cancels the stale run")
     }
 
+    @Test("A hung estimator reaches .failed at the deadline — never parks calculating")
+    func hungEstimatorFails() async {
+        let model = draft { _ in
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+            throw Unexpected()
+        }
+        model.estimateTimeout = 0.05
+        await model.calculateEstimate()
+        #expect(model.estimate == .failed,
+                "without the deadline this is the «Estimating…» spinner forever")
+    }
+
     @Test("The summary speaks in kilometres and minutes, not raw meters and seconds")
     func summaryReadsHuman() {
         let estimate = RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])
