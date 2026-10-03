@@ -210,6 +210,9 @@ nonisolated extension TariffClass {
         case .courier: .courier
         case .express: .express
         case .cargo: .cargo
+        case .sddLong: .sddLong
+        // `superexpress_d2d` isn't in the pinned 0.3.1 enum (announced 2026-10);
+        // it arrives through `init(wireSpelling:)` on stored orders until then.
         default: .other(wire.rawValue)
         }
     }

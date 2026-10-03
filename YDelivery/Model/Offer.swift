@@ -23,6 +23,10 @@ nonisolated enum TariffClass: Hashable, Sendable {
     case courier
     case express
     case cargo
+    /// `sdd_long` — same-day delivery on a longer run.
+    case sddLong
+    /// `superexpress_d2d` — the vendor's «Быстрее»: door to door in minimum time.
+    case superexpressD2D
     /// A class this app does not know yet — rendered by its wire name rather than
     /// dropped, so new provider vocabulary stays visible (the demo's lesson: advisory
     /// vocabulary grows without announcement).
@@ -35,6 +39,8 @@ nonisolated extension TariffClass {
         case .courier: String(localized: "Courier")
         case .express: String(localized: "Express")
         case .cargo: String(localized: "Cargo van")
+        case .sddLong: String(localized: "Same-day")
+        case .superexpressD2D: String(localized: "Super-express")
         case .other(let name): name
         }
     }
@@ -44,6 +50,8 @@ nonisolated extension TariffClass {
         case .courier: "🛵"
         case .express: "🚗"
         case .cargo: "🚚"
+        case .sddLong: "🛣️"
+        case .superexpressD2D: "⚡️"
         case .other: "📦"
         }
     }
@@ -54,6 +62,8 @@ nonisolated extension TariffClass {
         case .courier: String(localized: "On foot or a scooter")
         case .express: String(localized: "A passenger car")
         case .cargo: String(localized: "A van, loaders available")
+        case .sddLong: String(localized: "A longer run, still within the day")
+        case .superexpressD2D: String(localized: "Door to door in the least time")
         case .other: nil
         }
     }
@@ -69,7 +79,7 @@ nonisolated extension TariffClass {
         case .courier: 10
         case .express: 20
         case .cargo: 300
-        case .other: nil
+        case .sddLong, .superexpressD2D, .other: nil
         }
     }
 
@@ -79,7 +89,7 @@ nonisolated extension TariffClass {
         case .courier: [80, 50, 50]
         case .express: [100, 60, 50]
         case .cargo: [170, 96, 90]
-        case .other: nil
+        case .sddLong, .superexpressD2D, .other: nil
         }
     }
 
