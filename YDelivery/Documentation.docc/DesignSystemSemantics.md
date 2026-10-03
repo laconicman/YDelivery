@@ -1,19 +1,22 @@
 # Design System — Semantics: bounds, hints, and errors
 
-The research plan commissioned by `docs/agent-tasks/design-system-research.md` (PR #97).
-The trigger: 1.0 TestFlight screens carry inconsistencies no single component owns —
-"red" is doing three jobs, errors have two dialects, and bounds live partly beside
-their fields and partly only on the review sheet. Fixing them piecemeal would deepen
-the inconsistency the audit exists to close.
+The research plan commissioned by `docs/agent-tasks/design-system-research.md` (PR #97),
+merged at PR #98 and executed 2026-10. The trigger: 1.0 TestFlight screens carry
+inconsistencies no single component owns — "red" is doing three jobs, errors have two
+dialects, and bounds live partly beside their fields and partly only on the review
+sheet. Fixing them piecemeal would deepen the inconsistency the audit exists to close.
 
-This document is a *plan*, not a spec: it surveys the gap, proposes a vocabulary and
-the grammars that use it, names a retrofit order, and lists what needs the owner's
-ruling. Nothing here ships yet. When the rulings land, the decided rows fold into
-<doc:DesignSystem> and this page links there instead of restating them.
+**Status: ruled and folded.** Every proposal below was adopted; the decided rows now
+live in <doc:DesignSystem> ("Feedback roles", "Placement grammar", "The canonical
+failure row", field-taxonomy rule 4, the motion table's reveal row). This page stays
+as the survey and the reasoning — the evidence the rulings were made on — and the
+device-drive findings (`docs/agent-tasks/device-drive-findings.md`) that field-tested
+them. The out-of-scope findings the drive surfaced are registered in <doc:TechDebt>
+(YD-19 … YD-30).
 
-Conventions used below: **proposal** marks a recommendation awaiting the owner's
-ruling; *site* names are code references (file · component); ✓ in the survey means
-"already correct — keep as precedent".
+Conventions used below: **ruled** marks what was proposed and adopted; *site* names are
+code references (file · component); ✓ in the survey means "already correct — kept as
+precedent".
 
 ## What the survey found
 
@@ -56,10 +59,10 @@ Six systemic gaps, each visible on a shipping screen:
 ## The inventory
 
 Every color/hint/error surface the task names, plus the ones the first pass surfaced.
-*Proposed role* references the vocabulary defined below; `read-failure` and `error`
+*Role* references the vocabulary defined below; `read-failure` and `error`
 are distinct roles there on purpose.
 
-| File · site | Today | Proposed |
+| File · site | Today | Role |
 |---|---|---|
 | `NewDeliveryView+Content.fieldRow` — required-unmet line | `.red` footnote, no glyph; field unmarked until unmet | `bound`: marker + attention-tinted glyph line |
 | `fieldRow` — choice picker `Text("Not set").tag("")` | a selectable row that reads as answered | prompt, not an answer (placeholder semantics) |
@@ -72,7 +75,7 @@ are distinct roles there on purpose.
 | `TariffStrip.failed` — same shape + reason line | ✓ | `read-failure` |
 | `TariffStrip.ready(empty)` — `?` glyph + Retry | answered-and-nothing, actionable ✓ | `info` |
 | `TariffStrip.signedOut` — secondary invitation | ✓ | `info` |
-| `OrderBar` — ready-looking title while blockers exist | mute | owner ruling: destination-named title proposed |
+| `OrderBar` — ready-looking title while blockers exist | mute | destination-named title (ruled): "Review the order" while blocked |
 | `PointRow.addressWarning` — `Label(△)` footnote `.secondary` | advisory ✓ | `warning`, quiet end |
 | `PointRow` contact invitation + "Only the order asks — prices don't." | steering hint, `.tertiary` ✓ | `info` |
 | `PointRow.parcelActions` — `Label(📦)` footnote | ✓ | `info` |
@@ -116,7 +119,7 @@ are distinct roles there on purpose.
 | `StatusTimeline` signature warning — `Label(△fill).caption.orange` | the only `.orange`; fails AA at caption size | `warning` (darkened text token) |
 | `YDeliveryWidgets` — `status.color`, `status.symbol`, `StatusChip` | shared vocabulary already ✓ | unchanged; proof the tokens must live in `YDeliveryKit` |
 
-## The proposed vocabulary
+## The vocabulary — ruled; now lives in <doc:DesignSystem> → "Feedback roles"
 
 Six feedback roles, named by meaning — same rule the status set already runs on
 ("named by meaning so no hue name appears in a diff", DesignSystem → "Semantic
@@ -126,7 +129,7 @@ never appears without its glyph or its words** — the chip's rule generalized.
 | Role | Means | Chrome | Color channel |
 |---|---|---|---|
 | `info` | guidance, explanation, provenance, invitations | footnote, `.secondary`; glyph only where scanning needs it | system hierarchical style — no hue |
-| `bound` | a precondition, visible before it is broken; *not* an error | `exclamationmark.circle` line beside the field / section footer / review-sheet blocker row | **proposal:** `statusAttention` hue family — "a decision is owed"; neutral `.secondary` is the fallback |
+| `bound` | a precondition, visible before it is broken; *not* an error | `exclamationmark.circle` line beside the field / section footer / review-sheet blocker row | **ruled:** `statusAttention` hue family — "a decision is owed" (ships as `feedbackBound`, same values under its own name) |
 | `warning` | proceedable-but-risky; trust degradation; uncertain outcomes | `exclamationmark.triangle` + words; glyph may stay bright, words take the darkened text token | `warningText` ≈ `statusSearching` light `#8A5A00` (≈5.9:1), dark reuses its dark value |
 | `error` | an action tried and failed — writes, commands, refusals | glyph tinted the bright hue, words in `errorText`; optional action row | `errorText` darkened red, AA ≥4.5 at footnote; glyph `.red` is fine (non-text bar is 3:1) |
 | `success` | the outcome the sender wanted | `checkmark.circle.fill` + status words | `statusDone` — or the status the outcome enters (`ReviewSheet.placed` wears `statusSearching` on purpose) |
@@ -167,7 +170,7 @@ inconsistently; the vocabulary makes it deliberate:
   `PresentableError` + `.alert(error:)` (the share-ask precedent). HIG → Alerts:
   sparingly, only when the information is critical *and* the row can't carry it.
 
-## Placement grammar
+## Placement grammar — ruled; now lives in <doc:DesignSystem> → "Placement grammar"
 
 The question a contributor should never have to ask: *where does this sentence sit?*
 Answered by whose bound it is:
@@ -199,7 +202,7 @@ Answered by whose bound it is:
    timeline's own layout. Audit on adoption: `LibraryView` rows, `OrderDetailView`
    status header, `ReviewSheet` stops.
 
-## Error chrome — the canonical row
+## Error chrome — the canonical row — ruled; lives in <doc:DesignSystem>, ships as `YDeliveryKit`'s `Notice`
 
 One shape for "something failed", so a failure reads the same everywhere:
 
@@ -218,14 +221,14 @@ One shape for "something failed", so a failure reads the same everywhere:
   validation (bounds are not errors) or to pure storage failures — the log holds
   requests and responses, so there is nothing in it to share about a disk write.
   The affordance is the existing `ShareLink("Share diagnostics log")` surfaced
-  beside the message; Settings' row stays the always-on path. **Proposal:** inline
+  beside the message; Settings' row stays the always-on path. **Ruled:** inline
   on surfaces where the error is the content (order detail, review sheet,
-  sign-in); a "details in Settings → Diagnostics" footnote elsewhere — owner to rule.
+  sign-in); a "details in Settings → Diagnostics" footnote elsewhere.
 - **Precedence stays where it is**: a destructive confirm still runs through the
   confirmation dialog (`OrderDetailView`'s cancel) and a terminal refusal through
   `.alert(error:)`; the row is for failures the sender can act on in place.
 
-## Status colors for outcomes — cancellation first
+## Status colors for outcomes — cancellation first — ruled; the grammar lives in <doc:DesignSystem> → "Feedback roles"
 
 The straw man — green = free, blue/yellow = paid, orange/red = failed — fails on
 HIG's own terms and on this vocabulary:
@@ -246,7 +249,7 @@ HIG's own terms and on this vocabulary:
   applied it; retry re-reads); `.unrecorded` → `error` words, because the local
   write is what failed, with the retry re-writing rather than re-sending.
 
-**Proposal:** cancellation adopts the role grammar outright — `bound`-styled terms
+**Ruled:** cancellation adopts the role grammar outright — `bound`-styled terms
 explanation, destructive verb, `error`/`warning` failure states, status-colored
 terminal. The same mapping then serves the other outcome surfaces for free: the
 tariff strip's failure is `read-failure` + retry; `StatusChip` already *is* the
@@ -254,13 +257,13 @@ status-color grammar; sync states are `read-failure`. The "color is never the on
 channel" rule is already law — glyph and words ride every status; here it is
 restated as "the channel for money is the numeral".
 
-## Bounds, required fields, empty states
+## Bounds, required fields, empty states — ruled; the mechanics live in <doc:DesignSystem>, field-taxonomy rule 4
 
-- **Required fields get a persistent marker** — **proposal:** a `.tertiary`
+- **Required fields get a persistent marker** — **ruled:** a `.tertiary`
   "required" caption beside the field name (the schema editor already flags them
   persistently in its row subtitles — "Text · required · Claim document" — which is
   the house precedent; an asterisk is the platform convention but reads as
-  punctuation, not words, to VoiceOver). Owner to rule on the marker's shape.
+  punctuation, not words, to VoiceOver).
 - **The unmet state adds the `bound` line** — glyph + words, attention-tinted per
   the vocabulary; it disappears on answer. Red retires from this seat.
 - **`Not set` stops being an answer.** Required choice fields drop the `""` tag —
@@ -273,12 +276,10 @@ restated as "the channel for money is the numeral".
   reads «Add an item» + footer "at least one item — the order needs a parcel to
   carry"; the insurance sentence moves to the item editor's `Value` section. The
   Library's "No places yet" + way-in is the shape to copy.
-- **Field-error motion** (`DesignSystem` → Motion row 7: the ~2-frame shake) is
-  spec'd but unshipped. Either it ships with the `fieldRow` retrofit — it belongs
-  exactly there, beside-the-input only — or the spec row is struck. Owner's call;
-  flagging rather than quietly keeping dead spec.
+- **Field-error motion** (`DesignSystem` → "Motion": the ~2-frame shake) — **ruled:
+  ships** with the `fieldRow` retrofit, beside-the-input only.
 
-## Motion grammar — the reveal convention
+## Motion grammar — the reveal convention — ruled; a row in <doc:DesignSystem> → "Motion"
 
 Added to the existing table (DesignSystem → "Motion"): **content inserted inside an
 animating container reveals with `.move(edge: .top).combined(with: .opacity)`;
@@ -335,59 +336,50 @@ point of building it on semantic roles. Three notes, sourced:
   error/action rows pair an icon with body text. None of them spends red on a
   hint — which is what `fieldRow` does today.
 
-## Retrofit order — smallest blast radius first
+## Retrofit order — smallest blast radius first — executed
 
-Six PRs, each independently reviewable; the shared tokens come first because the
-package-first rule (CLAUDE.md §7) puts shared vocabulary in `YDeliveryKit`, and
-everything after is adoption, not invention.
+Each PR was independently reviewable; the shared tokens came first because the
+package-first rule puts shared vocabulary in `YDeliveryKit`, and everything after
+was adoption, not invention. What each step landed as (PR numbers on
+`laconicman/YDelivery`, kit numbers on `laconicman/YDeliveryKit`):
 
-1. **`YDeliveryKit` — roles + tokens** (additive; no app change): `bound`,
-   `warningText`, `errorText` colorsets with light/dark variants at AA-verified
-   values (the measured table above is the starting point); a `Notice`/`ErrorRow`
-   view owning the canonical chrome — glyph, words, optional action slot, optional
-   diagnostics link; the status-colored `.cancelled` glyph helper if the ruling
-   takes it. Previews: one per role.
-2. **Write-failure surfaces** — `SettingsView` sign-in, `CustomFieldsView`
-   saveError/FieldEditor, `LibraryView+TemplateEditor`, `SavePlaceSheet` +
-   `SaveTemplateSheet`, `OrderChatView.sendError`. Text-and-glyph swaps onto the
-   canonical row; diagnostics affordance per the ruling.
-3. **The compose card** — `fieldRow`: required marker, `bound` line, "Not set"
-   placeholder semantics; "What's inside" footer states the ≥1 bound; insurance
-   trivia moves into `ItemEditor`'s value section. Preview gaps filled.
-4. **Read-failure unification** — `fieldsError`, `templatesError`, `RefineContent`
-   geocode failure, `CustomFieldsView.fieldsError` (gains Retry): adopt the quiet
-   convention already proven on `EstimateBar`/`TariffStrip`.
-5. **Money-adjacent last** — `OrderBar` readiness per the ruling; `ReviewSheet`
-   blocker rows onto `bound` tint; `failed`/`unresolved` onto `error`/`warning`
-   chrome; the cancellation section's full grammar. Largest blast radius, the
-   most previews added.
-6. **Fold-in** — ruled rows move into `DesignSystem.md`; this page links to the
-   ruling notes.
+- **Step 0** — device-drive findings + the harness that produced them: #99;
+  the blocked sheet's CTA fix the drive surfaced: #100.
+- **Kit roles** — `feedbackBound`/`feedbackWarningText`/`feedbackErrorText`
+  colorsets + `Notice`: kit #37, tagged `0.4.8`.
+- **Write-failure surfaces**: #101. **Compose card / bounds**: #102.
+  **Blockers-as-doors**: #103. **Read-failure unification**: #104.
+  **OrderBar + outcome grammar** (incl. cancellation): #105.
+- **Stale-requirements reprice** (the drive's C1/C2/B4 — a refusal invalidates
+  the held quote, reprices, discloses "was ₽X, now ₽Y", and reconfirms): #106.
+- **Status words** (the drive's D2 — `.attention`'s collapsed words became
+  "Needs a decision"; `failed`'s provider phrase "Ended before delivery";
+  `.attention` rows render the provider phrase beside the chip): kit #38,
+  tagged `0.4.9` + app #107.
+- **This fold-in**: the docs you are reading.
 
-## Open questions — owner rulings needed
+## Owner rulings — all adopted
 
-1. **`bound` tint**: `statusAttention` family ("a decision is owed" — same hue the
-   order wears when it needs one; AA-passing already) vs neutral `.secondary`.
-   *Proposal: the attention family — a bound must be findable on a long card, and
-   hue is the find.*
-2. **Required marker shape**: persistent `required` caption (house precedent:
-   `CustomFieldsView` subtitles) vs asterisk vs nothing-until-unmet.
-   *Proposal: the caption — explicit beats symbolic, and VoiceOver reads it for free.*
-3. **`OrderBar` readiness**: destination-named title — "Review the order" while
-   blocked, "Order Courier · ₽" when ready — vs blocker count vs silence.
-   *Proposal: the title names the destination the tap actually opens.*
-4. **Diagnostics placement**: inline `ShareLink` on provider-implicated errors vs a
-   "details in Settings → Diagnostics" footnote. *Proposal: inline where the error
-   is the content; footnote elsewhere.*
-5. **`read-failure` glyph**: keep the triangle marker (scanability — a failed read
-   must not read as an empty one) vs words-only. *Proposal: keep it.*
-6. **Field-error shake**: ship with the `fieldRow` retrofit or strike the spec row.
-7. **Locale rule**: chrome localizes to the app's language, user/provider
-   vocabulary stays verbatim, quoted where interpolated («Заказ» is required…).
-   *Proposal: state exactly that — it is what the code already does; a real
-   localization pass is a Roadmap item, not a design-system one.*
-8. **Cancellation "free"**: any affirmative marker at all, or words-only.
-   *Proposal: words-only — the button's number is the channel.*
+Every proposal below the survey was taken as proposed:
+
+1. **`bound` tint** — the `statusAttention` family: "a decision is owed", the same
+   hue the order wears when it needs one. Ships as `feedbackBound` — the same
+   values under the role's own name, so a future divergence moves the role
+   without dragging statuses.
+2. **Required marker shape** — the persistent `required` caption: explicit beats
+   symbolic, VoiceOver reads it for free.
+3. **`OrderBar` readiness** — the title names the destination the tap opens:
+   "Review the order" while blocked (enabled — the sheet is where blockers
+   explain themselves), the priced promise when ready, a non-interactive
+   indicator while pricing.
+4. **Diagnostics placement** — inline `ShareLink` where the error is the content;
+   a "details in Settings → Diagnostics" footnote elsewhere.
+5. **`read-failure` glyph** — kept: a failed read must not read as an empty one.
+6. **Field-error shake** — ships with the `fieldRow` retrofit, beside-the-input only.
+7. **Locale rule** — chrome localizes to the app's language; user/provider
+   vocabulary stays verbatim, quoted where interpolated. A real localization
+   pass is a Roadmap item, not a design-system one.
+8. **Cancellation "free"** — words-only: the button's number is the channel.
 
 ## Validation
 
