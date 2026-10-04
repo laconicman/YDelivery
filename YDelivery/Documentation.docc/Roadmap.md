@@ -86,6 +86,12 @@ field stating its bound.
   reconcile, not provider push (Yandex's webhooks cannot reach CloudKit, <doc:Design>).
 - When the package ships `tariffs`: swap the strip's and explainer's static bounds for
   live per-geo `supported_requirements`.
+- Tariff cards tell when, not only how much — the provider's pickup/delivery windows on
+  every card, Fastest/Cheapest sort, and a re-price when the ten-minute `offer_ttl`
+  lapses (same-class offers differ only by their windows: YD-32).
+- Deliveries toolbar: sort (newest / oldest / price) and show (all / needs a decision /
+  delivered / cancelled) as one Menu — the archive filter follows the Kit column
+  (Design → History is kept, not deleted).
 
 *Done when:* a sender learns their courier arrived without opening the app.
 
@@ -150,6 +156,9 @@ the order detail's Chat row, and `OrderChatView` — text, photos, and
 `MAX`/`COALESCE` list ordering now real in `readOrders`. What remains is
 device work, not design — the live verifications (share acceptance end-to-end, the
 corp-visibility wire test) stand open in <doc:Collaboration>.
+
+- Diagnostics: one shareable file — events beside wire exchanges, a launch header
+  record (Design → The rest of the app is not in the file).
 
 ## Landed — the sender's library (author's idea, weighed 2026-09-29; shipped 2026-10-02)
 
@@ -218,6 +227,8 @@ Library tab. Search reaches both lists. Two evenings.
   `expected_visit_interval` on order-detail points answers when the courier
   reaches each door. All fields already ride the wire; app-side display only.
 - Handoff codes, proof of delivery, edit/return, `delivery-methods` windows.
+- Archive a finished order — `OrderPrivateState.archivedAt`, the seed carries it,
+  participants unaffected.
 - A Mac target if the product earns one.
 - **Extract the map components into a public SPM** once the destination design has shipped —
   point picker, pin taxonomy, link-paste geocoding. The demo repo becomes the second

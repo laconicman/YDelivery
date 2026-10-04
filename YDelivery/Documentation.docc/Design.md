@@ -351,6 +351,84 @@ sees the same `Authorization` — the exposure the reviewer flagged — while ad
 seam the middleware slot already provides); OSLog-only (no relaunch survival, the engaged-
 user scenario's core case).
 
+### The rest of the app is not in the file (2026-10-04)
+
+The TestFlight round made the gap concrete. A sender hit a provider `400` while
+cancelling a seeded order and shared the only artifact Settings offers — the wire log.
+It held the exchange and nothing around it: not the build that produced it, not the sync
+pass that had surfaced the row, not the store write that followed. The app keeps seven
+`Logger`s besides the wire sink — `ClaimsSyncController`, `StoreController` (store and
+draft), `LiveActivityController`, `SpotlightIndexer`, `ShareDelegates`, and the
+`uitest-seed` fixture (nine once #90's `ckschema-seed` and #112's `route-estimate`
+land) — and every one of them writes
+to OSLog only. On iOS that is the console of an attached debugger and a sysdiagnose a
+sender will never take; `OSLogStore` cannot read a previous launch, which is the launch
+the "I reopened the app to share it" case always is. So the file is the only evidence
+that leaves the device, and it carries one of the two halves.
+
+Options weighed:
+
+| Option | What it buys | What it costs |
+|---|---|---|
+| **(A) One diagnostics file, two record kinds.** `WireLogStore` becomes a `DiagnosticsStore` whose JSONL lines carry `kind: "wire"` (today's entry) or `kind: "event"` (`category`, `level`, `message`, optional `orderID`/`claimID`); a `Diagnostics.Logger` wrapper writes `warning`/`error` to both OSLog and the file, `debug`/`info` to OSLog only. | Everything the file lacks, with the bound, the epoch fence, the torn-line discipline and the share surface already built and reviewed. One artifact to ask for. | Call sites change from `Logger` to the wrapper (mechanical); an event must never carry an address or a phone — identifiers and `errorDescription` only, or the PII trade (YD-12) widens. |
+| (B) Export `OSLogStore` at share time | No call-site change | Current process only on iOS — exactly the relaunch case fails; `.debug` never reaches disk; bodies clipped. Rejected in 2026-09 for the wire half; the reasons hold for events. |
+| (C) MetricKit `MXDiagnosticPayload` | Crashes and hangs with stack traces, delivered by the system | Next-day delivery, no app events, no wire. Complementary — worth adding for the crash class (#89's trap would have arrived this way) — not a replacement. |
+| (D) A header record per launch | `kind: "launch"`: version/build, OS, device model, locale, iCloud account status, sync running, token present (never the token), seed flags. Answers "which build was that" without asking. | One line per launch against the 512 KB bound — negligible. |
+
+**Decision: A + D, then C.** The store's reviewed invariants are the asset; the second
+record kind reuses them. The wrapper keeps the event vocabulary small and
+PII-free by construction (a `String` message and identifiers — no model values).
+`Share diagnostics` stays the one door, labelled as today (YD-12), and appears beside
+every wire-explained failure (#105's rule) — the file it shares simply says more.
+Sequencing: land the wrapper and the header first (a bounded PR touching the call
+sites); MetricKit as its own slice once the first field crash asks for it.
+
+What this does not do: a crash log is still not in the file (that is C), and the
+`uitest-*`/`ckschema-seed` fixtures keep their `print`s for the harness — those runs are
+not shared.
+
+## History is kept, not deleted — archive, sort, filter (2026-10-04)
+
+A delivery is an event that happened. The provider remembers it: `claims/search`
+re-discovers every claim the account owns, and the sync merges by `claimID`, so a row
+deleted locally returns on the next pass as a fresh discovery — now without the local
+notes, fields and chat it carried. Deletion is therefore the wrong verb for the Deliveries
+list; **archive** is the right one: the row leaves the two shelves and lives one filter
+away, exactly as it does in Mail. The seed-order incident of the TestFlight round (a
+fixture claim the sender could neither cancel nor remove) is the live case: what the
+sender needed was "out of my sight", not "gone from the account".
+
+Shape, settled:
+
+- **Archive is the owner's view, not the order's state.** It lives on
+  `OrderPrivateState` (`archivedAt: Date?`) beside `pinned` — the private tier, synced
+  across the owner's devices, invisible to share participants, never written to the
+  provider. A shared order a participant archives for themselves would need a device-only
+  or participant-scoped flag; out of scope until a participant asks.
+- **Only what is over can be archived**: `done`, `cancelled`, and `attention` rows whose
+  provider word is terminal (`failed`, the refused-before-dispatch litter of YD-23). A live
+  order cannot be hidden from the shelf that exists to show it.
+- **Verbs**: swipe (leading edge, `archivebox`) and the row's context menu; the Archived
+  filter shows archived rows with «Unarchive» in the same places. No confirmation — it is
+  reversible and destroys nothing.
+- **Toolbar, not a mode.** The navigation bar gets one `Menu` (`line.3.horizontal.decrease.circle`)
+  holding two `Picker`s: **Sort** — newest first (default), oldest first, price; **Show** —
+  everything (default), needs a decision, delivered, cancelled, archived. Both act on the
+  content view's existing `visibleSections` derivation beside the search filter; the shelves
+  stay — sort orders within them, a status filter empties the shelf it does not touch, and
+  «Archived» replaces the two shelves with one. The choice is remembered per device
+  (`@AppStorage`), like a mail client's.
+- **Search is already there** (`.searchable`, PR #77); the toolbar completes the triad.
+
+Sequencing: the toolbar's sort and status filter need no schema and land first (pure
+derivation plus two pickers, tested on the model side); archive follows a Kit patch that
+adds `archivedAt` to the private row and the development schema seed that carries it.
+
+Rejected: a swipe-to-delete that merely hides (lies about the account), a "Trash" shelf
+with retention (a third shelf for a two-shelf list — Mail's Archive, not Mail's Trash, is
+the model), and status filters as segmented controls above the list (the search field
+already owns that seat).
+
 ## Sender-defined fields ride the wire's own slots (2026-09-24)
 
 Board `4b` asks for org-defined fields — «Заказ», «Накладная», «SKU» — answered per
