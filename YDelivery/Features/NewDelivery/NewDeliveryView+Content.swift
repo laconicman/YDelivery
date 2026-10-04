@@ -806,7 +806,6 @@ extension NewDeliveryView.Content {
                 .disabled(!canOrder)
                 .padding(.horizontal, Layout.Spacing.edge)
                 .padding(.vertical, Layout.Spacing.unit)
-                .background(.bar)
             }
         }
     }
