@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Building %1$@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дом %1$@"
+          }
+        }
+      }
+    },
     "Building %@" : {
       "localizations" : {
         "ru" : {
@@ -41,6 +51,16 @@
         }
       }
     },
+    "Entrance %1$@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подъезд %1$@"
+          }
+        }
+      }
+    },
     "Entrance %@" : {
       "localizations" : {
         "ru" : {
@@ -51,12 +71,32 @@
         }
       }
     },
+    "Flat or office %1$@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Квартира или офис %1$@"
+          }
+        }
+      }
+    },
     "Flat or office %@" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Квартира или офис %@"
+          }
+        }
+      }
+    },
+    "Floor %1$@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этаж %1$@"
           }
         }
       }
@@ -77,6 +117,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Найден адрес"
+          }
+        }
+      }
+    },
+    "Intercom %1$@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Домофон %1$@"
           }
         }
       }
@@ -117,6 +167,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Пункт выдачи"
+          }
+        }
+      }
+    },
+    "Pinned location" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отмеченное место"
           }
         }
       }
