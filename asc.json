@@ -7,5 +7,6 @@
     "ru"
   ],
   "minimumOSVersion": "17.0",
-  "appSource": "."
+  "appSource": ".",
+  "appId": "6818196668"
 }

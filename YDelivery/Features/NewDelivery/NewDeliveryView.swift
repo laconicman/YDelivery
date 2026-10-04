@@ -143,7 +143,12 @@ struct NewDeliveryView: View {
                 await draft.calculateEstimate()
             }
             .task(id: Run(inputs: draft.pricingInputs, attempt: offersAttempt)) {
-                await draft.loadOffers { try await session.offers(for: $0) }
+                await draft.loadOffers { request in
+                    #if DEBUG
+                    if YDeliveryApp.isOffersFixture { return Offer.listingStrip }
+                    #endif
+                    return try await session.offers(for: request)
+                }
             }
             // The ordering run: create → watch → accept, then remember. Owned by its
             // attempt id; the model's queue gate makes appear-time runs no-ops, and a

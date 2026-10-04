@@ -89,6 +89,18 @@ struct YDeliveryApp: App {
         #endif
     }
 
+    /// `--uitest-offers` prices the tariff strip from a fixture instead of the
+    /// provider — the listing's second screenshot needs a priced strip, and no
+    /// seeded launch has a session to quote one with. The strip still does its
+    /// own work; only the answer's source is the fixture (`Offer.listingStrip`).
+    static var isOffersFixture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--uitest-offers")
+        #else
+        false
+        #endif
+    }
+
     /// The App Group database — or, for the fixture launch, a throwaway one in a
     /// fresh directory with a container that resolves to nothing (`startSync`
     /// degrades to a logged failure, as it does on any unentitled install).
