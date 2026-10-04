@@ -188,6 +188,9 @@ extension PointPickerView {
                 trailing: Layout.Spacing.gutter
             ))
             .listRowBackground(Color.clear)
+            // The capsule floats on clear background — a row separator running
+            // beneath it reads as a broken section edge, not a divider.
+            .listRowSeparator(.hidden)
         }
 
         // MARK: Standing rows

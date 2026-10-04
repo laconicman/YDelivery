@@ -5,9 +5,10 @@ import YDeliveryKit
 extension NewDeliveryView {
     /// The confirmation the irreversible action owes (board `5f`, finding 2): route,
     /// price and class restated in full, and one Confirm. When something still blocks
-    /// ordering, the sheet states every bound instead of offering a dead button; the
-    /// placed state acknowledges itself — bounce and haptic, no confetti, money just
-    /// moved (DesignSystem → "Motion").
+    /// ordering, the sheet states every bound *and* keeps the Order button — disabled,
+    /// not absent, so the sheet never reads as a dead end; the placed state
+    /// acknowledges itself — bounce and haptic, no confetti, money just moved
+    /// (DesignSystem → "Motion").
     struct ReviewSheet: View {
         /// One stop, restated.
         struct Stop: Identifiable {
@@ -52,6 +53,24 @@ extension NewDeliveryView {
                             ForEach(blockers, id: \.self) { blocker in
                                 Label(blocker, systemSymbol: .exclamationmarkCircle)
                                     .font(.subheadline)
+                            }
+                            // Blocked is still a button — disabled, not absent, and
+                            // here beside the bounds rather than a screen-height
+                            // below them. A missing CTA reads as a dead sheet; a
+                            // greyed one says these rows are what's left between
+                            // the sender and the order. Only while ordering has not
+                            // begun, though: blockers can stay non-empty past
+                            // placement, and a placed or unresolved order must not
+                            // sit under a disabled Order action it no longer owns.
+                            if ordering == .idle || ordering == .queued {
+                                Button(action: confirm) {
+                                    Text(priceText.map { "Order for \($0)" } ?? "Order")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.large)
+                                .disabled(true)
                             }
                         }
                     }
