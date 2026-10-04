@@ -26,7 +26,7 @@ final class NotificationController: NSObject {
     /// Authorization is asked once, lazily — the first announce-worthy event
     /// is the moment the permission's value is self-evident. The `Task` is
     /// retained so two near-simultaneous events share one system prompt.
-    @ObservationIgnored private var authorization: Task<Bool, Never>?
+    @ObservationIgnored private var authorization: Task<Bool?, Never>?
 
     init(store: StoreController, center: UNUserNotificationCenter = .current()) {
         self.store = store
@@ -108,12 +108,42 @@ final class NotificationController: NSObject {
     }
 
     private func ensureAuthorized() async -> Bool {
-        if let authorization { return await authorization.value }
+        if let authorization {
+            guard let granted = await authorization.value else {
+                // The shared flight came back with a thrown prompt — no answer
+                // was given, so the task is not a cache entry worth keeping.
+                self.authorization = nil
+                return false
+            }
+            return granted
+        }
         let task = Task {
-            await ((try? center.requestAuthorization(options: [.alert, .sound])) ?? false)
+            try? await center.requestAuthorization(options: [.alert, .sound])
         }
         authorization = task
-        return await task.value
+        guard let granted = await task.value else {
+            // A thrown prompt is no answer — nothing is cached, so the next ask
+            // is free to ask again rather than wearing `false` forever.
+            authorization = nil
+            return false
+        }
+        return granted
+    }
+
+    /// The system's answer for this app, read live — the Settings row reflects
+    /// a permission changed outside the app.
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        await center.notificationSettings().authorizationStatus
+    }
+
+    /// Asks for authorization on demand — the Settings «Turn on» row shares the
+    /// lazy prompt's single flight, so a tap and a first announce-worthy event
+    /// still produce one system prompt.
+    func requestAuthorization() async -> Bool {
+        // Denied prompts nothing — the system won't ask twice; Settings'
+        // «Open Settings» door is the only path back.
+        if await authorizationStatus() == .denied { return false }
+        return await ensureAuthorized()
     }
 
     /// Reads and clears the tap-through — `RootView`'s consume step, so the
