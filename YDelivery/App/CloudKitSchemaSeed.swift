@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import GRDB
 import OSLog
 import SQLiteData
 import UIKit
@@ -29,7 +30,8 @@ extension YDeliveryApp {
 
     #if DEBUG
     /// The seed's own store: a throwaway `AppDatabase` under Application
-    /// Support, wiped at the start of every run — never the App Group store.
+    /// Support, emptied-and-removed at the start of every run — never the App
+    /// Group store.
     /// Writes through it still reach the real *container* (the sync engine
     /// takes `SyncIdentity.cloudKitContainer`), so the record types land where
     /// "Deploy Schema Changes" promotes from; the rows themselves are deleted
@@ -69,6 +71,16 @@ extension YDeliveryApp {
     static func seedCloudKitSchemaIfFlagged() async {
         guard isCloudKitSeed else { return }
         let logger = Logger(subsystem: "YDelivery", category: "ckschema-seed")
+        if FileManager.default.fileExists(atPath: seedDirectory.path) {
+            // Orphans before the wipe: an interrupted run may have uploaded
+            // rows whose ids only the leftover store knows — photo and
+            // attachment ids are *not* derived — so its rows are emptied and
+            // their tombstones shipped *before* the directory is removed and
+            // the fresh one is cut.
+            print("ckschema-seed leftover store — taking its rows back first")
+            await emptyExistingSeedStore(logger: logger)
+            try? FileManager.default.removeItem(at: seedDirectory)
+        }
         let database = seedDatabase(fresh: true)
         // A controller over the seed store gives the typed save paths without
         // touching the app's real store (which never starts sync on this
@@ -347,8 +359,10 @@ extension YDeliveryApp {
     /// `parcelTemplates`, `savedPlaces`, `customFieldDefinitions`,
     /// `providerAccounts`). Kit's typed deletes cover places/templates/field
     /// definitions; raw SQL on `queue` carries the rest, the same channel the
-    /// engine's triggers observe. Shared by the seed's take-back pass and
-    /// `--ckschema-seed-clean`, which names the same deterministic ids.
+    /// engine's triggers observe. Used by the seed's own take-back pass at the
+    /// end of a run — ``emptySeedStore`` is the row-blind counterpart the
+    /// clean flag and the leftover-store pre-pass use, since orphans carry
+    /// ids nothing derives.
     private static func deleteSeedRows(database: AppDatabase, parents: Bool) async throws {
         let orderPK = UUID.derived(
             namespace: UUID.DerivedNamespace.orderChild, "ckschema-seed", "order"
@@ -399,7 +413,9 @@ extension YDeliveryApp {
     /// mid-flight — or of an older seed revision that left them — without
     /// rewriting anything. Opens the isolated directory if a run left one,
     /// pulls the remote state so the deletes bind to known record versions,
-    /// then deletes by the seed's deterministic ids and ships the tombstones.
+    /// empties every synced table — every row it holds, not only the
+    /// deterministic ids, so orphaned photo/attachment rows go home too — and
+    /// ships the tombstones.
     static func cleanCloudKitSeedIfFlagged() async {
         guard isCloudKitSeedClean else { return }
         let logger = Logger(subsystem: "YDelivery", category: "ckschema-seed")
@@ -407,6 +423,13 @@ extension YDeliveryApp {
             print("ckschema-seed clean: no seed store — nothing to take back")
             return
         }
+        await emptyExistingSeedStore(logger: logger)
+    }
+
+    /// The clean pass proper — shared by `--ckschema-seed-clean` and the head
+    /// of a seed run that finds a leftover store. Assumes `seedDirectory`
+    /// exists.
+    private static func emptyExistingSeedStore(logger: Logger) async {
         let database = seedDatabase(fresh: false)
         await database.startSync()
         do { try await database.syncEngine.fetchChanges() }
@@ -415,29 +438,48 @@ extension YDeliveryApp {
             print("ckschema-seed clean fetchChanges failed: \(error)")
         }
         do {
-            try await deleteSeedRows(database: database, parents: false)
-        } catch {
-            logger.error("seed clean delete failed: \(error)")
-            print("ckschema-seed clean delete failed: \(error)")
-        }
-        do { try await database.syncEngine.sendChanges() }
-        catch {
-            logger.error("seed clean children flush failed: \(error)")
-            print("ckschema-seed clean children flush failed: \(error)")
-        }
-        do {
-            try await deleteSeedRows(database: database, parents: true)
-        } catch {
-            logger.error("seed clean delete failed: \(error)")
-            print("ckschema-seed clean delete failed: \(error)")
-        }
-        do {
-            try await database.syncEngine.sendChanges()
+            let counts = try await emptySeedStore(database: database)
+            let detail = counts.sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+            print("ckschema-seed clean deleted \(detail.isEmpty ? "nothing" : detail)")
             print("ckschema-seed clean done")
         } catch {
-            logger.error("seed clean flush failed: \(error)")
-            print("ckschema-seed clean flush failed: \(error)")
+            logger.error("seed clean failed: \(error)")
+            print("ckschema-seed clean failed: \(error)")
         }
+    }
+
+    /// Deletes *every row* of every synced table the store holds and ships the
+    /// tombstones — children first in one flush, roots in the next, because
+    /// CloudKit validates `parent` references per batch. Row-blind: unlike
+    /// ``deleteSeedRows`` it names no ids, so it also takes back orphans a
+    /// deterministic list cannot know (a photo message's attachment chain, a
+    /// previous revision's rows). Returns the deleted row count per table.
+    private static func emptySeedStore(database: AppDatabase) async throws -> [String: Int] {
+        // Children whose `parent` CKReference points at `orders`, then the
+        // template items under their root — blobs first, since they key off
+        // the attachments the messages name.
+        let children = ["attachmentBlobs", "routeStops", "orderItems",
+                        "orderProviderStates", "orderOptions", "orderCustomFields",
+                        "providerEvents", "orderMessages", "orderAttachments",
+                        "orderPrivateStates", "parcelTemplateItems"]
+        let parents = ["orders", "parcelTemplates", "savedPlaces",
+                       "customFieldDefinitions", "providerAccounts"]
+        let empty: @Sendable ([String], GRDB.Database) throws -> [String: Int] = { tables, db in
+            var counts: [String: Int] = [:]
+            for table in tables {
+                let n = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \"\(table)\"") ?? 0
+                guard n > 0 else { continue }
+                try db.execute(sql: "DELETE FROM \"\(table)\"")
+                counts[table] = n
+            }
+            return counts
+        }
+        var counts = try await database.queue.write { try empty(children, $0) }
+        try await database.syncEngine.sendChanges()
+        counts.merge(try await database.queue.write { try empty(parents, $0) }) { $1 }
+        try await database.syncEngine.sendChanges()
+        return counts
     }
 
     /// A 1×1 PNG rendered, not literal bytes — decodable by construction. The
