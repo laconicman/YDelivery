@@ -1,8 +1,9 @@
 # Vision
 
-What this app is for, what the API makes possible, and which capabilities earn a place —
-grounded in the Express API's actual method catalog (checked 2026-08-27) and in what the
-established couriers' apps (Borzo/Dostavista, Yandex Go's own client) teach users to expect.
+What this app is for, what a provider integration makes possible, and which capabilities
+earn a place — grounded in the first integration's actual method catalog (Yandex Delivery
+Express, checked 2026-08-27) and in what the established couriers' apps
+(Borzo/Dostavista, Yandex Go's own client) teach users to expect.
 
 ## The product in one paragraph
 
@@ -14,8 +15,10 @@ run is one tap. Nothing in that sentence requires the user to know what a "claim
 
 ## Capability map
 
-What the API offers, mapped to user-facing features. "In package" = present in
-`YandexDeliveryExpressAPI`.
+What the first integrated provider — Yandex Delivery's Express API — offers, mapped to
+user-facing features. "In package" = present in `YandexDeliveryExpressAPI`. A second
+integration earns its own column when it lands; the feature column must stay readable
+without knowing which provider is behind it.
 
 | Feature | API surface | In package | Phase |
 |---|---|---|---|
@@ -56,9 +59,10 @@ it has no inbound-webhook surface. Deliberately deferred: <doc:Roadmap> → Late
 
 ## What this app will not do
 
-- Mimic Yandex branding, name, or iconography — unofficial means visibly unofficial.
-- Cover the separate next-day/warehouse (НДД) API family. Different contract, different
-  package; out of scope until a real user needs it.
+- Mimic a provider's branding, name, or iconography — every integration is unofficial and
+  visibly so.
+- Cover Yandex's separate next-day/warehouse (НДД) API family, or a second provider.
+  Different contract, different package; out of scope until a real user needs it.
 - Expose raw API vocabulary (claims, offers/calculate) in the UI. The demo exists for that.
 
 ## Positioning — where the value actually sits (2026-09-29)
@@ -66,6 +70,14 @@ it has no inbound-webhook surface. Deliberately deferred: <doc:Roadmap> → Late
 Written after the Phase-3 surfaces landed, from the review that walked them on a
 seeded device. The capability map above says what the API *allows*; this section says
 what the app *is worth*, to whom, and what it must never claim.
+
+> **Repositioned 2026-10-02.** The product is a **general-purpose delivery app**, not a
+> Yandex client. Providers are integrations behind one boundary — the first is Yandex
+> Delivery Express, and the analysis below stays accurate for that integration's market.
+> What changes: the app's identity is what it does for a sender (map ordering, durable
+> history, the sender's library, shared tracking, signed records), not whose courier it
+> dispatches. Listing copy should lead with delivery and name providers as integrations,
+> not as the product.
 
 ### The gap the app fills
 
@@ -152,13 +164,17 @@ different audience. Author's call.
 
 Recommendation as of this writing: **A for the listing's first line, B for the
 screenshots, C for the second version** — once acceptance has been walked on real
-devices. Whichever leads, the phrase "unofficial client for" stays in the subtitle;
-positioning does not override <doc:Design> → "Unofficial, visibly".
+devices. All three wordings predate the 2026-10-02 repositioning and lead with the
+provider; under the general-purpose framing the provider's name moves to the subtitle —
+"supports Yandex Delivery business accounts" — while the unofficial-client disclaimer
+stays (<doc:Design> → "Unofficial, visibly").
 
 ### App Store presentation — what a listing needs from this codebase
 
-- **Name and subtitle.** `YDelivery` — *unofficial client for Yandex Delivery business
-  accounts*. Nominative use of the service's name is the honest description; no logos,
+- **Name and subtitle.** `YDelivery` — a delivery-first title; the subtitle names the
+  integration and must fit the App Store's 30-character limit (*"Yandex Delivery —
+  unofficial"*, 28).
+  Nominative use of the provider's name is the honest description; no logos,
   no color mimicry (trademark hygiene, and App Review 5.2.1 reads third-party names
   case by case — the disclaimer in the subtitle is the argument).
 - **Category.** Business primary, Utilities secondary. Not Shopping, not Travel.
