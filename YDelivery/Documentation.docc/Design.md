@@ -275,6 +275,12 @@ The session's two open questions that Phase 2 touched were settled by the author
 `_type: return`, not a badge reserved for later — and **currency is a picker** over the
 wire's three (₽ \$ €), RUB default, never a text field.
 
+*Addendum 2026-10-04:* decision #14 landed as stated — the route-estimate bar shows
+**distance only, always**. Two times on one screen is a bug report, so the provider's
+windows are the time of record (they go onto the tariff cards) and the MKDirections ETA
+is gone rather than reconciled; the walking fallback stays for the curve and the
+distance (YD-31).
+
 ## A person's name is components, joined by the formatter
 
 `Contact` stores `givenName` and `familyName`; the one full-name string the store and the

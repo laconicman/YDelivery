@@ -169,11 +169,8 @@ extension DeliveriesView {
                 if !isSearchPresented {
                     Button(action: compose) {
                         Label("New Delivery", systemSymbol: .plus)
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .primaryAction()
                     .padding(.horizontal)
                     .padding(.bottom, Layout.Spacing.unit)
                 }

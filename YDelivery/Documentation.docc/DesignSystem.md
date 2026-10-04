@@ -132,7 +132,9 @@ The bar's title names the destination its tap opens: while pricing it is a non-i
 indicator (a bar that cannot accept a tap must not look like a button), while blocked it
 reads "Review the order" and stays enabled — the sheet is where the blockers explain
 themselves — and when ready it names the priced promise. A CTA must never look reachable
-while a tap dead-ends, nor dead while a door exists.
+while a tap dead-ends, nor dead while a door exists. The look is one recipe with one name
+— `Button.primaryAction()` bundles bordered-prominent, large, headline, full width (a
+`ButtonStyle` could not keep the system's capsule); sites add only edge padding.
 
 ## Pin & badge taxonomy (board `2c`)
 

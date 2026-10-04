@@ -23,6 +23,20 @@ struct LibraryView: View {
     /// for a new one — one form, two doors.
     @State private var editingTemplate: ParcelTemplate?
     @State private var isAddingTemplate = false
+    /// The Places «+»'s picked point — `pickedPlace` is written by the picker
+    /// still mid-dismissal, `namingPlace` fires the naming sheet only after the
+    /// picker has left: two sheets on one view cannot overlap (DeepWiki pass —
+    /// the codebase chains no sheets off a dismissal yet).
+    @State private var pickedPlace: PendingNewPlace?
+    @State private var namingPlace: PendingNewPlace?
+    @State private var isPickingPlace = false
+
+    /// A point the picker just answered, awaiting its name and kind.
+    private struct PendingNewPlace: Identifiable {
+        let id = UUID()
+        let place: PickedPlace
+        let contact: Contact?
+    }
 
     var body: some View {
         NavigationStack {
@@ -51,6 +65,7 @@ struct LibraryView: View {
                 deleteParcel: { id in
                     pendingDeleteTemplate = store.parcelTemplates.first(where: { $0.id == id })
                 },
+                addPlace: { isPickingPlace = true },
                 addParcel: { isAddingTemplate = true }
             )
                 .navigationTitle("Library")
@@ -69,6 +84,31 @@ struct LibraryView: View {
                 }
                 .sheet(isPresented: $isAddingTemplate) {
                     ParcelTemplateEditor { try await store.save($0) }
+                }
+                // The «+» asks the full pick flow — search, map, the door details —
+                // then the same naming sheet a bookmark gets. No route ends to fill:
+                // the library's place stands alone.
+                .sheet(isPresented: $isPickingPlace, onDismiss: {
+                    if let picked = pickedPlace {
+                        namingPlace = picked
+                        pickedPlace = nil
+                    }
+                }) {
+                    // No saved chips here — picking one could only rename the
+                    // place it already is.
+                    PointPickerView(
+                        prompt: "New place",
+                        confirm: { place, contact in
+                            pickedPlace = PendingNewPlace(place: place, contact: contact)
+                        },
+                        showsSavedPlaces: false)
+                }
+                .sheet(item: $namingPlace) { pending in
+                    PointPickerView.SavePlaceSheet(address: pending.place.displayAddress, standsAlone: true) { name, kind in
+                        try await store.save(SavedPlace(
+                            name: name, kind: kind,
+                            point: RoutePoint(pending.place, contact: pending.contact)))
+                    }
                 }
                 .confirmationDialog(
                     "Forget this place?",

@@ -22,13 +22,20 @@ extension PointPickerView {
         @Environment(\.dismiss) private var dismiss
 
         private let isEditing: Bool
+        /// The sheet sits over nothing — closing loses only the naming attempt.
+        private let standsAlone: Bool
 
         /// `editing` seeds the name and kind — the `3e` chip editor reuses this sheet
         /// rather than growing a twin. Without it the sheet asks fresh, as it always has.
+        /// `standsAlone` is the library's «New place» flow: there is no point left
+        /// standing on a map behind this sheet, so its failure footer must not
+        /// promise one (review, #112).
         init(address: String, editing place: SavedPlace? = nil,
+             standsAlone: Bool = false,
              save: @escaping (String, SavedPlace.Kind) async throws -> Void) {
             self.address = address
             self.save = save
+            self.standsAlone = standsAlone
             isEditing = place != nil
             _name = State(initialValue: place?.name ?? "")
             _kind = State(initialValue: place?.kind ?? .other)
@@ -58,7 +65,9 @@ extension PointPickerView {
                         Section {
                             Notice(.error, failure)
                         } footer: {
-                            Text("The place was not kept. Try again, or close and carry on — the point is still on the map.")
+                            Text(standsAlone
+                                 ? "The place was not kept. Try again, or close — nothing else changed."
+                                 : "The place was not kept. Try again, or close and carry on — the point is still on the map.")
                         }
                     }
                 }

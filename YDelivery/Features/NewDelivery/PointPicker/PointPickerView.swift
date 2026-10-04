@@ -17,6 +17,10 @@ struct PointPickerView: View {
     /// A pasted route link fills both ends in one action (decision #9); `nil` hides
     /// that offer.
     let fillEnds: ((PickedPlace, PickedPlace) -> Void)?
+    /// Whether the saved-places chips lead the search stage. The library's own
+    /// «New place» picker turns them off — a chip picked there could only rename
+    /// the place it already is (review, #112).
+    let showsSavedPlaces: Bool
     @State private var model: Model
     @State private var pendingSave: PendingSave?
     /// The chip being renamed/retyped — the `3e` editor, same sheet as first save.
@@ -35,11 +39,13 @@ struct PointPickerView: View {
         initialPlace: PickedPlace? = nil,
         initialContact: Contact? = nil,
         confirm: @escaping (PickedPlace, Contact?) -> Void,
-        fillEnds: ((PickedPlace, PickedPlace) -> Void)? = nil
+        fillEnds: ((PickedPlace, PickedPlace) -> Void)? = nil,
+        showsSavedPlaces: Bool = true
     ) {
         self.prompt = prompt
         self.confirm = confirm
         self.fillEnds = fillEnds
+        self.showsSavedPlaces = showsSavedPlaces
         _model = State(initialValue: Model(initialPlace: initialPlace, initialContact: initialContact))
     }
 
@@ -57,11 +63,11 @@ struct PointPickerView: View {
         @Bindable var model = model
         NavigationStack {
             SearchContent(
-                chips: store.savedPlaces.map {
+                chips: showsSavedPlaces ? store.savedPlaces.map {
                     SearchContent.Chip(
                         id: $0.id, name: $0.name, symbol: $0.kind.symbol,
                         pinned: $0.pinned)
-                },
+                } : [],
                 recents: store.recentPoints.map(SearchContent.Recent.init),
                 historyUnavailable: store.pickerMemoryUnavailable,
                 searchText: $model.searchText,
@@ -136,6 +142,15 @@ struct PointPickerView: View {
                 )
                 .navigationTitle("Refine the point")
                 .navigationBarTitleDisplayMode(.inline)
+                // The pushed stages offer the same leave-the-flow affordance the
+                // search stage does — «Cancel» dismisses the whole sheet; Back still
+                // means one step up. Editing an existing point opens straight here,
+                // so without it that flow had no way out but the chevron.
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                }
                 // The flow's end, stacked on the map: door details and the person on
                 // one screen, Back returning to the address (Round 5, decision #40;
                 // author, 2026-09-14 — one navigation stack, not two sheets).
@@ -162,6 +177,11 @@ struct PointPickerView: View {
                     )
                     .navigationTitle("The point")
                     .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { dismiss() }
+                        }
+                    }
                 }
             }
             .task { await model.streamSuggestions() }

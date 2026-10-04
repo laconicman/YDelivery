@@ -152,6 +152,7 @@ extension NewDeliveryView {
         @State private var editMode: EditMode = .inactive
         /// The «Add field» chooser — presentation state only, like `editMode`.
         @State private var pickingField = false
+        @State private var pickingTemplate = false
         /// The open callout's pin — the pin↔row agreement (board `4a`): the card,
         /// the mark, and the highlighted row all read this one id.
         @State private var calloutPin: UUID?
@@ -320,34 +321,6 @@ extension NewDeliveryView {
             }
         }
 
-        /// The library's chips above the items — the picker's `chipsRow` precedent:
-        /// capsules in a horizontal scroll, one tap appends the template's items.
-        private var templateChipsRow: some View {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Layout.Spacing.unit) {
-                    ForEach(templateChips) { chip in
-                        Button {
-                            applyTemplate(chip.id)
-                        } label: {
-                            Label(chip.name, systemSymbol: .shippingbox)
-                                .font(.subheadline)
-                                .padding(.horizontal, Layout.Spacing.gutter)
-                                .padding(.vertical, Layout.Spacing.chip)
-                                .background(Color(.secondarySystemFill), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .listRowInsets(EdgeInsets(
-                top: Layout.Spacing.tight,
-                leading: Layout.Spacing.gutter,
-                bottom: Layout.Spacing.tight,
-                trailing: Layout.Spacing.gutter
-            ))
-            .listRowBackground(Color.clear)
-        }
-
         private var routeCard: some View {
             ScrollViewReader { proxy in
             List {
@@ -383,6 +356,17 @@ extension NewDeliveryView {
                     .onMove(perform: moveRows)
 
                     actions
+                        .frame(maxWidth: .infinity)
+                        // The action strip is part of the route card, not a row —
+                        // a card-colored row below it read as «the last row of a
+                        // missing List» (device drive, 2026-10). Clear background
+                        // and no separator anchor it to the section instead.
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                } header: {
+                    // The card's stops read under a title — without one the last
+                    // row floated, attached to nothing (device drive, 2026-10).
+                    Text("Route")
                 } footer: {
                     if offers == .idle {
                         // Prices follow the route alone — an empty parcel rides the
@@ -431,9 +415,6 @@ extension NewDeliveryView {
                                 .font(.footnote)
                         }
                     }
-                    if !templateChips.isEmpty {
-                        templateChipsRow
-                    }
                     ForEach(itemRows) { item in
                         Button {
                             editItem(item.id)
@@ -477,8 +458,35 @@ extension NewDeliveryView {
                     }
                     .onDelete(perform: removeItems)
 
-                    Button(action: addItem) {
-                        Label("Add an item", systemSymbol: .plus)
+                    // Both add-doors in one row — the library's entrance used to
+                    // squat as a chips row of its own. Each label degrades to its
+                    // short form on its own (ViewThatFits per button).
+                    HStack {
+                        Button(action: addItem) {
+                            ViewThatFits(in: .horizontal) {
+                                Label("Add an item", systemSymbol: .plus)
+                                Label("Add", systemSymbol: .plus)
+                            }
+                        }
+                        if !templateChips.isEmpty {
+                            Spacer()
+                            Button { pickingTemplate = true } label: {
+                                ViewThatFits(in: .horizontal) {
+                                    Label("Add from library", systemSymbol: .shippingbox)
+                                    Label("Library", systemSymbol: .shippingbox)
+                                }
+                            }
+                            // A dialog like «Add field», not a Menu — the dialog is
+                            // the one synthesized taps (UI tests, VoiceOver) can open.
+                            .confirmationDialog(
+                                "Add from library", isPresented: $pickingTemplate,
+                                titleVisibility: .visible
+                            ) {
+                                ForEach(templateChips) { chip in
+                                    Button(chip.name) { applyTemplate(chip.id) }
+                                }
+                            }
+                        }
                     }
                 } header: {
                     // «What's inside», not «Parcel»: several items ride one order,
@@ -807,15 +815,11 @@ extension NewDeliveryView.Content {
             if let title {
                 Button(action: openReview) {
                     Text(title)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .primaryAction()
                 .disabled(!canOrder)
                 .padding(.horizontal, Layout.Spacing.edge)
                 .padding(.vertical, Layout.Spacing.unit)
-                .background(.bar)
             }
         }
     }
@@ -1243,7 +1247,7 @@ private extension MKCoordinateRegion {
                   parts: nil, contactSummary: nil, contactPhone: nil,
                   parcelsLeaving: 0, parcelsArriving: 2),
         ],
-        estimate: .ready(RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])),
+        estimate: .ready(RouteEstimate(distanceMeters: 12400, legs: [])),
         offers: .ready([
             Offer(tariff: .courier, price: 749, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-1"),
             Offer(tariff: .express, price: 1190, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-2"),
@@ -1337,7 +1341,7 @@ private extension MKCoordinateRegion {
     VStack(spacing: 12) {
         NewDeliveryView.Content.EstimateBar(estimate: .calculating, retry: {})
         NewDeliveryView.Content.EstimateBar(
-            estimate: .ready(RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])),
+            estimate: .ready(RouteEstimate(distanceMeters: 12400, legs: [])),
             retry: {}
         )
         NewDeliveryView.Content.EstimateBar(estimate: .failed, retry: {})
