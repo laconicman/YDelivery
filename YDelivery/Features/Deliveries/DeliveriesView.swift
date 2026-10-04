@@ -22,13 +22,27 @@ struct DeliveriesView: View {
     /// (`CSSearchableItem.uniqueIdentifier` is that id).
     @State private var path: [UUID] = []
     @State private var model = Model()
+    /// The typed search — read by the derivation below, owned here so the list
+    /// handed down is already the answer (Content carries plain values, R5).
+    @State private var searchText = ""
+    /// The toolbar's sort and show picks — kept in defaults so a relaunch or a
+    /// tab switch away keeps them; the enum raw values are the stored strings.
+    @AppStorage("historySort") private var sort: HistorySort = .newestFirst
+    @AppStorage("historyFilter") private var filter: HistoryFilter = .all
 
     var body: some View {
         NavigationStack(path: $path) {
+            let sections = Model.sections(of: store.orders, fields: store.fields(for:))
             Content(
                 isSignedIn: session.isSignedIn,
-                sections: Model.sections(of: store.orders, fields: store.fields(for:)),
+                sections: Model.visible(sections, query: searchText,
+                                        sort: sort, filter: filter),
+                hasAnyRows: sections.contains { !$0.rows.isEmpty },
+                sort: $sort,
+                filter: $filter,
+                searchText: $searchText,
                 expandedID: model.expandedID,
+                pendingID: model.pendingID,
                 trail: model.trail,
                 trailError: model.trailError,
                 historyUnavailable: store.historyUnavailable,
@@ -95,8 +109,9 @@ extension DeliveriesView {
         /// must not wear «nothing reported» (review, PR #77).
         private(set) var trailError: String?
         /// The row whose trail is being read — opening is one publish, so a tap
-        /// on a still-opening row must know about it to close.
-        private var pendingID: UUID?
+        /// on a still-opening row must know about it to close; published so the
+        /// row can answer the wait with a spinner (review, PR #118).
+        private(set) var pendingID: UUID?
         /// The pending open's task — its own handle: a republish re-read must
         /// never cancel an open in flight, nor an open cancel a re-read.
         private var opening: Task<Void, Never>?
@@ -144,6 +159,10 @@ extension DeliveriesView {
             }
             guard expandedID != id else {
                 refreshing?.cancel()
+                // The collapse cancelled `opening` above — drop its marker too,
+                // or a third tap on that row is needed to open it (review, PR
+                // #118: A open → B pending → tap A → tap B must open B).
+                pendingID = nil
                 withAnimation(reduceMotion ? nil : .default) {
                     generation += 1
                     expandedID = nil
@@ -239,6 +258,88 @@ extension DeliveriesView {
                 Content.Section(id: .past, rows: past),
             ].filter { !$0.rows.isEmpty }
         }
+
+        /// The toolbar's list: what survives the status filter and the search,
+        /// in the picked order, still on its shelves. A shelf emptied by the
+        /// picks leaves the list; a price-less row cannot win «high first» and
+        /// sorts last. Pure — the root computes it, Content only draws (R5).
+        nonisolated static func visible(
+            _ sections: [Content.Section], query: String,
+            sort: HistorySort, filter: HistoryFilter
+        ) -> [Content.Section] {
+            let query = query.trimmingCharacters(in: .whitespaces)
+            return sections.compactMap { section in
+                let rows = section.rows
+                    .filter { row in
+                        filter.admits(row.status)
+                            && (query.isEmpty
+                                || row.searchableText.localizedCaseInsensitiveContains(query))
+                    }
+                    .sorted { lhs, rhs in
+                        switch sort {
+                        case .newestFirst: lhs.created > rhs.created
+                        case .oldestFirst: lhs.created < rhs.created
+                        case .priceHighFirst:
+                            switch (lhs.price, rhs.price) {
+                            case let (left?, right?):
+                                left == right
+                                    ? lhs.created > rhs.created
+                                    : left > right
+                            case (nil, _?): false
+                            case (_?, nil): true
+                            case (nil, nil): lhs.created > rhs.created
+                            }
+                        }
+                    }
+                return rows.isEmpty ? nil : Content.Section(id: section.id, rows: rows)
+            }
+        }
+    }
+}
+
+extension DeliveriesView {
+    /// The toolbar's orders for the shelves — persisted under `historySort`.
+    nonisolated enum HistorySort: String, CaseIterable, Codable, Sendable {
+        case newestFirst
+        case oldestFirst
+        /// Numeric amounts compared raw — the account is single-currency (RUB).
+        /// A mixed-currency account would need converted values first.
+        case priceHighFirst
+
+        var words: String {
+            switch self {
+            case .newestFirst: String(localized: "Newest first")
+            case .oldestFirst: String(localized: "Oldest first")
+            case .priceHighFirst: String(localized: "Price, high first")
+            }
+        }
+    }
+
+    /// The toolbar's status filter — persisted under `historyFilter`.
+    nonisolated enum HistoryFilter: String, CaseIterable, Codable, Sendable {
+        case all
+        case needsDecision
+        case delivered
+        case cancelled
+
+        var words: String {
+            switch self {
+            case .all: String(localized: "Everything")
+            case .needsDecision: String(localized: "Needs a decision")
+            case .delivered: String(localized: "Delivered")
+            case .cancelled: String(localized: "Cancelled")
+            }
+        }
+
+        /// Does a row's status pass — `.all` admits everything.
+        func admits(_ status: OrderStatus) -> Bool {
+            switch self {
+            case .all: true
+            case .needsDecision: status == .attention
+            case .delivered: status == .done
+            case .cancelled: status == .cancelled
+            }
+        }
     }
 }
 
@@ -270,7 +371,13 @@ extension DeliveriesView.Content.Row {
             id: order.id,
             status: order.status,
             statusObservedAt: order.providerObservedAt,
+            created: order.created,
             createdText: order.created.formatted(date: .abbreviated, time: .shortened),
+            // The wire's decimal is POSIX dot — parsing it under a comma-decimal
+            // locale drops the fraction (`priceText` reads it the same way).
+            price: order.price.flatMap {
+                Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX"))
+            },
             destinationText: destination?.compactAddress ?? origin?.compactAddress ?? "",
             originText: hasOrigin ? origin?.compactAddress : nil,
             middleStops: hasOrigin ? max(0, (destinationIndex ?? 0) - 1) : 0,

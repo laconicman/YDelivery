@@ -26,7 +26,13 @@ extension DeliveriesView {
             let status: OrderStatus
             /// The provider's as-of stamp — sits with the status, never with the date.
             let statusObservedAt: Date?
+            /// When the order was placed — the sorts need the value itself; the
+            /// line shows `createdText`.
+            let created: Date
             let createdText: String
+            /// The with-VAT total as a number — «Price, high first» sorts on it;
+            /// the line shows `priceText`. `nil` when the provider never priced.
+            let price: Decimal?
             /// Where the parcel goes — the last drop-off (YD-15), compacted.
             let destinationText: String
             /// Where it left from, when the route has a distinct origin; `nil` for a
@@ -53,9 +59,22 @@ extension DeliveriesView {
         }
 
         let isSignedIn: Bool
+        /// The shelves *after* the toolbar's picks and the search — the root runs
+        /// `Model.visible` and hands the answer down; this view never filters.
         let sections: [Section]
+        /// Whether any rows exist at all — the pick that empties the list must
+        /// not wear an empty history's face, and only the root knows the count.
+        var hasAnyRows = false
+        /// The toolbar's sort and show picks and the typed query — bindings, so
+        /// the menu writes back to the root's storage (and the storage persists).
+        var sort: Binding<HistorySort> = .constant(.newestFirst)
+        var filter: Binding<HistoryFilter> = .constant(.all)
+        var searchText: Binding<String> = .constant("")
         /// The row whose provider trail is open, if any — one at a time.
         var expandedID: UUID? = nil
+        /// The row whose trail is being read — its tap is answered with a
+        /// spinner in place of the chevron while the open is pending.
+        var pendingID: UUID? = nil
         /// The open row's trail: `nil` while the read is in flight.
         var trail: [ProviderEvent]? = nil
         /// Why the open row's trail could not be read — rendered instead of the
@@ -77,7 +96,6 @@ extension DeliveriesView {
         /// Open or close a row's provider trail — the status line's tap.
         var toggleTrail: (Row.ID) -> Void = { _ in }
 
-        @State private var searchText = ""
         @State private var isSearchPresented = false
 
         private var rows: [Row] { sections.flatMap(\.rows) }
@@ -100,23 +118,11 @@ extension DeliveriesView {
             .tint(.gray)
         }
 
-        /// The typed filter — addresses, people, status words and field values,
-        /// case-insensitive. A shelf with no hits leaves the list.
-        private var visibleSections: [Section] {
-            let query = searchText.trimmingCharacters(in: .whitespaces)
-            guard !query.isEmpty else { return sections }
-            return sections
-                .map { Section(id: $0.id, rows: $0.rows.filter {
-                    $0.searchableText.localizedCaseInsensitiveContains(query)
-                }) }
-                .filter { !$0.rows.isEmpty }
-        }
-
         var body: some View {
             Group {
                 if !rows.isEmpty {
                     List {
-                        ForEach(visibleSections) { section in
+                        ForEach(sections) { section in
                             SwiftUI.Section {
                                 ForEach(section.rows) { row in
                                     let expanded = expandedID == row.id
@@ -124,6 +130,7 @@ extension DeliveriesView {
                                         OrderRow(
                                             row: row,
                                             isExpanded: expanded,
+                                            isOpening: expandedID != row.id && pendingID == row.id,
                                             toggleTrail: { toggleTrail(row.id) }
                                         )
                                     }
@@ -165,15 +172,36 @@ extension DeliveriesView {
                         }
                     }
                     .refreshable { await refresh() }
-                    .searchable(text: $searchText, isPresented: $isSearchPresented,
-                                prompt: "Address, person, status or your field")
                 } else if let historyUnavailable {
-                    // Checked before the empty states: *could not look* is not *nothing
-                    // there*, and only this branch knows the difference.
+                    // Checked before the filtered-empty and the empty states:
+                    // *could not look* outranks *nothing matched* — even when
+                    // cached rows exist but the picks hid them all (review,
+                    // PR #118).
                     ContentUnavailableView {
                         Label("Deliveries can't be read", systemSymbol: .exclamationmarkTriangle)
                     } description: {
                         Text(historyUnavailable)
+                    }
+                } else if hasAnyRows {
+                    // Rows exist and none survive the picks — a filtered-empty
+                    // state, not an empty history. Name what hid them: a typed
+                    // query gets its «Clear search», a status pick its «Show
+                    // everything»; both when both.
+                    ContentUnavailableView {
+                        Label("Nothing to show", systemSymbol: .line3HorizontalDecreaseCircle)
+                    } description: {
+                        if !searchText.wrappedValue.isEmpty {
+                            Text("Nothing matches “\(searchText.wrappedValue)”.")
+                        } else {
+                            Text("Change the filter or clear the search.")
+                        }
+                    } actions: {
+                        if !searchText.wrappedValue.isEmpty {
+                            Button("Clear search") { searchText.wrappedValue = "" }
+                        }
+                        if filter.wrappedValue != .all {
+                            Button("Show everything") { filter.wrappedValue = .all }
+                        }
                     }
                 } else if !isSignedIn {
                     ContentUnavailableView {
@@ -200,6 +228,10 @@ extension DeliveriesView {
                     }
                 }
             }
+            // On the Group, not the List: a query that matches nothing must
+            // keep its field — otherwise it cannot be cleared (review, PR #118).
+            .searchable(text: searchText, isPresented: $isSearchPresented,
+                        prompt: "Address, person, status or your field")
             .safeAreaInset(edge: .bottom) {
                 if !isSearchPresented {
                     Button(action: compose) {
@@ -208,6 +240,27 @@ extension DeliveriesView {
                     .primaryAction()
                     .padding(.horizontal)
                     .padding(.bottom, Layout.Spacing.unit)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    // One menu for the two list picks; the glyph fills while a
+                    // status filter stands, so an active filter shows at a glance.
+                    Menu {
+                        Picker("Sort", selection: sort) {
+                            ForEach(HistorySort.allCases, id: \.self) {
+                                Text($0.words).tag($0)
+                            }
+                        }
+                        Picker("Show", selection: filter) {
+                            ForEach(HistoryFilter.allCases, id: \.self) {
+                                Text($0.words).tag($0)
+                            }
+                        }
+                    } label: {
+                        Label("Sort and filter", systemSymbol: .line3HorizontalDecreaseCircle)
+                            .symbolVariant(filter.wrappedValue == .all ? .none : .fill)
+                    }
                 }
             }
         }
@@ -237,7 +290,12 @@ extension DeliveriesView.Content {
         /// Drives only the disclosure chevron and the a11y hint — the trail
         /// itself is a `TrailRow` emitted beside this row.
         let isExpanded: Bool
+        /// The tap landed and the read is still out — the chevron swaps for a
+        /// spinner so a slow trail read never leaves the tap unanswered.
+        var isOpening = false
         let toggleTrail: () -> Void
+
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         var body: some View {
             VStack(alignment: .leading, spacing: Layout.Spacing.chip) {
@@ -309,11 +367,16 @@ extension DeliveriesView.Content {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                Image(systemSymbol: .chevronDown)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                    .animation(.default, value: isExpanded)
+                if isOpening {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Image(systemSymbol: .chevronDown)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .animation(reduceMotion ? nil : .default, value: isExpanded)
+                }
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: toggleTrail)
@@ -374,14 +437,24 @@ extension DeliveriesView.Content {
 
 #if DEBUG
 private extension DeliveriesView.Content.Row {
+    /// Preview rows carry the same facts the real row does — a `Date` and a
+    /// `Decimal` — and wear the text production would derive, so a sort or a
+    /// format change shows up here first.
     static func fixture(
-        status: OrderStatus, created: String, origin: String?, destination: String,
-        middles: Int = 0, price: String?, observed: Date? = nil,
+        status: OrderStatus, created: Date, origin: String?, destination: String,
+        middles: Int = 0, price: Decimal? = nil, observed: Date? = nil,
         detail: String? = nil, route: [RoutePoint] = []
     ) -> Self {
-        .init(id: UUID(), status: status, statusObservedAt: observed, createdText: created,
+        .init(id: UUID(), status: status, statusObservedAt: observed,
+              created: created,
+              createdText: created.formatted(date: .abbreviated, time: .shortened),
+              price: price,
               destinationText: destination, originText: origin, middleStops: middles,
-              statusDetail: detail, priceText: price, route: route)
+              statusDetail: detail,
+              priceText: price.map {
+                  $0.formatted(.currency(code: "RUB").precision(.fractionLength(0...2)))
+              },
+              route: route)
     }
 }
 
@@ -394,27 +467,50 @@ private let previewRoute = [
 
 private let previewSections: [DeliveriesView.Content.Section] = [
     .init(id: .live, rows: [
-        .fixture(status: .active, created: "15 Jan, 11:00", origin: "ул Москворечье, 6",
-                 destination: "Каширское шоссе, 52", price: "1 767,78 ₽",
-                 observed: .init(timeIntervalSince1970: 1_800_002_400), route: previewRoute),
-        .fixture(status: .searching, created: "15 Jan, 10:12", origin: "Невский проспект, 100",
-                 destination: "Арбат, 10", middles: 1, price: "3 400 ₽"),
-        .fixture(status: .attention, created: "14 Jan, 07:13", origin: "Никольская, 10",
-                 destination: "Пятницкая, 25", price: "890 ₽",
+        .fixture(status: .active, created: .init(timeIntervalSince1970: 1_800_039_600),
+                 origin: "ул Москворечье, 6",
+                 destination: "Каширское шоссе, 52", price: 1767.78,
+                 observed: .init(timeIntervalSince1970: 1_800_042_000), route: previewRoute),
+        .fixture(status: .searching, created: .init(timeIntervalSince1970: 1_800_036_720),
+                 origin: "Невский проспект, 100",
+                 destination: "Арбат, 10", middles: 1, price: 3_400),
+        .fixture(status: .attention, created: .init(timeIntervalSince1970: 1_799_936_000),
+                 origin: "Никольская, 10",
+                 destination: "Пятницкая, 25", price: 890,
                  observed: .init(timeIntervalSince1970: 1_799_950_000),
                  detail: "Ended before delivery"),
     ]),
     .init(id: .past, rows: [
-        .fixture(status: .done, created: "4 Sep", origin: "Тверская, 1", destination: "Арбат, 10",
-                 price: "3 400 ₽"),
-        .fixture(status: .cancelled, created: "3 Jan, 21:13", origin: "Новослободская, 3",
-                 destination: "Тверская-Ямская, 12", price: "1 240 ₽"),
+        .fixture(status: .done, created: .init(timeIntervalSince1970: 1_789_000_000),
+                 origin: "Тверская, 1", destination: "Арбат, 10", price: 3_400),
+        .fixture(status: .cancelled, created: .init(timeIntervalSince1970: 1_767_283_980),
+                 origin: "Новослободская, 3",
+                 destination: "Тверская-Ямская, 12", price: 1_240),
     ]),
 ]
 
 #Preview("Two shelves") {
     NavigationStack {
-        DeliveriesView.Content(isSignedIn: true, sections: previewSections, compose: {})
+        DeliveriesView.Content(isSignedIn: true, sections: previewSections,
+                               hasAnyRows: true, compose: {})
+    }
+}
+
+#Preview("Filtered to cancelled") {
+    let cancelled = previewSections.compactMap { section -> DeliveriesView.Content.Section? in
+        let rows = section.rows.filter { $0.status == .cancelled }
+        return rows.isEmpty ? nil : .init(id: section.id, rows: rows)
+    }
+    NavigationStack {
+        DeliveriesView.Content(isSignedIn: true, sections: cancelled, hasAnyRows: true,
+                               filter: .constant(.cancelled), compose: {})
+    }
+}
+
+#Preview("Nothing to show") {
+    NavigationStack {
+        DeliveriesView.Content(isSignedIn: true, sections: [], hasAnyRows: true,
+                               filter: .constant(.delivered), compose: {})
     }
 }
 
@@ -430,6 +526,14 @@ private let previewSections: [DeliveriesView.Content.Section] = [
                 ProviderEvent(orderID: live.id, providerEventID: 3, at: t0 + 1_200, kind: "status", providerStatus: "pickuped", source: "journal"),
             ],
             compose: {})
+    }
+}
+
+#Preview("A row opening — slow read") {
+    NavigationStack {
+        DeliveriesView.Content(
+            isSignedIn: true, sections: previewSections,
+            pendingID: previewSections[0].rows[1].id, compose: {})
     }
 }
 
