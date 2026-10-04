@@ -37,6 +37,10 @@ struct NewDeliveryView: View {
     @State private var namingTemplateItem: ParcelItem?
     @State private var editingOptions: OptionsEditor.Focus?
     @State private var showsExplainer = false
+    /// The field a blocker's door is scrolling to — cleared once the card has
+    /// brought the row into view, so a second door to the same field still
+    /// lands.
+    @State private var scrollTarget: UUID?
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @Environment(ClaimsSyncController.self) private var sync
@@ -124,6 +128,8 @@ struct NewDeliveryView: View {
             content.saveTemplateItem = store.canSaveTemplates
                 ? { id in namingTemplateItem = draft.item(withID: id) }
                 : nil
+            content.scrollTarget = scrollTarget
+            content.onScrolled = { scrollTarget = nil }
             return content
         }
 
@@ -151,6 +157,9 @@ struct NewDeliveryView: View {
             Task { await store.refresh() }
         case .field(let id):
             draft.revealField(id)
+            // The door lands on the row it names — the card scrolls the field
+            // into view once the sheet is gone.
+            scrollTarget = id
         case .offer:
             break
         }

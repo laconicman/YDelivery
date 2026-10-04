@@ -869,36 +869,38 @@ extension NewDeliveryView {
         /// it (the wire would otherwise say it as a 400).
         var orderBlockers: [Blocker] {
             var blockers: [Blocker] = []
-            if !isRouteComplete, let point = points.first(where: { $0.place == nil }) {
+            // One door per incomplete stop, kind-qualified like the item doors:
+            // a single generic row would leave the second bound invisible after
+            // the first is fixed.
+            for point in points where point.place == nil {
                 blockers.append(.init(
                     id: "route/\(point.id)",
                     message: String(localized: "Every stop needs its place on the map."),
                     destination: .point(point.id)
                 ))
             }
-            if let point = points.first(where: {
+            for point in points {
                 // The wire's contact is `name` *and* `phone`, both required — a
                 // dialable number with nobody attached still 400s at claim time
                 // (DeepWiki consult on the spec, 2026-09-18).
-                let contact = $0.contact?.storable
-                return (contact?.phone ?? "").isEmpty || (contact?.fullName ?? "").isEmpty
-            }) {
-                blockers.append(.init(
-                    id: "contact/\(point.id)",
-                    message: String(localized: "The courier calls ahead — every stop needs a person: a name and a phone."),
-                    destination: .contact(point.id)
-                ))
-            } else if let point = points.first(where: {
-                // The same dialability rule the editor hints with: a half-typed contact
-                // may be *saved*, but an order carries only numbers the courier can
-                // actually call (review, PR #25).
-                PhoneFormat.dialable($0.contact?.storable?.phone ?? "") == nil
-            }) {
-                blockers.append(.init(
-                    id: "phone/\(point.id)",
-                    message: String(localized: "A phone the courier can't dial is no phone yet — finish the number."),
-                    destination: .contact(point.id)
-                ))
+                let contact = point.contact?.storable
+                if (contact?.phone ?? "").isEmpty || (contact?.fullName ?? "").isEmpty {
+                    blockers.append(.init(
+                        id: "contact/\(point.id)",
+                        message: String(localized: "The courier calls ahead — every stop needs a person: a name and a phone."),
+                        destination: .contact(point.id)
+                    ))
+                } else if PhoneFormat.dialable(contact?.phone ?? "") == nil {
+                    // The same dialability rule the editor hints with: a
+                    // half-typed contact may be *saved*, but an order carries
+                    // only numbers the courier can actually call (review,
+                    // PR #25).
+                    blockers.append(.init(
+                        id: "phone/\(point.id)",
+                        message: String(localized: "A phone the courier can't dial is no phone yet — finish the number."),
+                        destination: .contact(point.id)
+                    ))
+                }
             }
             if items.isEmpty {
                 blockers.append(.init(

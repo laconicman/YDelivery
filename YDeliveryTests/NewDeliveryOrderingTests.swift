@@ -65,7 +65,8 @@ struct NewDeliveryOrderingTests {
     @Test("Blocked drafts state every bound; a ready draft states none")
     func blockersStateTheBounds() async {
         let empty = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
-        #expect(empty.orderBlockers.count == 4, "route, phones, parcel, class — all missing")
+        #expect(empty.orderBlockers.count == 6,
+                "two stops miss their place and their person; parcel and class too")
 
         let model = readyDraft()
         #expect(model.orderBlockers.map(\.message) == [String(localized: "Pick a delivery class once prices arrive.")])
@@ -98,6 +99,23 @@ struct NewDeliveryOrderingTests {
         #expect(specBlockers.map(\.destination) == [.item(second.id), .item(third.id)])
         #expect(specBlockers[0].message.contains("Зарядка"), "the named item names itself")
         #expect(specBlockers[1].message.contains("item 3"), "a nameless item falls back to its ordinal")
+    }
+
+    /// Two stops left empty earn two doors — one per incomplete stop, so the
+    /// second bound isn't invisible after the first is fixed (the item-door
+    /// rule). The field door's destination is the field's row — the card
+    /// scrolls it into view (`Content.scrollTarget`).
+    @Test("Every incomplete stop gets its own door")
+    func everyIncompleteStopGetsItsDoor() async {
+        // A fresh draft is two incomplete stops: each names its own door for
+        // its place and its person — fixing one can't hide the other.
+        let model = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
+        let routeDoors = model.orderBlockers.filter { $0.id.hasPrefix("route/") }
+        #expect(routeDoors.count == 2)
+        #expect(routeDoors.map(\.destination) == [.point(model.points[0].id), .point(model.points[1].id)])
+        let contactDoors = model.orderBlockers.filter { $0.id.hasPrefix("contact/") }
+        #expect(contactDoors.count == 2)
+        #expect(contactDoors.map(\.destination) == [.contact(model.points[0].id), .contact(model.points[1].id)])
     }
 
     @Test("A phone the editor let through half-typed still blocks the order")
