@@ -315,6 +315,16 @@
         }
       }
     },
+    "Add" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Добавить"
+          }
+        }
+      }
+    },
     "Add an item" : {
       "localizations" : {
         "ru" : {
@@ -331,6 +341,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Добавить поле"
+          }
+        }
+      }
+    },
+    "Add from library" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Добавить из библиотеки"
           }
         }
       }
