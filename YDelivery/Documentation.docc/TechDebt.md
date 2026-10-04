@@ -559,9 +559,11 @@ the one write shape that always re-marks the row save-pending.
 - **Discharge:** an upstream fix that un-deletes metadata on a conflicting insert
   (or a report Point-Free accepts); locally, `recordOrder`/`savePlace` could write
   children as diffed UPDATEs instead of delete+insert. A plain UPDATE
-  (`UPDATE … SET col = col`) re-marks the row save-pending — the minimal
-  repair, proven by the seed's earlier resurrection pass before it moved to an
-  isolated always-fresh database. Confirmed in `sqlite-data` 1.12.0 source
+  (`UPDATE … SET col = col`) re-marks a row save-pending **only while its metadata is
+  not tombstoned** — that was the seed's earlier resurrection pass, which repaired the
+  `INSERT OR REPLACE` shape (no delete trigger fired, `_isDeleted` still 0); after a
+  genuine delete-then-reinsert the tombstone stays and no UPDATE restores the row, so the
+  only cure for that shape is not to write it. Confirmed in `sqlite-data` 1.12.0 source
   (`Internal/Triggers.swift`: `afterInsert` → `SyncMetadata.insert … onConflictDoUpdate
   { }`, a no-op; `afterUpdate` bumps `userModificationTime` but never clears
   `_isDeleted`; `afterDeleteFromUser` sets it) — and `INSERT OR REPLACE` never bumps

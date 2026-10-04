@@ -217,8 +217,12 @@ Kit #36 / app #92) is reshaped rather than shipped and migrated:
   `participantKeys` table (`keyID`, `participantRef`, `publicKey`, `role`, `addedAt`,
   owner-signed when the owner adds a courier's key, self-signed when a participant
   rotates its own) replaces `ownerSigningKey` on the root. The owner's keys are rows in
-  it like anyone's. TOFU pinning applies per key; a key the reader has not seen before is
-  *new*, not *wrong* — rendered as such.
+  it like anyone's. Trust is pinned per **participant**, not per key: the first key seen
+  for a participant is taken on trust (TOFU), and every later key row of that participant
+  must be signed by one of their already-pinned keys — a chain, so a read-write
+  participant who adds a fresh `keyID` claiming to be the owner's cannot slip past the
+  changed-key warning as merely *new* (review of the first draft). An unchained key row
+  is itself *unverified*, and so is every row signed with it.
 - **Every signed row names its key.** `signingKeyID` + `signature` on `OrderProviderState`
   (later per leg), `ProviderEvent`, and — once couriers write — the courier's event rows;
   `OrderMessage` may follow for the chat's own accountability. The verdict a reader

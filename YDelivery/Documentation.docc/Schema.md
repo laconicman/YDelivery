@@ -480,12 +480,16 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   What stays open is *shared* tags: a tag vocabulary a team shares is the workspace-root
   question above; private tags wait until someone names a use pin doesn't cover.
 - **Signed provider state**: `signature BLOB` + `signingKeyID` on `OrderProviderState` and
-  `ProviderEvent` (owner-written), `ownerSigningKey` on `Order`; Curve25519 over a canonical
-  serialisation; the private key in the iCloud Keychain, so the owner's devices sign and
-  everyone verifies (<doc:Collaboration> → "Where this landed", 5). Additive DDL; rows
-  written before the columns exist read as *unsigned*, not *forged*. *Who* wrote a row is
-  already free from CloudKit's `lastModifiedUserRecordID`; the signature answers *whether
-  the owner's key wrote it*, which permissions cannot.
+  `ProviderEvent`; Curve25519 over a canonical serialisation; the owner's private key in
+  the iCloud Keychain, so the owner's devices sign and everyone verifies
+  (<doc:Collaboration> → "Where this landed", 5). **Superseded 2026-10-05 in one
+  respect:** the public key does *not* ride the `Order` root as `ownerSigningKey` — keys
+  are rows of a shared, append-only `participantKeys` table so that couriers and other
+  writers can publish theirs too (<doc:Collaboration> → "Generalised 2026-10-05"); the
+  Kit migration follows that contract, not this bullet's earlier wording. Additive DDL;
+  rows written before the columns exist read as *unsigned*, not *forged*. *Who* wrote a
+  row is already free from CloudKit's `lastModifiedUserRecordID`; the signature answers
+  *whether a key entitled to write it did*, which permissions cannot.
 - **Accountless couriers and support staff**: out of this design's reach — a private
   `CKShare` requires an iCloud account per participant, and an App Clip changes the
   install experience, not the identity requirement (Devin Review, second round — an
@@ -562,10 +566,12 @@ may assume. Three rules for every schema PR from here:
    an `authorRef` (the `*Ref` convention: a participant reference, not a user record id)
    and the signing columns (<doc:Collaboration>) are the shape; until they exist, nothing
    should read "the owner wrote this" from the table alone.
-3. **A stop may be a dock.** `RouteStop.role` is `pickup`/`dropoff` from the sender's
-   point of view; a dock is a drop-off of leg *n* and the pickup of leg *n+1*. Keep `role`
-   the sender's word and let legs carry their own stop references later — do not add a
-   third `role` value that bakes the two-leg case into the sender's route.
+3. **A stop may be a dock.** `RouteStop.role` is `pickup`/`dropoff`/`return` from the
+   sender's point of view; a dock is not a fourth role but a leg boundary — the stop where
+   leg *n* ends and leg *n+1* begins, whatever the sender calls it (a `return` stop can be
+   a dock too: the parcel comes back to the sender through a hand-over). Keep `role` the
+   sender's word and let legs carry their own stop references later — do not add a `role`
+   value that bakes the two-leg case into the sender's route.
 
 Identity, for the record: `providerAccountRef` is the Yandex account's name for the
 owner and stays that; a courier is a **share participant** (a CloudKit user the owner
