@@ -90,15 +90,19 @@ struct NewDeliveryEstimateTests {
 
     /// The deadline cannot wait on an uncooperative operation: this estimator
     /// never returns *and* swallows cancellation, so only a race that drops the
-    /// loser reaches `.failed`. A task group would hang here forever.
+    /// loser reaches `.failed`. A task group would hang here forever. The stall
+    /// is released on the way out so the test process carries no spinning task.
     @Test("A stalled estimator that ignores cancellation still meets the deadline")
     func uncooperativeEstimatorFails() async {
+        let (stall, release) = AsyncStream<Void>.makeStream()
         let model = draft { _ in
-            while true { try? await Task.sleep(nanoseconds: 100_000_000) }
+            for await _ in stall {}
+            return RouteEstimate(distanceMeters: 1, legs: [])
         }
         model.estimateTimeout = 0.05
         let start = Date()
         await model.calculateEstimate()
+        defer { release.finish() }
         #expect(model.estimate == .failed)
         #expect(Date().timeIntervalSince(start) < 5,
                 "the deadline fired without waiting for the loser's cooperation")
@@ -111,6 +115,22 @@ struct NewDeliveryEstimateTests {
         model.estimateTimeout = 0.05
         await model.calculateEstimate()
         #expect(model.estimate == .ready(estimate))
+    }
+
+    /// Cancellation can fire before the gate's work task is even installed —
+    /// a cancelled-ahead run must refuse the late starter, not launch it.
+    @Test("A run cancelled before the operation starts never starts it")
+    func cancelledBeforeStartNeverRuns() async {
+        let starts = Starts()
+        let model = draft { _ in
+            await starts.tick()
+            throw Unexpected()
+        }
+        model.estimateTimeout = 0.05
+        let task = Task { await model.calculateEstimate() }
+        task.cancel()
+        await task.value
+        #expect(await starts.count == 0, "the operation never started")
     }
 
     @Test("Cancelling the run itself publishes nothing")
@@ -128,4 +148,9 @@ struct NewDeliveryEstimateTests {
     }
 
     private struct Unexpected: Error {}
+
+    private actor Starts {
+        private(set) var count = 0
+        func tick() { count += 1 }
+    }
 }

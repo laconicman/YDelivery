@@ -669,8 +669,13 @@ extension NewDeliveryView {
 
             func startWork(_ operation: @escaping @Sendable () async throws -> T) {
                 state.withLock {
+                    // A result can already have landed — cancellation fires
+                    // ahead of `arm`/`startWork` — and a late starter must not
+                    // run at all.
+                    guard $0.result == nil else { return }
                     $0.work = Task {
                         do {
+                            guard !Task.isCancelled else { throw CancellationError() }
                             resume(with: .success(try await operation()))
                         } catch {
                             resume(with: .failure(error))
@@ -681,6 +686,7 @@ extension NewDeliveryView {
 
             func startTimer(_ seconds: TimeInterval) {
                 state.withLock {
+                    guard $0.result == nil else { return }
                     $0.timer = Task {
                         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                         resume(with: .failure(EstimateTimeout()))
@@ -1347,9 +1353,6 @@ extension NewDeliveryView {
 // MARK: - Live seam
 
 extension NewDeliveryView.Model {
-    /// `MKDirections`, one request per leg, summed — the map's honest guess until
-    /// provider figures replace it (decision #14). Any leg without a route fails the
-    /// whole estimate: a number covering half the route would be a lie.
     /// `MKDirections`, one request per leg, summed — the map's honest distance
     /// until provider figures land (decision #14; the provider's windows are the
     /// time of record, so no ETA is summed at all). Any leg without a route fails
@@ -1366,8 +1369,7 @@ extension NewDeliveryView.Model {
                 // fallback still gets its turn. Cancellation and every other
                 // error (throttle, auth, the network) rethrow honestly.
                 where error.code == .directionsNotFound
-                    || error.code == .placemarkNotFound
-                    || error.code == .serverFailure {
+                    || error.code == .placemarkNotFound {
                 route = nil
             }
             if route == nil {
