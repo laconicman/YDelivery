@@ -21,9 +21,10 @@ struct DraftPersistenceTests {
     }
 
     private func makeStore() -> StoreController {
+        // A fixture store must not reach the simulator's widget snapshot (YD-26's class).
         StoreController(database: AppDatabase(
             directory: directory, providerAccountRef: "test:unattributed",
-            containerIdentifier: "iCloud.test"))
+            containerIdentifier: "iCloud.test"), republishing: .none)
     }
 
     /// A draft exercising every persisted lane: filled pickup with a contact, an
