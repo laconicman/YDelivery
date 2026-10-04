@@ -110,16 +110,26 @@ extension OrderDetailView {
                                     .foregroundStyle(.secondary)
                             }
                         case .ready(let current):
-                            // Terms are the decision's price stated at the decision —
-                            // bound-flavored while a choice stands; `.unavailable` owes
-                            // nothing, so it stays quiet words.
-                            if current.terms == .unavailable {
+                            // Terms wear their cost: cancelling free is the outcome
+                            // the sender wanted, money leaving is a warning, and
+                            // `.unavailable` owes nothing, so it stays quiet words.
+                            switch current.terms {
+                            case .free:
+                                // TODO: Notice(.success) once the kit tags it
+                                Label {
+                                    Text(current.terms.explanation)
+                                } icon: {
+                                    Image(systemSymbol: .checkmarkCircle)
+                                }
+                                .font(.footnote)
+                                .foregroundStyle(OrderStatus.done.color)
+                            case .paid:
+                                Notice(.warning, current.terms.explanation)
+                                    .font(.footnote)
+                            case .unavailable:
                                 Text(current.terms.explanation)
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
-                            } else {
-                                Notice(.bound, current.terms.explanation)
-                                    .font(.footnote)
                             }
                             if current.terms.isConfirmable {
                                 Button(current.terms.buttonTitle, role: .destructive) {
