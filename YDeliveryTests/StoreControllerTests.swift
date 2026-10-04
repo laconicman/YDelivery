@@ -302,6 +302,37 @@ struct StoreControllerTests {
         #expect(controller.fieldsError == nil)
     }
 
+    /// The write landed; only its confirming re-read could not be made. That debt
+    /// belongs to the read channel — the caller's write did succeed, so nothing
+    /// rethrows and the draft sees an unreadable schema rather than a refused
+    /// write (the finding: one shared catch dressed this as a write failure).
+    @Test("A failed confirming read is a read failure, not a refused write")
+    func confirmingReadFailureIsAReadFailure() async throws {
+        let controller = controller
+        let field = CustomFieldDefinition(name: "А", position: 0)
+        try await controller.saveField(field)
+
+        // The column the re-read orders by disappears — deletes still land (they
+        // key on id), but `SELECT * ORDER BY position` now refuses. A schema
+        // change under the store is the cheapest honest stand-in for an
+        // unreadable read.
+        let database = AppDatabase(
+            directory: directory, providerAccountRef: "test:unattributed",
+            containerIdentifier: "iCloud.test")
+        try await database.queue.write {
+            try $0.execute(sql: "ALTER TABLE \"customFieldDefinitions\" RENAME COLUMN \"position\" TO \"positionRenamed\"")
+        }
+
+        // deleteField swallows nothing falsely here: the write must land and the
+        // task must complete, so the gesture's caller is told of no failure.
+        await controller.deleteField(field.id)
+
+        #expect(controller.fieldsError != nil, "the confirming read failed — the schema is unreadable")
+        #expect(controller.fieldsWriteError == nil, "the write was not refused")
+        // No healthy-looking republication arrived: the stale copy stays as-is.
+        #expect(controller.fieldDefinitions.map(\.name) == ["А"])
+    }
+
     /// The widget snapshot's cap windows history, never liveness: a delivery
     /// started before the newest fifty still reaches the waiting widget —
     /// without the tail pass it would vanish from the surface built to show it

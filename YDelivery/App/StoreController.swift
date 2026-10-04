@@ -366,8 +366,12 @@ final class StoreController {
 
     /// The schema-write serializer: each caller's work runs after the previous
     /// write finished (a failed one must not strand the queue), then republishes the
-    /// schema as the write's own confirmation. Errors land on ``fieldsWriteError``
-    /// *and* propagate — the editor renders them, gestures only record them.
+    /// schema as the write's own confirmation. The two steps fail differently: a
+    /// refused write lands on ``fieldsWriteError`` *and* propagates — the editor
+    /// renders it, gestures only record it — while a failed confirming read is a
+    /// read failure. The write already landed, so nothing rethrows: ``fieldsError``
+    /// says the schema is unreadable and the draft stops believing its stale copy
+    /// is the healthy set (review, PR #104).
     private func enqueueFieldWrite(
         _ work: @escaping @concurrent @Sendable (AppDatabase) async throws -> Void
     ) async throws {
@@ -375,20 +379,24 @@ final class StoreController {
         let prior = fieldWrites
         let task = Task {
             _ = try? await prior?.value
-            try await work(database)
-            fieldDefinitions = try await Self.readFieldDefinitions(database)
-            // The write's confirming re-read succeeded — the schema is readable
-            // (the read error's news is stale) and this write's own debt is paid.
-            fieldsError = nil
-            fieldsWriteError = nil
+            do {
+                try await work(database)
+                fieldsWriteError = nil
+            } catch {
+                fieldsWriteError = error
+                throw error
+            }
+            do {
+                fieldDefinitions = try await Self.readFieldDefinitions(database)
+                // The confirming re-read succeeded — the schema is readable and
+                // the read error's news is stale.
+                fieldsError = nil
+            } catch {
+                fieldsError = error
+            }
         }
         fieldWrites = task
-        do {
-            try await task.value
-        } catch {
-            fieldsWriteError = error
-            throw error
-        }
+        try await task.value
     }
 
     /// Keeps a place and republishes the set.
