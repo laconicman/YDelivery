@@ -412,6 +412,8 @@ order and survive sync. Test fixtures and production data share one store.
 - **Discharge:** a fixture quarantine — prefix-marked writes the seeded paths
   recognise and a cleanup hook that purges them, or a fixture-scoped store the
   seeds can target without touching the sender's data.
+- **Partly discharged** — the schema seed writes an isolated database and
+  deletes its rows (#90); the `--uitest-*` fixtures still write the real store
 
 ## YD-27 — A point's coordinates can drift on a contact-only save — **open**
 
@@ -533,6 +535,33 @@ the wrong queue shipped in TestFlight 1.0 (1) and trapped in the field
 - **Discharge:** a seam that lets a unit test invoke the registered handler from a
   non-main queue, or a UI-test hook that triggers the launch. Either has to stay out of
   the shipped binary: the private selectors are grounds for App Store rejection.
+
+## YD-34 — sqlite-data swallows a re-insert under an existing key — **open**
+
+Upstream `sqlite-data` (1.12.0) loses a row that is deleted and re-inserted under
+the same primary key in one transaction — the exact shape of `recordOrder`'s
+stop/custom-field rewrite and every `INSERT OR REPLACE` rerun. The `afterDelete`
+trigger marks `SyncMetadata._isDeleted` and queues a remote `.deleteRecord`; the
+`afterInsert` trigger's `SyncMetadata.insert` then lands on `ON CONFLICT DO
+NOTHING` against the still-existing metadata row, so `_isDeleted` stays set and
+**no `.saveRecord` is ever queued**. The remote delete ships; the re-created row
+never re-uploads. The row sits locally healthy while every other device loses it.
+
+Found while seeding the development schema (`--ckschema-seed`, 2026-10): a rerun's
+stops never re-serialized, which is why a column added to the row descriptor
+(`building`) could not reach the dev schema until the seed issued a plain UPDATE —
+the one write shape that always re-marks the row save-pending.
+
+- **Cost:** every `recordOrder` remotely deletes the order's `routeStops` and
+  `orderCustomFields`; the local copies persist, so it is silent. Columns added to
+  a synced row type can never reach CloudKit for rows written this way — the
+  serializer only runs on an upload, and no upload is ever queued.
+- **Discharge:** an upstream fix that un-deletes metadata on a conflicting insert
+  (or a report Point-Free accepts); locally, `recordOrder`/`savePlace` could write
+  children as diffed UPDATEs instead of delete+insert. A plain UPDATE
+  (`UPDATE … SET col = col`) re-marks the row save-pending — the minimal
+  repair, proven by the seed's earlier resurrection pass before it moved to an
+  isolated always-fresh database.
 
 ## See Also
 

@@ -493,6 +493,60 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   identities ever become a requirement, the answer is a separate authenticated relay,
   not CloudKit — a different feature, not a flag on this one.
 
+## The development schema, verified (2026-10)
+
+`--ckschema-seed` (DEBUG only) opens an **isolated** `AppDatabase` in
+`Application Support/ckschema-seed/` — removed and recreated per run, provider
+account `yandex:ckschema-seed`, same CloudKit container — writes one fully
+populated row per synchronized table, flushes, then deletes every seeded row
+children-first and flushes again so the tombstones ship. The real store's
+`startSync()` is skipped on a seed launch, so nothing the seed writes can sit
+in the sender's data (the earlier store-sharing seed is the YD-26 class).
+`--ckschema-seed-clean` reopens that directory and deletes by the deterministic
+ids, for a run that died between flushes.
+
+`xcrun cktool export-schema --environment development` after a run on a
+development-signed device confirms **all sixteen** custom record types exist
+with every declared column present as a field — NULL columns never become
+fields, so presence is proof the write carried a value:
+
+- **Shared tier:** `orders` (5), `routeStops` (20 — all `AddressParts`,
+  `contact*` and `visit*` fields), `orderItems` (12 — both `*StopRef` value
+  references), `orderProviderStates` (16 — `corpClientID`/`dueAt`/`finishedAt`/
+  `providerDetail` included), `orderOptions` (7), `orderCustomFields` (6),
+  `providerEvents` (8), `orderMessages` (7 — `attachmentRef`, `authorHint`),
+  `orderAttachments` (7), `attachmentBlobs` (`data` lands as a CKAsset plus its
+  `data_hash`).
+- **Private tier:** `providerAccounts` (6), `orderPrivateStates` (4),
+  `savedPlaces` (16 — `pinned` included), `customFieldDefinitions` (8),
+  `parcelTemplates` (3 — `id`, `name`, `pinned`), `parcelTemplateItems`
+  (11 — `templateID` and every parcel measure).
+- **Device tier produces no record types by design:** `syncStates`,
+  `pendingDiscoveries`, `pendingAcceptances`, `orderDrafts`, `draftStops`,
+  `draftItems`, `draftCustomFields` are not registered with the engine.
+
+Every child record carries `parent` to `orders` via its single declared FK;
+`*Ref` columns are plain string fields, matching the value-reference convention.
+Each row also carries `sqlitedata_icloud_userModificationTime` plus a per-field
+companion — the substrate's LWW bookkeeping — which is expected, not seed noise.
+
+Earlier seed runs surfaced two findings, both fixed: issued provisioning
+profiles encode `icloud-services` as the wildcard string `"*"`, which the
+entitlement gate false-rejected (Kit fix), and `building` existed in the DDL
+but not in the `@Table` descriptors, so it could never serialize (Kit fix).
+
+The seeded order is `.cancelled` under claim `ckschema-seed-claim`: a run that
+dies between flushes can never read as a live delivery or start a Live
+Activity, and the clean flag takes the residue back. Because the directory is
+fresh, every write is a first INSERT — no prior tombstone exists under the
+deterministic keys, so the YD-34 swallow never fires and no resurrection
+UPDATEs remain. The production exposure in `recordOrder` stays open as
+<doc:TechDebt> **YD-34**: rows written by delete+insert or
+`INSERT OR REPLACE` are remotely deleted and never re-saved.
+
+Nothing here promotes anything: the schema lives in **development**, and
+"Deploy Schema Changes" in CloudKit Console remains a deliberate, separate act.
+
 ## See Also
 
 - <doc:Collaboration> — the stack research and grant model this schema implements

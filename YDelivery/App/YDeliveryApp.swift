@@ -56,12 +56,18 @@ struct YDeliveryApp: App {
         }
         // CloudKit sync starts at launch, entitlement or not — `startSync` probes and
         // degrades to a logged, stored failure rather than a CKContainer trap.
-        _syncTask = State(initialValue: Task { await database?.startSync() })
+        // Except the schema-seed launches: those drive their own isolated store
+        // and the real one must never sync its rows.
+        _syncTask = State(initialValue: Task {
+            guard !Self.isCloudKitSeed, !Self.isCloudKitSeedClean else { return }
+            await database?.startSync()
+        })
         _session = State(initialValue: session)
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
         _notifications = State(initialValue: notifications)
-        _activities = State(initialValue: LiveActivityController(reconciles: !Self.isHistoryFixture))
+        _activities = State(initialValue: LiveActivityController(
+            reconciles: !(Self.isHistoryFixture || Self.isCloudKitSeed)))
         // The share-acceptance bridge — the delegates are UIKit-instantiated,
         // so the database reaches them through this property, not an init.
         // It goes through the store, not the database: accepting also re-reads
@@ -72,6 +78,8 @@ struct YDeliveryApp: App {
         Task {
             await Self.seedFieldsIfFlagged(store)
             await Self.seedHistoryIfFlagged(store, database: database)
+            await Self.seedCloudKitSchemaIfFlagged()
+            await Self.cleanCloudKitSeedIfFlagged()
         }
         #endif
     }
@@ -103,7 +111,10 @@ struct YDeliveryApp: App {
 
     /// The App Group database — or, for the fixture launch, a throwaway one in a
     /// fresh directory with a container that resolves to nothing (`startSync`
-    /// degrades to a logged failure, as it does on any unentitled install).
+    /// degrades to a logged failure, as it does on any unentitled install). The
+    /// `--ckschema-seed` launch keeps the real store too — the seed drives its
+    /// own isolated database, so the store below is constructed but never
+    /// started (see the launch `syncTask`).
     private static func database() -> AppDatabase? {
         guard !isHistoryFixture else {
             return AppDatabase(
@@ -121,15 +132,20 @@ struct YDeliveryApp: App {
     /// The fixture launch reads a Keychain service no sign-in ever writes, so the
     /// session starts signed out and the sync engine never calls the provider —
     /// a saved token would otherwise pull the account's real orders into the
-    /// fixture store.
+    /// fixture store. The schema seed shares the service for the same reason,
+    /// minus the pull: a signed-out session can never touch the provider API,
+    /// which a schema-population run has no business paying against.
     private static func tokenStore() -> TokenStore {
-        isHistoryFixture ? TokenStore(service: "uitest.YDelivery") : TokenStore()
+        isHistoryFixture || isCloudKitSeed
+            ? TokenStore(service: "uitest.YDelivery") : TokenStore()
     }
 
     /// The fixture store publishes nowhere — its reads must not reach the
-    /// system surfaces that belong to the real history.
+    /// system surfaces that belong to the real history. The schema seed
+    /// publishes nowhere either: its order exists to create CloudKit record
+    /// types, not to pose as history on the owner's widget or Spotlight.
     private static func republication() -> StoreController.Republication {
-        isHistoryFixture ? .none : .systemSurfaces
+        isHistoryFixture || isCloudKitSeed ? .none : .systemSurfaces
     }
 
     #if DEBUG
