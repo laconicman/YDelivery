@@ -24,13 +24,15 @@ extension LibraryView {
         @Environment(\.dismiss) private var dismiss
 
         init(template: ParcelTemplate? = nil,
-             save: @escaping (ParcelTemplate) async throws -> Void) {
+             save: @escaping (ParcelTemplate) async throws -> Void,
+             keepError: String? = nil) {
             self.template = template
             self.save = save
             _name = State(initialValue: template?.name ?? "")
             let firstItem = template?.items.first.map(ParcelItem.init(templateItem:)) ?? ParcelItem()
             _item = State(initialValue: firstItem)
             _hasSize = State(initialValue: firstItem.size != nil)
+            _failure = State(initialValue: keepError)
         }
 
         /// Save's bound — the library needs a name to say the entry with, and
@@ -164,9 +166,15 @@ extension LibraryView {
 }
 
 #Preview("The store could not keep it") {
+    let template = ParcelTemplate(
+        name: "Keyboard", pinned: false,
+        items: [ParcelTemplate.Item(name: "Mechanical keyboard", quantity: 1,
+                                    weightKg: 0.9, cost: "4500", currency: "RUB",
+                                    sizeLengthCm: 45, sizeWidthCm: 15, sizeHeightCm: 3)])
     Color.clear.sheet(isPresented: .constant(true)) {
-        LibraryView.ParcelTemplateEditor { _ in
-            throw StoreController.StoreUnavailable()
-        }
+        LibraryView.ParcelTemplateEditor(
+            template: template,
+            save: { _ in throw StoreController.StoreUnavailable() },
+            keepError: StoreController.StoreUnavailable().localizedDescription)
     }
 }
