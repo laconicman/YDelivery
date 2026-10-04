@@ -58,15 +58,20 @@ extension NewDeliveryView {
                             // here beside the bounds rather than a screen-height
                             // below them. A missing CTA reads as a dead sheet; a
                             // greyed one says these rows are what's left between
-                            // the sender and the order.
-                            Button(action: confirm) {
-                                Text(priceText.map { "Order for \($0)" } ?? "Order")
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
+                            // the sender and the order. Only while ordering has not
+                            // begun, though: blockers can stay non-empty past
+                            // placement, and a placed or unresolved order must not
+                            // sit under a disabled Order action it no longer owns.
+                            if ordering == .idle || ordering == .queued {
+                                Button(action: confirm) {
+                                    Text(priceText.map { "Order for \($0)" } ?? "Order")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.large)
+                                .disabled(true)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                            .disabled(true)
                         }
                     }
 
