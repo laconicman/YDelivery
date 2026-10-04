@@ -141,8 +141,26 @@ extension NewDeliveryView {
         /// A blocker's field door, landed: the root sets the row to bring into
         /// view; `onScrolled` clears it so the next door to the same row still
         /// reads as a change. Plain value + closure, like every other input.
-        var scrollTarget: NewDeliveryView.Model.ScrollAnchor? = nil
+        var scrollTarget: ScrollAnchor? = nil
         var onScrolled: () -> Void = {}
+
+        /// Where a bound's door lands on the draft card — a row id, or the strip
+        /// itself for the class bound (review, PR #104). Rows answer to their
+        /// subject's raw id; `.tariffStrip` answers to its constant. The view's
+        /// own type: presentation state stays out of the model (REVIEW.md).
+        enum ScrollAnchor: Hashable {
+            case field(UUID)
+            case item(UUID)
+            case stop(UUID)
+            case tariffStrip
+
+            var id: AnyHashable {
+                switch self {
+                case .field(let id), .item(let id), .stop(let id): id
+                case .tariffStrip: "tariffStrip"
+                }
+            }
+        }
         let setFieldValue: (UUID, String) -> Void
         let revealField: (UUID) -> Void
         let editOptions: (NewDeliveryView.OptionsEditor.Focus) -> Void

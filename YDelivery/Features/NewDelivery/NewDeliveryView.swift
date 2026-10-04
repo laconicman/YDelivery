@@ -39,7 +39,7 @@ struct NewDeliveryView: View {
     @State private var showsExplainer = false
     /// The row a blocker's door is scrolling to — cleared once the card has
     /// brought it into view, so a second door to the same row still lands.
-    @State private var scrollTarget: Model.ScrollAnchor?
+    @State private var scrollTarget: Content.ScrollAnchor?
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @Environment(ClaimsSyncController.self) private var sync

@@ -39,8 +39,15 @@ final class StoreController {
     /// A schema write landed but its confirming read failed — the published
     /// definitions are older than the disk and must not be trusted for validation,
     /// even though they are populated (review, PR #104). Cleared by the next read
-    /// of definitions that succeeds, wherever it came from.
+    /// of definitions that succeeds, wherever it came from — gated by
+    /// ``fieldWriteGeneration`` so a read that began before a write landed cannot
+    /// clear the debt the write's failed confirming read recorded (review, PR #105).
     private(set) var fieldsCacheIsStale = false
+    /// How many field writes have landed. A schema read captures it up front and
+    /// is trusted only while the number still stands: a write that landed
+    /// mid-read may carry a failed confirming read, which an in-flight refresh
+    /// must never sweep away (review, PR #105). `internal` for the tests.
+    private(set) var fieldWriteGeneration = 0
     /// The write side of the same seam — a gesture the store could not carry. A
     /// reread cannot fix it, so ``refresh()`` leaves it standing; only the next
     /// successful field write clears it.
@@ -215,13 +222,11 @@ final class StoreController {
                 placesError = error
             }
             do {
-                fieldDefinitions = try await Self.readFieldDefinitions(database)
-                orderFields = try await Self.readOrderFields(database)
-                fieldsError = nil
-                fieldsCacheIsStale = false
+                try await republishFieldSchema(database)
             } catch {
                 fieldsError = error
             }
+
             do {
                 parcelTemplates = try await Self.readParcelTemplates(database)
                 templatesError = nil
@@ -234,6 +239,37 @@ final class StoreController {
         } else {
             hasLoaded = true
             hasLoadedPlaces = true
+        }
+    }
+
+    /// Publishes a field-schema read — but clears ``fieldsCacheIsStale`` only
+    /// while no write landed since the read began. A refresh that suspended
+    /// mid-read must not unlock a schema a later write left unconfirmed
+    /// (review, PR #105): a landed write forces one bounded re-read through
+    /// the same guard, after which a *second* landed write leaves the flag
+    /// standing for the next read.
+    private func republishFieldSchema(_ database: AppDatabase) async throws {
+        var generation = fieldWriteGeneration
+        var definitions = try await Self.readFieldDefinitions(database)
+        var fields = try await Self.readOrderFields(database)
+        if fieldWriteGeneration != generation {
+            generation = fieldWriteGeneration
+            definitions = try await Self.readFieldDefinitions(database)
+            fields = try await Self.readOrderFields(database)
+        }
+        fieldDefinitions = definitions
+        orderFields = fields
+        fieldsError = nil
+        clearStaleFieldCacheIfUnwritten(since: generation)
+    }
+
+    /// Clears the stale mark only while the generation a read observed still
+    /// stands — a write landed since means that read may already predate it.
+    /// `internal` so the tests can drive the guard directly: a real read
+    /// cannot be paused mid-flight without standing a write up inside it.
+    func clearStaleFieldCacheIfUnwritten(since generation: Int) {
+        if fieldWriteGeneration == generation {
+            fieldsCacheIsStale = false
         }
     }
 
@@ -387,6 +423,7 @@ final class StoreController {
             _ = try? await prior?.value
             do {
                 try await work(database)
+                fieldWriteGeneration += 1
                 fieldsWriteError = nil
             } catch {
                 fieldsWriteError = error
