@@ -40,9 +40,10 @@ final class ListingStripScreenshotTests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(firstStop.waitForExistence(timeout: 15))
         let pricedCTA = app.buttons.containing(
-            NSPredicate(format: "label CONTAINS %@", "RUB")
+            NSPredicate(format: "label CONTAINS '₽' OR label CONTAINS 'RUB'")
         ).firstMatch
-        _ = pricedCTA.waitForExistence(timeout: 10)
+        XCTAssertTrue(pricedCTA.waitForExistence(timeout: 15),
+                      "the priced CTA must render before the first shot")
         snap("0-draft-map-priced")
 
         // The strip lives below the stops; item summaries carry ₽ too, so the anchor
