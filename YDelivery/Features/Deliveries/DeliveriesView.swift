@@ -42,6 +42,7 @@ struct DeliveriesView: View {
                 filter: $filter,
                 searchText: $searchText,
                 expandedID: model.expandedID,
+                pendingID: model.pendingID,
                 trail: model.trail,
                 trailError: model.trailError,
                 historyUnavailable: store.historyUnavailable,
@@ -108,8 +109,9 @@ extension DeliveriesView {
         /// must not wear «nothing reported» (review, PR #77).
         private(set) var trailError: String?
         /// The row whose trail is being read — opening is one publish, so a tap
-        /// on a still-opening row must know about it to close.
-        private var pendingID: UUID?
+        /// on a still-opening row must know about it to close; published so the
+        /// row can answer the wait with a spinner (review, PR #118).
+        private(set) var pendingID: UUID?
         /// The pending open's task — its own handle: a republish re-read must
         /// never cancel an open in flight, nor an open cancel a re-read.
         private var opening: Task<Void, Never>?
@@ -157,6 +159,10 @@ extension DeliveriesView {
             }
             guard expandedID != id else {
                 refreshing?.cancel()
+                // The collapse cancelled `opening` above — drop its marker too,
+                // or a third tap on that row is needed to open it (review, PR
+                // #118: A open → B pending → tap A → tap B must open B).
+                pendingID = nil
                 withAnimation(reduceMotion ? nil : .default) {
                     generation += 1
                     expandedID = nil
@@ -296,6 +302,8 @@ extension DeliveriesView {
     nonisolated enum HistorySort: String, CaseIterable, Codable, Sendable {
         case newestFirst
         case oldestFirst
+        /// Numeric amounts compared raw — the account is single-currency (RUB).
+        /// A mixed-currency account would need converted values first.
         case priceHighFirst
 
         var words: String {
@@ -365,7 +373,11 @@ extension DeliveriesView.Content.Row {
             statusObservedAt: order.providerObservedAt,
             created: order.created,
             createdText: order.created.formatted(date: .abbreviated, time: .shortened),
-            price: order.price.flatMap { Decimal(string: $0) },
+            // The wire's decimal is POSIX dot — parsing it under a comma-decimal
+            // locale drops the fraction (`priceText` reads it the same way).
+            price: order.price.flatMap {
+                Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX"))
+            },
             destinationText: destination?.compactAddress ?? origin?.compactAddress ?? "",
             originText: hasOrigin ? origin?.compactAddress : nil,
             middleStops: hasOrigin ? max(0, (destinationIndex ?? 0) - 1) : 0,

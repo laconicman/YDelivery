@@ -10,7 +10,8 @@ import YDeliveryKit
 struct DeliveriesRowsTests {
     private func order(
         status: OrderStatus, created: TimeInterval, addresses: [String],
-        contacts: [String?]? = nil, providerStatus: String? = nil
+        contacts: [String?]? = nil, providerStatus: String? = nil,
+        price: String = "1200"
     ) -> Order {
         Order(
             created: .init(timeIntervalSince1970: created), status: status,
@@ -18,7 +19,7 @@ struct DeliveriesRowsTests {
                 RoutePoint(latitude: 55, longitude: 37, address: address,
                            contactName: contacts?[index] ?? nil)
             },
-            price: "1200", currency: "RUB", claimID: "c",
+            price: price, currency: "RUB", claimID: "c",
             providerStatus: providerStatus,
             providerObservedAt: providerStatus == nil ? nil : .init(timeIntervalSince1970: created + 600))
     }
@@ -243,6 +244,50 @@ struct DeliveriesRowsTests {
         #expect(model.expandedID == a)
         #expect(model.trail?.map(\.providerEventID) == [1])
         #expect(model.trailError == nil)
+    }
+
+    @Test("The wire's dot decimal parses — a comma-decimal locale can't inflate it")
+    func wirePriceParsesPOSIX() {
+        let row = DeliveriesView.Content.Row(
+            order: order(status: .done, created: 1, addresses: ["A, 1", "B, 2"],
+                         price: "1767.78"),
+            fieldValues: [])
+        #expect(row.price == Decimal(string: "1767.78",
+                                     locale: Locale(identifier: "en_US_POSIX")))
+        #expect(row.price == 1767.78,
+                "the wire's dot is a decimal point even where ',' is the separator")
+        #expect(row.price != Decimal(string: "1767.78",
+                                     locale: Locale(identifier: "de_DE")),
+                "…where the comma would carry the fraction and the dot is foreign")
+    }
+
+    @Test("Collapsing the open row clears a pending tap too — B opens on its next tap")
+    func collapseClearsPendingTap() async {
+        let model = DeliveriesView.Model()
+        let a = UUID(), b = UUID()
+        func event(_ id: Int64, order: UUID) -> ProviderEvent {
+            ProviderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+                          providerStatus: "pickuped", source: "journal")
+        }
+        model.toggleTrail(of: a) { [event(1, order: a)] }
+        for _ in 0..<50 where model.expandedID == nil { await Task.yield() }
+        #expect(model.expandedID == a)
+        // B's open is in flight; the sender taps A instead — A collapses and
+        // B's pending open dies with it, not just its task.
+        let gate = Gate()
+        model.toggleTrail(of: b) {
+            await gate.wait()
+            return [event(9, order: b)]
+        }
+        await Task.yield()
+        model.toggleTrail(of: a) { [event(1, order: a)] }
+        #expect(model.expandedID == nil && model.trail == nil)
+        // B's next tap must open it — not cancel a pending marker left behind.
+        model.toggleTrail(of: b) { [event(9, order: b)] }
+        for _ in 0..<50 where model.expandedID != b { await Task.yield() }
+        #expect(model.expandedID == b)
+        #expect(model.trail?.map(\.providerEventID) == [9])
+        await gate.release()
     }
 
     @Test("A republish re-read that outlives a reopen never overwrites the newer trail")
