@@ -28,6 +28,12 @@ struct CustomFieldsView: View {
                         .font(.footnote)
                 }
             }
+            if let fieldsWriteError = store.fieldsWriteError {
+                // A refused write is not a read problem: rereading cannot fix it,
+                // so there is no Retry — redoing the edit is the retry, and the
+                // next successful write clears this itself.
+                Notice(.error, fieldsWriteError.localizedDescription)
+            }
             ForEach(store.fieldDefinitions) { field in
                 Button {
                     editing = field

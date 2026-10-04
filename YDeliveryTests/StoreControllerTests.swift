@@ -283,6 +283,25 @@ struct StoreControllerTests {
         #expect(controller.fieldsError == nil)
     }
 
+    /// A write the store could not carry is a different failure from an unread
+    /// schema: it lands on its own channel, and no reread can pay it — only the
+    /// next successful write clears it.
+    @Test("A failed field write keeps its warning through a refresh")
+    func writeErrorOutlivesRefresh() async {
+        // Containerless: every write refuses, and refresh() reads nothing.
+        let controller = StoreController(database: nil, republishing: .none)
+
+        await controller.deleteField(UUID())
+
+        #expect(controller.fieldsWriteError != nil, "the gesture that failed says so")
+        #expect(controller.fieldsError == nil, "nothing was read, so nothing failed to read")
+
+        await controller.refresh()
+
+        #expect(controller.fieldsWriteError != nil, "a reread cannot pay a write's debt")
+        #expect(controller.fieldsError == nil)
+    }
+
     /// The widget snapshot's cap windows history, never liveness: a delivery
     /// started before the newest fifty still reaches the waiting widget —
     /// without the tail pass it would vanish from the surface built to show it

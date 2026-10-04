@@ -36,6 +36,10 @@ final class StoreController {
     /// The fields side of the seam — a schema that failed to read is a draft showing
     /// no fields, which is exactly the state to tell apart from "nothing configured".
     private(set) var fieldsError: (any Error)?
+    /// The write side of the same seam — a gesture the store could not carry. A
+    /// reread cannot fix it, so ``refresh()`` leaves it standing; only the next
+    /// successful field write clears it.
+    private(set) var fieldsWriteError: (any Error)?
     /// The parcel library's side of the seam — same rule: a template list that
     /// could not be read must not render as an empty one (the chip row's
     /// absence would otherwise read as "you have saved nothing").
@@ -343,27 +347,27 @@ final class StoreController {
             reindexSpotlightIfHealthy()
             renderWidgetSnapshotIfHealthy()
         } catch {
-            fieldsError = error
+            fieldsWriteError = error
         }
     }
 
     /// Forgets a definition — values already on orders keep their name snapshot.
     /// Mirrors ``deletePlace(_:)``: nobody renders a thrown error, so a failure lands
-    /// on ``fieldsError``.
+    /// on ``fieldsWriteError``.
     func deleteField(_ id: CustomFieldDefinition.ID) async {
         do {
             try await enqueueFieldWrite { try $0.deleteFieldDefinition(id: id) }
             reindexSpotlightIfHealthy()
             renderWidgetSnapshotIfHealthy()
         } catch {
-            fieldsError = error
+            fieldsWriteError = error
         }
     }
 
     /// The schema-write serializer: each caller's work runs after the previous
     /// write finished (a failed one must not strand the queue), then republishes the
-    /// schema as the write's own confirmation. Errors land on ``fieldsError`` *and*
-    /// propagate — the editor renders them, gestures only record them.
+    /// schema as the write's own confirmation. Errors land on ``fieldsWriteError``
+    /// *and* propagate — the editor renders them, gestures only record them.
     private func enqueueFieldWrite(
         _ work: @escaping @concurrent @Sendable (AppDatabase) async throws -> Void
     ) async throws {
@@ -373,13 +377,16 @@ final class StoreController {
             _ = try? await prior?.value
             try await work(database)
             fieldDefinitions = try await Self.readFieldDefinitions(database)
+            // The write's confirming re-read succeeded — the schema is readable
+            // (the read error's news is stale) and this write's own debt is paid.
             fieldsError = nil
+            fieldsWriteError = nil
         }
         fieldWrites = task
         do {
             try await task.value
         } catch {
-            fieldsError = error
+            fieldsWriteError = error
             throw error
         }
     }

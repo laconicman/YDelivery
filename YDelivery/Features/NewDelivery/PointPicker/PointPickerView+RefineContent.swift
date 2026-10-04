@@ -188,8 +188,10 @@ extension PointPickerView.RefineContent {
                         .foregroundStyle(.secondary)
                 }
                 if let errorText {
-                    // A geocode miss is a failed read, not an error — quiet words,
-                    // and the address field above stays the retry.
+                    // A geocode miss is a failed read, not an error — quiet words.
+                    // With a pin the address field above stays the retry; without
+                    // one there is no field to fix — the retry is the search field
+                    // or another map tap, as the invitation line above already says.
                     Label(errorText, systemSymbol: .exclamationmarkTriangle)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
