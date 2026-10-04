@@ -221,11 +221,9 @@ Library tab. Search reaches both lists. Two evenings.
 - **Push relay** (Cloudflare Worker or edgepush; webhook `callback_url` must end `?`/`&`) —
   its own repo, evaluated with DeepWiki before adoption; unlocks background Live Activity
   updates.
-- **Offer windows as the tariff differentiator**: same-class offers differ only
-  by price today (YD-32) — `pickupInterval`/`deliveryInterval` on the card lets
-  the sender compare on speed, the provider's `description` names each variant;
-  `expected_visit_interval` on order-detail points answers when the courier
-  reaches each door. All fields already ride the wire; app-side display only.
+- **Per-stop arrival windows on the order detail** — `expected_visit_interval` on
+  the points answers when the courier reaches each door; display only, the field
+  already rides the wire. (The tariff cards' windows themselves moved to Now.)
 - Handoff codes, proof of delivery, edit/return, `delivery-methods` windows.
 - Archive a finished order — `OrderPrivateState.archivedAt`, the seed carries it,
   participants unaffected.
