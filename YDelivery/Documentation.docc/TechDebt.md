@@ -454,6 +454,31 @@ easy to miss.
 - **Discharge:** one hit-target pass on the describe form — target frames and
   focus order verified where pills sit beside the contact fields.
 
+## YD-31 — Route estimate rides a region-gated graph — **open**
+
+Device-drive finding: `MKDirections` `.automobile` returned a ~90 m/16 s stub for
+a 5.3 km Moscow route instead of failing — on-device proof that driving coverage
+degenerates rather than erroring in Russia (the same device routes 4 km in NYC
+correctly; `.walking` returned the real 6.2 km; `.transit` errors honestly with
+`MKErrorDomain 5`; `.any` resolves to automobile and degenerates the same way).
+The estimator now gates each leg against the geodesic — a road route can never
+be shorter than the straight line between its ends — and retries the leg as
+`.walking`, so distance and the map curve stay true at pedestrian pace.
+
+- **Cost:** the estimate's time side reads as walking pace even for vehicle
+  classes (cargo, express), and the polyline is foot geometry — honest today,
+  wrong-flavored for a van.
+- **Discharge:** tie transport to the tariff's vehicle class — foot for
+  courier, automobile-with-the-same-geodesic-gate for cargo/express — and once
+  offers land, take the time side from `deliveryInterval`/`pickupInterval`
+  (the provider's own courier ETA beats MapKit's pace). If real road curves are
+  ever wanted, MKDirections cannot supply them here — Yandex MapKit Router,
+  2GIS, or OSRM are the realistic geometry sources; no `.bicycle` mode exists
+  in `MKDirectionsTransportType` for a cycling estimate. Apple's availability
+  page lists Russia under Turn-by-Turn Navigation but not Transit/Cycling, so
+  the service tier visibly trails the advertised list — re-probe `.transit`
+  and `.automobile` on major OS releases.
+
 ## YD-33 — The background-refresh launch handler has no automated test — **open**
 
 The handler registered in `YDeliveryApp.init()` only runs when iOS launches a

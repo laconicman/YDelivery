@@ -1289,16 +1289,11 @@ extension NewDeliveryView.Model {
         var time: TimeInterval = 0
         var legs: [[RouteEstimate.Coordinate]] = []
         for (from, to) in zip(waypoints, waypoints.dropFirst()) {
-            let request = MKDirections.Request()
-            request.source = MKMapItem(placemark: MKPlacemark(
-                coordinate: CLLocationCoordinate2D(latitude: from.latitude, longitude: from.longitude)
-            ))
-            request.destination = MKMapItem(placemark: MKPlacemark(
-                coordinate: CLLocationCoordinate2D(latitude: to.latitude, longitude: to.longitude)
-            ))
-            request.transportType = .automobile
-            let response = try await MKDirections(request: request).calculate()
-            guard let route = response.routes.first else { throw NoRouteFound() }
+            var route = try await routeLeg(from: from, to: to, transportType: .automobile)
+            if route == nil {
+                route = try await routeLeg(from: from, to: to, transportType: .walking)
+            }
+            guard let route else { throw NoRouteFound() }
             distance += route.distance
             time += route.expectedTravelTime
             legs.append(route.polyline.coordinateRun)
@@ -1306,11 +1301,43 @@ extension NewDeliveryView.Model {
         return RouteEstimate(distanceMeters: distance, travelTime: time, legs: legs)
     }
 
+    /// One `MKDirections` leg — `nil` when the service has no route, and also when
+    /// it returns a degenerate stub: in regions without driving-directions coverage
+    /// (e.g. Russia) an automobile request "succeeds" with a ~90 m loop instead of
+    /// failing honestly. A real road route can never be shorter than the
+    /// straight-line distance between its endpoints, so a result under the geodesic
+    /// is coverage collapsing, not a road — the caller retries on foot (couriers in
+    /// dense centers are pedestrian anyway; the curve and distance stay true).
+    private nonisolated static func routeLeg(
+        from: RouteEstimate.Coordinate, to: RouteEstimate.Coordinate,
+        transportType: MKDirectionsTransportType
+    ) async throws -> MKRoute? {
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(
+            coordinate: CLLocationCoordinate2D(latitude: from.latitude, longitude: from.longitude)
+        ))
+        request.destination = MKMapItem(placemark: MKPlacemark(
+            coordinate: CLLocationCoordinate2D(latitude: to.latitude, longitude: to.longitude)
+        ))
+        request.transportType = transportType
+        let response = try await MKDirections(request: request).calculate()
+        guard let route = response.routes.first else { return nil }
+        // Snap tolerance: endpoints move meters to the nearest road, so the tripwire
+        // fires only when the answer is an order of magnitude too short.
+        let straightLine = from.location.distance(from: to.location)
+        guard route.distance >= straightLine * 0.9 else { return nil }
+        return route
+    }
+
     nonisolated struct NoRouteFound: LocalizedError {
         var errorDescription: String? {
             String(localized: "No drivable route between these points.")
         }
     }
+}
+
+private nonisolated extension RouteEstimate.Coordinate {
+    var location: CLLocation { CLLocation(latitude: latitude, longitude: longitude) }
 }
 
 private nonisolated extension MKPolyline {
