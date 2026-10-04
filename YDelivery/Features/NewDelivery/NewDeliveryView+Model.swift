@@ -1135,23 +1135,6 @@ extension NewDeliveryView {
             revealedFieldIDs.insert(id)
         }
 
-        /// Where a bound's door lands on the draft card — a row id, or the strip
-        /// itself for the class bound (review, PR #104). Rows answer to their
-        /// subject's raw id; `.tariffStrip` answers to its constant.
-        nonisolated enum ScrollAnchor: Hashable {
-            case field(UUID)
-            case item(UUID)
-            case stop(UUID)
-            case tariffStrip
-
-            var id: AnyHashable {
-                switch self {
-                case .field(let id), .item(let id), .stop(let id): id
-                case .tariffStrip: "tariffStrip"
-                }
-            }
-        }
-
         /// What a choice field's picker offers — the authored choices, plus the
         /// carried answer when a repeated order holds one the schema has since
         /// dropped. Without it the picker would look unanswered while the value

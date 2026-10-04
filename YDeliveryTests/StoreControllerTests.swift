@@ -345,6 +345,45 @@ struct StoreControllerTests {
         #expect(controller.fieldDefinitions.isEmpty, "the delete did land")
     }
 
+    /// A refresh that suspended mid-read fetched its definitions before the
+    /// write whose confirming read failed — clearing on that copy would unlock
+    /// a schema the store never confirmed. The generation guard is what
+    /// refuses; the write seam below stands the same state up without pausing
+    /// a live read (one cannot be suspended halfway, so the test drives the
+    /// guard's decision directly: review, PR #105).
+    @Test("A refresh begun before a stale-making write cannot clear the flag")
+    func inFlightReadCannotClearStaleFlag() async throws {
+        let controller = controller
+        let field = CustomFieldDefinition(name: "А", position: 0)
+        try await controller.saveField(field)
+        // The generation a refresh would have captured before the write.
+        let observed = controller.fieldWriteGeneration
+
+        // A write lands whose confirming read fails — same stand-in as the
+        // test above: the ORDER BY column is gone until the gesture ends.
+        let database = AppDatabase(
+            directory: directory, providerAccountRef: "test:unattributed",
+            containerIdentifier: "iCloud.test")
+        try await database.queue.write {
+            try $0.execute(sql: "ALTER TABLE \"customFieldDefinitions\" RENAME COLUMN \"position\" TO \"positionRenamed\"")
+        }
+        await controller.deleteField(field.id)
+        #expect(controller.fieldsCacheIsStale)
+        #expect(controller.fieldWriteGeneration > observed,
+                "the landed write advanced the generation")
+
+        // The in-flight refresh completes and tries to trust its pre-write
+        // copy — the guard holds the debt.
+        controller.clearStaleFieldCacheIfUnwritten(since: observed)
+        #expect(controller.fieldsCacheIsStale,
+                "a generation that predates the write cannot clear the flag")
+
+        // A read taken after the write — the retry's own generation — does.
+        controller.clearStaleFieldCacheIfUnwritten(
+            since: controller.fieldWriteGeneration)
+        #expect(!controller.fieldsCacheIsStale)
+    }
+
     /// The widget snapshot's cap windows history, never liveness: a delivery
     /// started before the newest fifty still reaches the waiting widget —
     /// without the tail pass it would vanish from the surface built to show it

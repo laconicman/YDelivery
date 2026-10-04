@@ -49,7 +49,7 @@ Six systemic gaps, each visible on a shipping screen:
    right job.
 5. **The CTA is mute about readiness.** `OrderBar` renders «Order Courier ·
    RUB 3,095.14» — a named, priced promise — while `orderBlockers` is non-empty
-   (`canOrder` is `selectedOffer != nil`, blind to every other bound). The review
+   (its only gate was `selectedOffer != nil`, blind to every other bound). The review
    sheet knows the truth; the bar presents as ready.
 6. **One line, two languages — by accident.** Field names render the sender's own
    vocabulary («Заказ») beside English hint prose and English bound sentences. That

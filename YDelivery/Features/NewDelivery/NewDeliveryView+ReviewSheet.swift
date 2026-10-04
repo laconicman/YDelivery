@@ -212,9 +212,10 @@ extension NewDeliveryView {
                         Text("Order placed — finding a courier")
                             .font(.headline)
                         if let recordWarning {
-                            Text(recordWarning)
+                            // The wire succeeded and the disk did not — an uncertain
+                            // memory, not a refused action: warning, not error.
+                            Notice(.warning, recordWarning)
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
                             // The order exists; this draft holds the only copy of it that
                             // has not been written down. Done would retire the draft and
                             // take that copy with it, so the offer here is to write it
@@ -240,8 +241,9 @@ extension NewDeliveryView {
                     }
                     .frame(maxWidth: .infinity)
                 case .failed(let reason):
+                    // A definite refusal — the error role: retrying re-asks.
                     VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
-                        Label(reason, systemSymbol: .exclamationmarkTriangle)
+                        Notice(.error, reason)
                             .font(.subheadline)
                         Button("Try again", action: confirm)
                     }
@@ -250,7 +252,9 @@ extension NewDeliveryView {
                     // again could buy a second delivery. The honest next step is to look
                     // at what exists before doing anything (review, PR #22).
                     VStack(alignment: .leading, spacing: Layout.Spacing.unit) {
-                        Label(reason, systemSymbol: .questionmarkCircle)
+                        // The answer was lost, not refused — uncertain is warning's
+                        // seat, never error's.
+                        Notice(.warning, reason)
                             .font(.subheadline)
                         Text("Check Deliveries before ordering again — this one may have gone through.")
                             .font(.footnote)
@@ -362,6 +366,72 @@ private extension NewDeliveryView.Model.Blocker.Destination {
             blockers: [],
             ordering: .placed,
             recordWarning: nil,
+            confirm: {},
+            done: {}
+        )
+    }
+}
+
+#Preview("Failed — a refused write") {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        NewDeliveryView.ReviewSheet(
+            stops: [
+                .init(id: UUID(), badge: .start, address: "Москва, ул Москворечье, 6", contact: "Иван Петров"),
+                .init(id: UUID(), badge: .end, address: "Москва, Каширское шоссе, 52", contact: "Анна Сидорова"),
+            ],
+            itemLines: ["Ноутбук — 1 pcs · 60 000 ₽"],
+            optionsLine: "to the door",
+            whenLine: "as soon as possible",
+            tariffName: "Express",
+            priceText: "1 190 ₽",
+            blockers: [],
+            ordering: .failed("The provider refused the offer — the door-to-door option changed."),
+            recordWarning: nil,
+            confirm: {},
+            done: {}
+        )
+    }
+}
+
+#Preview("Unresolved — the answer was lost") {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        NewDeliveryView.ReviewSheet(
+            stops: [
+                .init(id: UUID(), badge: .start, address: "Москва, ул Москворечье, 6", contact: "Иван Петров"),
+                .init(id: UUID(), badge: .end, address: "Москва, Каширское шоссе, 52", contact: "Анна Сидорова"),
+            ],
+            itemLines: ["Ноутбук — 1 pcs · 60 000 ₽"],
+            optionsLine: "to the door",
+            whenLine: "as soon as possible",
+            tariffName: "Express",
+            priceText: "1 190 ₽",
+            blockers: [],
+            ordering: .unresolved(
+                reason: "No answer came back for the acceptance — the provider may have taken the order.",
+                claimID: "claim-preview"
+            ),
+            recordWarning: nil,
+            confirm: {},
+            done: {}
+        )
+    }
+}
+
+#Preview("Placed — history refused the write") {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        NewDeliveryView.ReviewSheet(
+            stops: [
+                .init(id: UUID(), badge: .start, address: "Москва, ул Москворечье, 6", contact: "Иван Петров"),
+                .init(id: UUID(), badge: .end, address: "Москва, Каширское шоссе, 52", contact: "Анна Сидорова"),
+            ],
+            itemLines: ["Ноутбук — 1 pcs · 60 000 ₽"],
+            optionsLine: "to the door",
+            whenLine: "as soon as possible",
+            tariffName: "Express",
+            priceText: "1 190 ₽",
+            blockers: [],
+            ordering: .placed,
+            recordWarning: "The order was placed, but saving it to history failed.",
             confirm: {},
             done: {}
         )

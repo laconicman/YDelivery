@@ -39,7 +39,7 @@ struct NewDeliveryView: View {
     @State private var showsExplainer = false
     /// The row a blocker's door is scrolling to — cleared once the card has
     /// brought it into view, so a second door to the same row still lands.
-    @State private var scrollTarget: Model.ScrollAnchor?
+    @State private var scrollTarget: Content.ScrollAnchor?
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @Environment(ClaimsSyncController.self) private var sync
@@ -86,7 +86,6 @@ struct NewDeliveryView: View {
                 whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
                 orderBarTitle: orderBarTitle,
-                canOrder: draft.selectedOffer != nil,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
@@ -489,12 +488,16 @@ private extension NewDeliveryView {
     /// Every class the app knows, priced where the strip has a price — the explainer
     /// teaches the vocabulary even for classes the route was not offered.
     /// The CTA's words. `nil` while the bar has no place on screen at all — no route,
-    /// no prices asked for yet.
+    /// no prices asked for yet. When the order cannot yet be placed, the title names
+    /// the destination the tap actually opens — the review sheet, which lists what is
+    /// owed — rather than promising a sale it cannot make (the drive's dead-CTA
+    /// finding; the bar was an `Order`-labeled button that swallowed taps).
     var orderBarTitle: String? {
         guard draft.offers != .idle else { return nil }
-        return draft.selectedOffer.map {
-            String(localized: "Order \($0.tariff.words) · \($0.priceText)")
-        } ?? String(localized: "Order")
+        guard draft.orderBlockers.isEmpty, let offer = draft.selectedOffer else {
+            return String(localized: "Review the order")
+        }
+        return String(localized: "Order \(offer.tariff.words) · \(offer.priceText)")
     }
 
     var explainerCards: [TariffExplainer.Card] {
