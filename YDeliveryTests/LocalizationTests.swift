@@ -83,6 +83,40 @@ struct LocalizationTests {
                 == "Не влезает в %1$@ — предел %2$@. Выберите класс побольше, иначе могут отказать у двери.")
     }
 
+    /// The retrofit sweep: every key the code emits that the catalog lacked —
+    /// indexed `Text` forms beside their unindexed `String(localized:)` twins,
+    /// the toolbar's sort/filter words, the notification rows.
+    @Test("The sweep's new keys resolve to Russian")
+    func sweepKeysResolveRussian() throws {
+        #expect(ru("Flat %1$@") == "Кв. %1$@")
+        #expect(ru("stop %1$lld") == "точка %1$lld")
+        #expect(ru("Newest first") == "Сначала новые")
+        #expect(ru("Everything") == "Все")
+        #expect(ru("Nothing to show") == "Нечего показать")
+        #expect(ru("Review the order") == "Проверить заказ")
+        #expect(ru("No route between these points.") == "Между этими точками нет маршрута.")
+        #expect(ru("The provider refused the order.") == "Провайдер отказал в заказе.")
+        #expect(ru("Nothing matches “%1$@”.") == "По запросу “%1$@” ничего нет.")
+        #expect(ru("Clear search") == "Очистить поиск")
+        // The single-arg inflect keys compile a plural spec like their
+        // unindexed twins — `NSStringLocalizedFormatKey` names the substitution.
+        let leave = try ruDict("^[%1$lld item](inflect: true) leave here")
+        #expect(leave["NSStringLocalizedFormatKey"] as? String == "%#@value@")
+        let forms = try #require(leave["value"] as? [String: Any])
+        #expect(forms["one"] as? String == "%1$lld предмет уезжает отсюда")
+        #expect(forms["many"] as? String == "%1$lld предметов уезжают отсюда")
+
+        // #117's tariff keys resolve through the table now that the strip's
+        // call sites are on this tree.
+        #expect(ru("Fastest") == "Сначала быстрые")
+        #expect(ru("Cheapest") == "Сначала дешёвые")
+        #expect(ru("by %@") == "к %@")
+        #expect(ru("pickup by %@") == "забор к %@")
+        #expect(ru("Delivery options") == "Варианты доставки")
+        #expect(ru("Prices refreshed — the quote expired")
+                == "Цены обновлены — расчёт устарел")
+    }
+
     @Test("The provider's extra classes have sender words")
     func extraClassesResolve() {
         #expect(ru("Same-day") == "День в день")

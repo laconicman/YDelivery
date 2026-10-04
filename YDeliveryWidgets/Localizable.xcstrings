@@ -131,6 +131,16 @@
         }
       }
     },
+    "№%1$@ " : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "№%1$@ "
+          }
+        }
+      }
+    },
     "№%@ " : {
       "localizations" : {
         "ru" : {

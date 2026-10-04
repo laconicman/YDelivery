@@ -51,7 +51,9 @@ struct ShareView: View {
     private var foundAddress: some View {
         Section {
             if let point = model.point {
-                Text(point.address.isEmpty ? "Pinned location" : point.address)
+                Text(point.address.isEmpty
+                     ? String(localized: "Pinned location")
+                     : point.address)
                     .font(.body)
                 doorParts(point)
             }
