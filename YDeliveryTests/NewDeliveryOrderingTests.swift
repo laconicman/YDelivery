@@ -472,6 +472,158 @@ struct NewDeliveryOrderingTests {
                 "a 5xx proves nothing about the quote — nothing is re-priced")
     }
 
+    @Test("A 409 accept retries the fresh version — the claim is still ours")
+    func versionBumpedAcceptRetries() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        var creates = 0
+        var accepts = 0
+
+        await model.placeOrder(
+            create: { _, _ in
+                creates += 1
+                return PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil)
+            },
+            // The re-read shows the claim still waiting — bumped to version 2
+            // by another client, not refused.
+            watch: { id in PlacedClaim(id: id, version: 2, status: .readyToAccept, failureText: nil) },
+            accept: { _, version in
+                accepts += 1
+                if version == 1 {
+                    throw ProviderRefusal(message: "version conflict", status: 409)
+                }
+                return PlacedClaim(id: "claim-1", version: version, status: .searching, failureText: nil)
+            },
+            clock: TestClock()
+        )
+
+        #expect(model.ordering == .placed)
+        #expect(creates == 1 && accepts == 2,
+                "one create, a refused v1 accept, a landed v2 accept")
+        #expect(model.placedOrder?.claimID == "claim-1")
+    }
+
+    @Test("A second 409 at the fresh version abandons — quote dropped, key spent")
+    func repeatedVersionConflictAbandons() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            // Still waiting at v2 both times — the fresh-version accept was
+            // refused too, so the claim is dead to this flow.
+            watch: { id in PlacedClaim(id: id, version: 2, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in throw ProviderRefusal(message: "version conflict", status: 409) },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("two refused accepts are .failed, got \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer == nil && model.repriceRequests == 1,
+                "the refused quote re-prices, it is never replayed")
+
+        await priced(model)
+        model.confirmOrder()
+        #expect(model.orderRequestID != first, "the refused claim's token is spent")
+    }
+
+    @Test("A 5xx at create keeps the quote and the token")
+    func serverErrorAtCreateKeepsQuote() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+
+        await model.placeOrder(
+            create: { _, _ in throw ProviderRefusal(message: nil, status: 500) },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in Issue.record("never reached"); return PlacedClaim(id: "x", version: 1, status: .searching, failureText: nil) },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("a 5xx at create is .failed, got \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer != nil && model.repriceRequests == 0,
+                "a 5xx proves nothing about the payload — the quote stands")
+
+        model.confirmOrder()
+        #expect(model.ordering == .queued)
+        #expect(model.orderRequestID == first, "the idempotent create replays under the same key")
+    }
+
+    @Test("A throttle at create keeps the quote and the token the same way")
+    func throttledCreateKeepsQuote() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+
+        await model.placeOrder(
+            create: { _, _ in throw ProviderRefusal(message: "too many requests", status: 429) },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in Issue.record("never reached"); return PlacedClaim(id: "x", version: 1, status: .searching, failureText: nil) },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("a throttle at create is .failed, got \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer != nil && model.repriceRequests == 0,
+                "a 429 is rate-limiting — the payload was never tried")
+
+        model.confirmOrder()
+        #expect(model.orderRequestID == first, "the idempotent create replays under the same key")
+    }
+
+    @Test("A throttle at accept fails plainly — the retry re-accepts the same claim")
+    func throttledAcceptReplaysTheClaim() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+        var creates = 0
+
+        await model.placeOrder(
+            create: { _, _ in
+                creates += 1
+                return PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil)
+            },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in throw ProviderRefusal(message: "too many requests", status: 429) },
+            clock: TestClock()
+        )
+
+        guard case .failed = model.ordering else {
+            Issue.record("a throttle is .failed, never .unresolved: \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer != nil && model.repriceRequests == 0)
+
+        model.confirmOrder()
+        #expect(model.ordering == .queued && model.orderRequestID == first,
+                "the retry replays the idempotent create — no second courier")
+        await model.placeOrder(
+            create: { _, _ in
+                creates += 1
+                return PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil)
+            },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { id, _ in PlacedClaim(id: id, version: 1, status: .searching, failureText: nil) },
+            clock: TestClock()
+        )
+        #expect(model.ordering == .placed)
+        #expect(model.placedOrder?.claimID == "claim-1",
+                "the create returned the same claim and it was accepted")
+    }
+
     @Test("Only the provider's door-to-door phrase earns the annotation")
     func doorMeansTheOption() {
         #expect("Invalid door code".namingKnownRequirements == "Invalid door code",

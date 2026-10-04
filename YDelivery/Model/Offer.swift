@@ -181,9 +181,13 @@ nonisolated struct ProviderRefusal: LocalizedError, Hashable {
     /// The HTTP status, set on every documented case; `isDefinitive` reads it.
     var status: Int?
 
-    /// The request was validated and declined — nothing executed. 5xx and
-    /// unknown statuses may have executed, so they are not definitive.
-    var isDefinitive: Bool { status.map { (400..<500).contains($0) } ?? false }
+    /// The request was validated and declined — nothing executed. 5xx,
+    /// throttles and unknown statuses prove nothing about the payload: a 429
+    /// is rate-limiting, not a refusal of the request's content, so it is not
+    /// definitive either (review, PR #107).
+    var isDefinitive: Bool {
+        status.map { (400..<500).contains($0) && $0 != 429 } ?? false
+    }
 
     var errorDescription: String? {
         if let message, !message.isEmpty { return message }
