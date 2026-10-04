@@ -32,7 +32,11 @@ extension SettingsView {
             Form {
                 Section {
                     if isSignedIn {
-                        LabeledContent("Status", value: "Signed in")
+                        LabeledContent {
+                            Text("Signed in")
+                        } label: {
+                            Text("Status")
+                        }
                         Button("Sign Out", role: .destructive, action: signOut)
                     } else {
                         SecureField("OAuth token", text: $draftToken)

@@ -68,10 +68,10 @@ packages:
   # consumed by URL for the same clean-clone reason as the API package above.
   YDeliveryKit:
     url: https://github.com/laconicman/YDeliveryKit
-    # 0.4.8 adds the feedback roles — bound/warning/error text tokens and the
-    # Notice row the write-failure surfaces adopt. (0.4.7's sender's library,
-    # 0.4.6's nonisolated vocabulary, 0.4.5's ShareError stay requirements.)
-    minorVersion: 0.4.8
+    # 0.4.10 adds the kit's own string catalogs (ru); 0.4.7 added the
+    # which the draft's chips and the Library tab consume. (0.4.6's nonisolated
+    # vocabulary and 0.4.5's ShareError stay requirements, subsumed by this floor.)
+    minorVersion: 0.4.10
   # Compile-checked SF Symbol names (TechDebt → YD-3).
   SFSafeSymbols:
     url: https://github.com/SFSafeSymbols/SFSafeSymbols
