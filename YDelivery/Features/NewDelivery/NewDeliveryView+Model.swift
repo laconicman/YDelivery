@@ -930,7 +930,10 @@ extension NewDeliveryView {
                     let sameClass = chosenTariff.flatMap { tariff in
                         loaded.first { $0.tariff == tariff }
                     }
-                    selectedOfferID = (sameClass ?? loaded.first)?.id
+                    // The fallback is the sort's first card, not the wire's —
+                    // the strip and the selected card answer the same pick
+                    // (review, PR #117).
+                    selectedOfferID = (sameClass ?? loaded.sorted(by: offerSort).first)?.id
                 }
                 armQuoteExpiry()
             } catch is CancellationError {
@@ -938,11 +941,13 @@ extension NewDeliveryView {
                 guard !Task.isCancelled else { return }
                 offers = .signedOut
                 selectedOfferID = nil
+                priceRefreshNote = nil
             } catch {
                 guard !Task.isCancelled else { return }
                 offers = .failed(
                     (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 )
+                priceRefreshNote = nil
             }
         }
 
@@ -1308,16 +1313,17 @@ extension NewDeliveryView {
                 }
                 return
             }
-            // An `offer_ttl` that passed while the sheet was open is the same kind of
-            // stale: the payload cannot be spent, so re-price rather than queue a
-            // create the provider would refuse (the expiry task misses a sheet-open
-            // confirm by sleeping).
-            if selectedOffer?.isExpired() == true {
-                invalidateStaleQuote(fromExpiry: true)
-                return
-            }
             switch ordering {
             case .idle, .failed:
+                // An `offer_ttl` that passed while the sheet was open is the same kind
+                // of stale: the payload cannot be spent, so re-price rather than queue
+                // a create the provider would refuse (the expiry task misses a
+                // sheet-open confirm by sleeping). Inside the branch — a queued or
+                // running order never re-prices from a tap (review, PR #117).
+                if selectedOffer?.isExpired() == true {
+                    invalidateStaleQuote(fromExpiry: true)
+                    return
+                }
                 // Safe to rotate here and only here: `.failed` is the state that promises
                 // acceptance was never attempted. An edited draft must mint a new token —
                 // and so must one whose claim the provider itself ended: replaying that
@@ -1350,6 +1356,15 @@ extension NewDeliveryView {
             guard ordering == .queued, let request = orderRequest,
                   let offer = selectedOffer
             else { return }
+            // An expiry between the confirm and this run would send a dead
+            // payload — fail plainly and re-price rather than create what the
+            // provider will refuse (review, PR #117).
+            guard !offer.isExpired(at: .now) else {
+                invalidateStaleQuote(fromExpiry: true)
+                ordering = .failed(
+                    String(localized: "The quote expired before the order left — prices are refreshing."))
+                return
+            }
             // The run spends the payloads it holds; the expiry sleep must not reprice
             // under a live attempt.
             quoteExpiryTask?.cancel()

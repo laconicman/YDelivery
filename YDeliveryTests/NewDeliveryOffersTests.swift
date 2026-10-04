@@ -100,6 +100,17 @@ struct NewDeliveryOffersTests {
         #expect(model.sortedOffers == .ready([slow, quick]))
     }
 
+    @Test("The fallback pick follows the sort — «cheapest» answers the cheapest card")
+    func sortedFallbackSelection() async {
+        let model = filledDraft()
+        let dear = Offer(tariff: .express, price: 1190, currency: "RUB",
+                         pickupInterval: nil, deliveryInterval: nil, payload: "express")
+        model.offerSort = .cheapest
+        await model.loadOffers { _ in [dear, self.offer("courier")] }
+        #expect(model.selectedOfferID == "courier",
+                "wire order is not the answer — the sort's first card is")
+    }
+
     @Test("A windowless quote never expires")
     func timelessQuoteNeverExpires() async {
         let model = filledDraft()

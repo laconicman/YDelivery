@@ -408,8 +408,10 @@ extension NewDeliveryView {
                                 retry: retryOffers
                             )
                             // The TTL re-price's one line — said once, under the
-                            // fresh cards.
-                            if let priceRefreshNote {
+                            // fresh cards; only beside a `.ready` strip (review,
+                            // PR #117 — a failed re-price or a sign-out must not
+                            // keep wearing it).
+                            if let priceRefreshNote, case .ready = offers {
                                 Text(priceRefreshNote)
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)

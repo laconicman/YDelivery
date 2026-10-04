@@ -832,6 +832,48 @@ struct NewDeliveryOrderingTests {
         #expect(model.orderRequest == nil)
     }
 
+    @Test("A quote that lapses between confirm and create never reaches the wire")
+    func expiredQuoteFailsBeforeCreate() async {
+        let model = readyDraft()
+        await model.loadOffers { _ in
+            [Offer(tariff: .express, price: 1190, currency: "RUB",
+                   pickupInterval: nil, deliveryInterval: nil,
+                   validUntil: Date.now + 0.2,
+                   payload: "dying")]
+        }
+        model.confirmOrder()
+        #expect(model.ordering == .queued)
+        let quoted = model.repriceRequests
+        var created = false
+
+        // The expiry lands while the run is queued — the expiry task stands
+        // down for a live attempt, so placeOrder's own guard is what catches it.
+        try? await Task.sleep(for: .milliseconds(250))
+        await model.placeOrder(
+            create: { _, _ in
+                created = true
+                return PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil)
+            },
+            watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in
+                Issue.record("never reached")
+                return PlacedClaim(id: "x", version: 1, status: .searching, failureText: nil)
+            },
+            clock: TestClock()
+        )
+
+        #expect(!created, "a dead payload must not reach create")
+        guard case .failed(let message) = model.ordering else {
+            Issue.record("the lapse is .failed, got \(model.ordering)")
+            return
+        }
+        #expect(message == String(
+            localized: "The quote expired before the order left — prices are refreshing."))
+        #expect(model.repriceRequests == quoted + 1,
+                "the strip refetches rather than replaying the spent quote")
+        #expect(model.offers == .idle)
+    }
+
     @Test("An edited retry mints a new token; an unchanged one keeps it")
     func tokenFollowsTheRequest() async {
         struct Offline: Error {}
