@@ -139,6 +139,11 @@ extension NewDeliveryView {
         /// opens at the root. `nil` when the store cannot keep one, so the row
         /// never shows a menu item that cannot run (the `savePlace` rule).
         var saveTemplateItem: ((UUID) -> Void)? = nil
+        /// A blocker's field door, landed: the root sets the row to bring into
+        /// view; `onScrolled` clears it so the next door to the same row still
+        /// reads as a change. Plain value + closure, like every other input.
+        var scrollTarget: UUID? = nil
+        var onScrolled: () -> Void = {}
         let setFieldValue: (UUID, String) -> Void
         let revealField: (UUID) -> Void
         let editOptions: (NewDeliveryView.OptionsEditor.Focus) -> Void
@@ -344,6 +349,7 @@ extension NewDeliveryView {
         }
 
         private var routeCard: some View {
+            ScrollViewReader { proxy in
             List {
                 Section {
                     ForEach(rows) { row in
@@ -369,6 +375,9 @@ extension NewDeliveryView {
                         )
                         .deleteDisabled(!row.isDeletable)
                         .moveDisabled(!row.isMovable)
+                        // A bound's door scrolls to its row — every row answers
+                        // to its subject's id.
+                        .id(row.id)
                     }
                     .onDelete(perform: removeRows)
                     .onMove(perform: moveRows)
@@ -453,6 +462,7 @@ extension NewDeliveryView {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .id(item.id)
                         .contextMenu {
                             // The second door to «Save as template» — the first
                             // lives in the item editor itself (the library doc).
@@ -503,6 +513,7 @@ extension NewDeliveryView {
                         }
                         ForEach(fieldRows) { row in
                             SchemaFieldRow(row: row, setFieldValue: setFieldValue)
+                                .id(row.id)
                         }
                         if !hiddenFieldRows.isEmpty {
                             // A confirmationDialog, not a Menu: the choice is one
@@ -559,6 +570,15 @@ extension NewDeliveryView {
                 // edit mode is on — leave it too, or the list is trapped editing with
                 // no exit (review, PR #17).
                 if rows.count <= 2 { editMode = .inactive }
+            }
+            .onChange(of: scrollTarget) { _, target in
+                // A field door lands on its row — the sheet let go, the card
+                // brings the field to center so the bound is seen where it is
+                // answered.
+                guard let target else { return }
+                withAnimation { proxy.scrollTo(target, anchor: .center) }
+                onScrolled()
+            }
             }
         }
 

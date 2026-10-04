@@ -65,14 +65,57 @@ struct NewDeliveryOrderingTests {
     @Test("Blocked drafts state every bound; a ready draft states none")
     func blockersStateTheBounds() async {
         let empty = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
-        #expect(empty.orderBlockers.count == 4, "route, phones, parcel, class — all missing")
+        #expect(empty.orderBlockers.count == 6,
+                "two stops miss their place and their person; parcel and class too")
 
         let model = readyDraft()
-        #expect(model.orderBlockers == [String(localized: "Pick a delivery class once prices arrive.")])
+        #expect(model.orderBlockers.map(\.message) == [String(localized: "Pick a delivery class once prices arrive.")])
+        #expect(model.orderBlockers.map(\.destination) == [.offer],
+                "every blocker is a door — the class bound points at the tariff strip")
 
         await priced(model)
         #expect(model.orderBlockers.isEmpty)
         #expect(model.orderRequest != nil)
+    }
+
+    @Test("Two invalid items earn two doors, each named")
+    func everyInvalidItemGetsItsDoor() async {
+        let model = readyDraft()
+        await priced(model)
+        var second = ParcelItem()
+        second.name = "Зарядка"
+        // The seeded item's cost stays; the new one has none — and a third
+        // joins with no name and no value at all.
+        model.setItem(second)
+        var third = ParcelItem()
+        third.name = ""
+        // A wholly blank item saves as nothing — weight makes it real; the
+        // name and the value stay the miss.
+        third.weightKg = 0.2
+        model.setItem(third)
+
+        let specBlockers = model.orderBlockers.filter { $0.id.hasPrefix("itemSpec/") }
+        #expect(specBlockers.count == 2, "each miss is its own door, not the first one twice")
+        #expect(specBlockers.map(\.destination) == [.item(second.id), .item(third.id)])
+        #expect(specBlockers[0].message.contains("Зарядка"), "the named item names itself")
+        #expect(specBlockers[1].message.contains("item 3"), "a nameless item falls back to its ordinal")
+    }
+
+    /// Two stops left empty earn two doors — one per incomplete stop, so the
+    /// second bound isn't invisible after the first is fixed (the item-door
+    /// rule). The field door's destination is the field's row — the card
+    /// scrolls it into view (`Content.scrollTarget`).
+    @Test("Every incomplete stop gets its own door")
+    func everyIncompleteStopGetsItsDoor() async {
+        // A fresh draft is two incomplete stops: each names its own door for
+        // its place and its person — fixing one can't hide the other.
+        let model = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
+        let routeDoors = model.orderBlockers.filter { $0.id.hasPrefix("route/") }
+        #expect(routeDoors.count == 2)
+        #expect(routeDoors.map(\.destination) == [.point(model.points[0].id), .point(model.points[1].id)])
+        let contactDoors = model.orderBlockers.filter { $0.id.hasPrefix("contact/") }
+        #expect(contactDoors.count == 2)
+        #expect(contactDoors.map(\.destination) == [.contact(model.points[0].id), .contact(model.points[1].id)])
     }
 
     @Test("A phone the editor let through half-typed still blocks the order")
@@ -82,9 +125,11 @@ struct NewDeliveryOrderingTests {
         // Saving unfinished contacts is allowed (the editor only hints) — the order
         // gate is where dialability is enforced, with the same rule (review, PR #25).
         model.setContact(Contact(givenName: "Анна", phone: "домофон 12"), for: model.points[1].id)
-        #expect(model.orderBlockers == [
+        #expect(model.orderBlockers.map(\.message) == [
             String(localized: "A phone the courier can't dial is no phone yet — finish the number.")
         ])
+        #expect(model.orderBlockers.first?.destination == .contact(model.points[1].id),
+                "the bound's door is the stop's own editor")
         #expect(model.orderRequest == nil)
 
         model.setContact(Contact(givenName: "Анна", phone: "+7 998 765-43-21"), for: model.points[1].id)
@@ -98,7 +143,7 @@ struct NewDeliveryOrderingTests {
         // `Contact` on the wire is `name` *and* `phone`, both required (DeepWiki
         // consult on the spec, 2026-09-18) — a nameless phone would 400 at claim.
         model.setContact(Contact(phone: "+7 998 765-43-21"), for: model.points[1].id)
-        #expect(model.orderBlockers == [
+        #expect(model.orderBlockers.map(\.message) == [
             String(localized: "The courier calls ahead — every stop needs a person: a name and a phone.")
         ])
         #expect(model.orderRequest == nil)
@@ -114,9 +159,11 @@ struct NewDeliveryOrderingTests {
             name: "Заказ", isOptional: false, carrier: .orderNumber)
         model.fieldDefinitions = [field]
 
-        #expect(model.orderBlockers == [
+        #expect(model.orderBlockers.map(\.message) == [
             String(localized: "«Заказ» is required — the order doesn't leave without it.")
         ])
+        #expect(model.orderBlockers.first?.destination == .field(field.id),
+                "the bound's door is the field's own row")
         #expect(model.orderRequest == nil)
 
         model.setFieldValue("4417", for: field.id)

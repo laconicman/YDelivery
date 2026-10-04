@@ -93,10 +93,12 @@ struct NewDeliveryModelTests {
     func unreadSchemaBlocks() {
         let model = NewDeliveryView.Model()
         model.fieldsUnavailable = true
-        #expect(model.orderBlockers.contains { $0.contains("fields couldn't load") })
+        #expect(model.orderBlockers.contains { $0.message.contains("fields couldn't load") })
+        #expect(model.orderBlockers.first { $0.message.contains("fields couldn't load") }?
+            .destination == .fieldsSchema, "an unread schema's door is the re-read")
 
         model.fieldDefinitions = [CustomFieldDefinition(name: "Заказ")]
-        #expect(!model.orderBlockers.contains { $0.contains("fields couldn't load") })
+        #expect(!model.orderBlockers.contains { $0.message.contains("fields couldn't load") })
     }
 
     @Test("The route completes only when every stop is chosen")
