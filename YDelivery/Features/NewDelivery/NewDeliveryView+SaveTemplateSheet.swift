@@ -45,8 +45,7 @@ extension NewDeliveryView {
 
                     if let failure {
                         Section {
-                            Label(failure, systemSymbol: .exclamationmarkTriangle)
-                                .foregroundStyle(.secondary)
+                            Notice(.error, failure)
                         } footer: {
                             Text("The template was not kept. Try again, or close and carry on — the item is still in the draft.")
                         }

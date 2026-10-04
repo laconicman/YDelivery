@@ -88,9 +88,8 @@ extension OrderChatView {
             .background(.bar)
             .overlay(alignment: .top) {
                 if let sendError {
-                    Text(sendError)
+                    Notice(.error, sendError)
                         .font(.footnote)
-                        .foregroundStyle(.red)
                         .offset(y: -Layout.Spacing.edge)
                 }
             }
@@ -236,6 +235,20 @@ private extension OrderMessage {
             loadError: String(localized: "Shared storage is unavailable on this install."),
             sendError: nil, isSending: false,
             composer: .constant(""),
+            send: {}, confirmReceipt: {}, sendPhoto: { _ in }, photo: { _ in })
+    }
+}
+
+#Preview("Send refused — draft kept") {
+    NavigationStack {
+        OrderChatView.Content(
+            messages: [
+                .preview(OrderMessage.Kind.text, text: "The courier is at the gate"),
+            ],
+            photoData: [:], loadError: nil,
+            sendError: String(localized: "The message didn't leave — check the connection and send it again."),
+            isSending: false,
+            composer: .constant("Can you call me at the door?"),
             send: {}, confirmReceipt: {}, sendPhoto: { _ in }, photo: { _ in })
     }
 }
