@@ -82,6 +82,24 @@ extension DeliveriesView {
 
         private var rows: [Row] { sections.flatMap(\.rows) }
 
+        /// «Повторить»/«Наоборот» — shared by the order row and its trail row:
+        /// the trail is the same order's continuation, so its swipe offers the
+        /// same doors.
+        @ViewBuilder
+        private func orderActions(for id: Row.ID) -> some View {
+            Button {
+                repeatOrder(id, false)
+            } label: {
+                Label("Repeat", systemSymbol: .arrowClockwise)
+            }
+            Button {
+                repeatOrder(id, true)
+            } label: {
+                Label("Reverse", systemSymbol: .arrowUturnLeft)
+            }
+            .tint(.gray)
+        }
+
         /// The typed filter — addresses, people, status words and field values,
         /// case-insensitive. A shelf with no hits leaves the list.
         private var visibleSections: [Section] {
@@ -101,27 +119,38 @@ extension DeliveriesView {
                         ForEach(visibleSections) { section in
                             SwiftUI.Section {
                                 ForEach(section.rows) { row in
+                                    let expanded = expandedID == row.id
                                     NavigationLink(value: row.id) {
                                         OrderRow(
                                             row: row,
-                                            isExpanded: expandedID == row.id,
-                                            trail: expandedID == row.id ? trail : nil,
-                                            trailError: expandedID == row.id ? trailError : nil,
+                                            isExpanded: expanded,
                                             toggleTrail: { toggleTrail(row.id) }
                                         )
                                     }
+                                    // The open pair reads as one card: no line
+                                    // between the order row and its trail.
+                                    .listRowSeparator(expanded ? .hidden : .automatic,
+                                                      edges: .bottom)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                        Button {
-                                            repeatOrder(row.id, false)
-                                        } label: {
-                                            Label("Repeat", systemSymbol: .arrowClockwise)
-                                        }
-                                        Button {
-                                            repeatOrder(row.id, true)
-                                        } label: {
-                                            Label("Reverse", systemSymbol: .arrowUturnLeft)
-                                        }
-                                        .tint(.gray)
+                                        orderActions(for: row.id)
+                                    }
+                                    if expanded {
+                                        // The trail is a row of its own, not
+                                        // extra height inside `OrderRow`: the
+                                        // List animates row insertion natively
+                                        // — the new cell slides in pushing the
+                                        // rows below — while an in-row growth
+                                        // gets its frame centre-interpolated by
+                                        // the cell host and the collapsed lines
+                                        // float mid-cell under the fading route
+                                        // (PR #109's 60 fps captures).
+                                        TrailRow(route: row.route, trail: trail,
+                                                 trailError: trailError)
+                                            .listRowSeparator(.hidden, edges: .top)
+                                            // Same order, same doors.
+                                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                                orderActions(for: row.id)
+                                            }
                                     }
                                 }
                             } header: {
@@ -138,7 +167,6 @@ extension DeliveriesView {
                     .refreshable { await refresh() }
                     .searchable(text: $searchText, isPresented: $isSearchPresented,
                                 prompt: "Address, person, status or your field")
-                    .animation(.default, value: expandedID)
                 } else if let historyUnavailable {
                     // Checked before the empty states: *could not look* is not *nothing
                     // there*, and only this branch knows the difference.
@@ -201,18 +229,14 @@ extension DeliveriesView.Content {
     /// the route as «from → to» on the second, the status — with its own as-of time —
     /// on the third. Three lines, eight rows to a screen, and what differs between
     /// orders is what the eye lands on. The status line is the trail's door: tapping
-    /// it opens the provider's account of this order in place; the rest of the row
-    /// still opens the order (review, 2026-09-29 — the row's centre used to open
-    /// nothing at all).
+    /// it opens the provider's account of this order as the row that slides in
+    /// beneath; the rest of the row still opens the order (review, 2026-09-29 —
+    /// the row's centre used to open nothing at all).
     struct OrderRow: View {
         let row: Row
+        /// Drives only the disclosure chevron and the a11y hint — the trail
+        /// itself is a `TrailRow` emitted beside this row.
         let isExpanded: Bool
-        /// The trail while this row is open — `nil` still loading, `[]` nothing
-        /// reported; ignored while collapsed.
-        let trail: [ProviderEvent]?
-        /// A read that failed — its own row, so a storage error never reads as a
-        /// fact about the provider's history.
-        var trailError: String? = nil
         let toggleTrail: () -> Void
 
         var body: some View {
@@ -229,9 +253,6 @@ extension DeliveriesView.Content {
                 }
                 routeLine
                 statusLine
-                if isExpanded {
-                    expandedBody
-                }
             }
             .padding(.vertical, Layout.Spacing.tight)
         }
@@ -262,13 +283,16 @@ extension DeliveriesView.Content {
             .lineLimit(1)
         }
 
-        /// The status chip with its as-of time and the disclosure mark. A tap
-        /// gesture on the line, not a `Button`: inside a `List` row that is itself a
-        /// `NavigationLink`, a button — even borderless — competes with the row
-        /// for the whole cell and fires on row taps; a gesture claims only the
-        /// pixels under the pill (exactly the behaviour `RouteLine` had to *lose*,
-        /// Kit #27, and here the small footprint is what makes it right). Taps
-        /// anywhere else on the row still follow the link.
+        /// The status chip, then the trailing group — as-of stamp last but one,
+        /// disclosure mark at the edge (semantics rule 7: the stamp trails).
+        /// The whole line is the trail's door: a tap gesture, not a `Button`,
+        /// because inside a `List` row that is itself a `NavigationLink` a button —
+        /// even borderless — competes with the row for the whole cell and fires on
+        /// row taps; a gesture claims only the pixels under the line (exactly the
+        /// behaviour `RouteLine` had to *lose*, Kit #27). The line is deliberately
+        /// full-width — a wider target than the pill alone, and the stamp's tail
+        /// space is claimed by design rather than left blank (owner's call, review
+        /// of PR #109). Taps anywhere else on the row still follow the link.
         private var statusLine: some View {
             HStack(spacing: Layout.Spacing.unit) {
                 StatusChip(status: row.status)
@@ -278,6 +302,7 @@ extension DeliveriesView.Content {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                Spacer(minLength: Layout.Spacing.unit)
                 if let at = row.statusObservedAt {
                     Text(at, format: .dateTime.hour().minute())
                         .font(.footnote)
@@ -288,6 +313,7 @@ extension DeliveriesView.Content {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .animation(.default, value: isExpanded)
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: toggleTrail)
@@ -299,33 +325,50 @@ extension DeliveriesView.Content {
             .accessibilityAction(named: Text("Toggle status history"), toggleTrail)
         }
 
+        private static let routeArrow = "→"
+    }
+
+    /// The open order's provider trail as a row of its own, emitted right under
+    /// its `OrderRow`. It is a row — not extra height inside the order row —
+    /// because the List animates row insertion natively (the new cell slides in
+    /// and pushes the rows below) while an in-row growth has its frame
+    /// centre-interpolated by the cell host, leaving the collapsed lines
+    /// floating mid-cell mid-animation. Plain values, no NavigationLink:
+    /// tapping it does nothing — the order row above opens the order.
+    struct TrailRow: View {
+        let route: [RoutePoint]
+        /// `nil` still loading, `[]` nothing reported.
+        let trail: [ProviderEvent]?
+        /// A read that failed — its own row, so a storage error never reads as a
+        /// fact about the provider's history.
+        var trailError: String? = nil
+
         /// The whole route with its people, then the provider's trail — what the
         /// collapsed row summarised, in full. Loading and nothing-reported are
         /// different rows (R9).
-        @ViewBuilder
-        private var expandedBody: some View {
-            RouteLine(points: row.route)
-                .font(.subheadline)
-                .padding(.top, Layout.Spacing.tight)
-            if let trailError {
-                Label(trailError, systemSymbol: .exclamationmarkTriangle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else if let trail {
-                if trail.isEmpty {
-                    Text("The provider has not reported on this order yet.")
+        var body: some View {
+            VStack(alignment: .leading, spacing: Layout.Spacing.chip) {
+                RouteLine(points: route)
+                    .font(.subheadline)
+                if let trailError {
+                    Label(trailError, systemSymbol: .exclamationmarkTriangle)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                } else if let trail {
+                    if trail.isEmpty {
+                        Text("The provider has not reported on this order yet.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        StatusTimeline(events: trail)
+                    }
                 } else {
-                    StatusTimeline(events: trail)
+                    ProgressView()
+                        .controlSize(.small)
                 }
-            } else {
-                ProgressView()
-                    .controlSize(.small)
             }
+            .padding(.vertical, Layout.Spacing.tight)
         }
-
-        private static let routeArrow = "→"
     }
 }
 
@@ -412,6 +455,21 @@ private let previewSections: [DeliveriesView.Content.Section] = [
         DeliveriesView.Content(
             isSignedIn: true, sections: previewSections,
             expandedID: previewSections[0].rows[1].id, trail: [], compose: {})
+    }
+}
+
+#Preview("Trail row — loaded / failed / empty") {
+    let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    let live = previewSections[0].rows[0]
+    List {
+        DeliveriesView.Content.TrailRow(route: live.route, trail: [
+            ProviderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: "status", providerStatus: "accepted", source: "journal"),
+            ProviderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: "status", providerStatus: "performer_found", source: "journal"),
+        ])
+        DeliveriesView.Content.TrailRow(
+            route: live.route, trail: nil,
+            trailError: "Shared storage is unavailable on this install.")
+        DeliveriesView.Content.TrailRow(route: live.route, trail: [])
     }
 }
 
