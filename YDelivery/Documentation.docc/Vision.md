@@ -61,8 +61,10 @@ it has no inbound-webhook surface. Deliberately deferred: <doc:Roadmap> → Late
 
 - Mimic a provider's branding, name, or iconography — every integration is unofficial and
   visibly so.
-- Cover Yandex's separate next-day/warehouse (НДД) API family, or a second provider.
-  Different contract, different package; out of scope until a real user needs it.
+- Cover Yandex's separate next-day/warehouse (НДД) API family now, or ship a second
+  provider in 1.0 — the direction below records that other services, docked legs and
+  independent couriers are where this goes later; each arrives as its own package behind
+  the same boundary.
 - Expose raw API vocabulary (claims, offers/calculate) in the UI. The demo exists for that.
 
 ## Positioning — where the value actually sits (2026-09-29)
@@ -234,6 +236,35 @@ risk is not architectural, it is **market size**: Express token holders who woul
 an unofficial iOS client are few. Two things widen it without a backend — the Demo mode
 (anyone can look), and the share/App Clip path (recipients arrive through senders). Both
 are in reach of the current codebase.
+
+## Direction — many providers, docked legs, independent couriers (2026-10-05)
+
+Owner's note, recorded verbatim in intent: other delivery services someday; complex
+docking scenarios between them; independent couriers who participate through this app
+(or a courier edition of it) — and because such a courier *writes* the journal of their
+own leg, signing is what makes that journal trustworthy. Not for now; for the roadmap,
+and for the schema to think ahead.
+
+What this changes about the product's shape, stated so nothing built now contradicts it:
+
+- **A delivery is the sender's intent; a leg is a provider's (or a courier's) part of
+  it.** Today one `Order` is one Yandex claim. Tomorrow one order may be *leg 1: provider
+  A to a dock, leg 2: courier B from the dock to the door*. The route stays the sender's
+  one route; a **dock** is a stop that ends one leg and starts the next.
+- **A provider is any party that moves the parcel** — a platform behind an API, or a
+  person with a phone. The courier edition is a participant that is granted a leg and
+  writes its events; it is not a second app with a second store.
+- **Journal entries are attributed and verifiable.** Every event names who wrote it and
+  carries that writer's signature; a reader checks against keys it has seen. This is the
+  2026-09-29 signing idea generalised from "the owner signs the provider mirror" to
+  "every writer signs their own rows" — see <doc:Collaboration>.
+- **The first integration stays Yandex Express; the second provider arrives as a package
+  of its own** (rule 7), behind the same controller boundary. The HDD/warehouse family
+  is still out of scope until a user needs it.
+
+What it does *not* change now: no second provider, no legs table, no courier edition in
+1.0. The schema notes in <doc:Schema> list what not to cement; the Later tier in
+<doc:Roadmap> carries the sequence.
 
 ## See Also
 

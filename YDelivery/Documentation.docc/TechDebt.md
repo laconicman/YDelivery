@@ -561,7 +561,13 @@ the one write shape that always re-marks the row save-pending.
   children as diffed UPDATEs instead of delete+insert. A plain UPDATE
   (`UPDATE … SET col = col`) re-marks the row save-pending — the minimal
   repair, proven by the seed's earlier resurrection pass before it moved to an
-  isolated always-fresh database.
+  isolated always-fresh database. Confirmed in `sqlite-data` 1.12.0 source
+  (`Internal/Triggers.swift`: `afterInsert` → `SyncMetadata.insert … onConflictDoUpdate
+  { }`, a no-op; `afterUpdate` bumps `userModificationTime` but never clears
+  `_isDeleted`; `afterDeleteFromUser` sets it) — and `INSERT OR REPLACE` never bumps
+  `userModificationTime` either (SQLite's REPLACE fires no delete trigger without
+  `recursive_triggers`), so a replaced row's edit never uploads. The Kit fix (upsert +
+  prune, no delete-then-reinsert) is the next Kit PR.
 
 ## See Also
 

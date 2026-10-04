@@ -547,6 +547,36 @@ UPDATEs remain. The production exposure in `recordOrder` stays open as
 Nothing here promotes anything: the schema lives in **development**, and
 "Deploy Schema Changes" in CloudKit Console remains a deliberate, separate act.
 
+## Direction — legs and participants: what not to cement (2026-10-05)
+
+The owner's direction (<doc:Vision> → "Direction — many providers, docked legs,
+independent couriers") does not change the schema today. It changes what a new column
+may assume. Three rules for every schema PR from here:
+
+1. **Provider-specific state goes on the mirror, never on `Order`.** `OrderProviderState`
+   is 1:1 today and becomes *one row per leg* later (`LegState`, keyed by a `legID`); a
+   column added to `Order` because "there is only one claim" is the thing the migration
+   would have to unpick. `claimID`, `tariff`, `price`, courier fields stay on the mirror.
+2. **Events name their writer.** `ProviderEvent` is "owner-written" today; a courier's
+   leg will have events the courier writes. New event columns must not assume the owner —
+   an `authorRef` (the `*Ref` convention: a participant reference, not a user record id)
+   and the signing columns (<doc:Collaboration>) are the shape; until they exist, nothing
+   should read "the owner wrote this" from the table alone.
+3. **A stop may be a dock.** `RouteStop.role` is `pickup`/`dropoff` from the sender's
+   point of view; a dock is a drop-off of leg *n* and the pickup of leg *n+1*. Keep `role`
+   the sender's word and let legs carry their own stop references later — do not add a
+   third `role` value that bakes the two-leg case into the sender's route.
+
+Identity, for the record: `providerAccountRef` is the Yandex account's name for the
+owner and stays that; a courier is a **share participant** (a CloudKit user the owner
+granted), so their identity rides the share, not a provider account. The private tier is
+the owner's and stays unshared; a courier's own private notes would be their own
+database's private tier — the courier edition is a participant, not a second owner.
+
+Known schema work that respects these rules and is next: `OrderPrivateState.archivedAt`
+(archive — owner's view, private tier, <doc:Design>); the signing columns once the
+participant key table is designed (<doc:Collaboration>).
+
 ## See Also
 
 - <doc:Collaboration> — the stack research and grant model this schema implements
