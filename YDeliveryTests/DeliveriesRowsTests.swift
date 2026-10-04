@@ -285,6 +285,88 @@ struct DeliveriesRowsTests {
         #expect(model.trailError == nil)
     }
 
+    // MARK: The toolbar's derivation
+
+    private func row(
+        status: OrderStatus, created: TimeInterval,
+        price: Decimal? = nil, haystack: String = ""
+    ) -> DeliveriesView.Content.Row {
+        .init(id: UUID(), status: status, statusObservedAt: nil,
+              created: .init(timeIntervalSince1970: created), createdText: "",
+              price: price,
+              destinationText: "B", originText: nil, middleStops: 0,
+              priceText: price.map { "\($0) ₽" }, route: [], searchableText: haystack)
+    }
+
+    private func sections(
+        of rows: [DeliveriesView.Content.Row]
+    ) -> [DeliveriesView.Content.Section] {
+        [
+            .init(id: .live, rows: rows.filter(\.status.isLive)),
+            .init(id: .past, rows: rows.filter { !$0.status.isLive }),
+        ].filter { !$0.rows.isEmpty }
+    }
+
+    @Test("Newest first keeps today's order; oldest and price reorder within their shelf")
+    func sortOrdersWithinShelves() {
+        let sections = sections(of: [
+            row(status: .done, created: 100, price: 900),
+            row(status: .cancelled, created: 300, price: nil),
+            row(status: .done, created: 200, price: 1500),
+        ])
+        let visible = { sort in
+            DeliveriesView.Model.visible(sections, query: "", sort: sort, filter: .all)
+                .flatMap(\.rows)
+        }
+        #expect(visible(.newestFirst).map(\.status) == [.cancelled, .done, .done])
+        #expect(visible(.oldestFirst).map(\.status) == [.done, .done, .cancelled])
+        let byPrice = visible(.priceHighFirst)
+        #expect(byPrice.map(\.price) == [1500, 900, nil],
+                "no price cannot win «high first» and sorts last")
+    }
+
+    @Test("Each filter keeps only its statuses; «Everything» keeps the list whole")
+    func filterAdmitsItsStatuses() {
+        let sections = sections(of: [
+            row(status: .active, created: 1),
+            row(status: .attention, created: 2),
+            row(status: .done, created: 3),
+            row(status: .cancelled, created: 4),
+        ])
+        let statuses = { filter in
+            DeliveriesView.Model.visible(sections, query: "", sort: .newestFirst, filter: filter)
+                .flatMap(\.rows).map(\.status)
+        }
+        #expect(statuses(.all).count == 4)
+        #expect(statuses(.needsDecision) == [.attention])
+        #expect(statuses(.delivered) == [.done])
+        #expect(statuses(.cancelled) == [.cancelled])
+    }
+
+    @Test("Filter and search compose — a hit must pass both gates")
+    func filterAndSearchCompose() {
+        let sections = sections(of: [
+            row(status: .done, created: 1, haystack: "Арбат 10"),
+            row(status: .done, created: 2, haystack: "Тверская 1"),
+            row(status: .cancelled, created: 3, haystack: "Арбат 10"),
+        ])
+        let visible = DeliveriesView.Model.visible(
+            sections, query: "арбат", sort: .newestFirst, filter: .delivered)
+        #expect(visible.flatMap(\.rows).map(\.created) == [Date(timeIntervalSince1970: 1)],
+                "the cancelled Арбат is filtered out, the Тверская done is searched out")
+    }
+
+    @Test("A shelf emptied by the filter leaves the list entirely")
+    func emptiedShelfDrops() {
+        let sections = sections(of: [
+            row(status: .active, created: 1),
+            row(status: .done, created: 2),
+        ])
+        let visible = DeliveriesView.Model.visible(
+            sections, query: "", sort: .newestFirst, filter: .delivered)
+        #expect(visible.map(\.id) == [.past], "the live shelf is gone, not shown empty")
+    }
+
     private final class Counter: @unchecked Sendable { var n = 0 }
 
     /// A one-shot hold for a fetch under test: `wait()` parks until `release()`.
