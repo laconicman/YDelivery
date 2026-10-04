@@ -40,6 +40,9 @@ struct NewDeliveryView: View {
     /// The row a blocker's door is scrolling to — cleared once the card has
     /// brought it into view, so a second door to the same row still lands.
     @State private var scrollTarget: Content.ScrollAnchor?
+    /// The strip's order, kept in defaults — a sheet dismissal keeps it, and the
+    /// draft reads it rather than owning the persistence.
+    @AppStorage("tariffSort") private var tariffSort: OfferSort = .fastest
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @Environment(ClaimsSyncController.self) private var sync
@@ -75,7 +78,7 @@ struct NewDeliveryView: View {
                 rows: contentRows,
                 pins: contentPins,
                 estimate: draft.estimate,
-                offers: draft.offers,
+                offers: draft.sortedOffers,
                 selectedOfferID: draft.selectedOfferID,
                 itemRows: contentItemRows,
                 fieldRows: fieldRows(draft.visibleFieldDefinitions),
@@ -131,6 +134,8 @@ struct NewDeliveryView: View {
                 : nil
             content.scrollTarget = scrollTarget
             content.onScrolled = { scrollTarget = nil }
+            content.sort = $tariffSort
+            content.priceRefreshNote = draft.priceRefreshNote
             return content
         }
 
@@ -250,6 +255,10 @@ struct NewDeliveryView: View {
                 }
             }
             .task { await store.refresh() }
+            // The persisted sort seeds the draft; the menu writes back through the
+            // binding — the model never reads defaults itself.
+            .onAppear { draft.offerSort = tariffSort }
+            .onChange(of: tariffSort) { _, value in draft.offerSort = value }
             // The «Ваши поля» schema follows the store — an edit mid-draft re-types
             // the section without losing typed values (keyed by definition id), and
             // a read that failed keeps the draft from mistaking unread for empty.

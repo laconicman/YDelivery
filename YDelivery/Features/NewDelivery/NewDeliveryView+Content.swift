@@ -143,7 +143,6 @@ extension NewDeliveryView {
         /// reads as a change. Plain value + closure, like every other input.
         var scrollTarget: ScrollAnchor? = nil
         var onScrolled: () -> Void = {}
-
         /// Where a bound's door lands on the draft card — a row id, or the strip
         /// itself for the class bound (review, PR #104). Rows answer to their
         /// subject's raw id; `.tariffStrip` answers to its constant. The view's
@@ -161,6 +160,11 @@ extension NewDeliveryView {
                 }
             }
         }
+        /// The strip's order — a binding because the sort menu edits it, persisted
+        /// on the root's side (`@AppStorage`). `priceRefreshNote` is the one-shot
+        /// footnote after a TTL re-price; nil is the common case.
+        var sort: Binding<OfferSort> = .constant(.fastest)
+        var priceRefreshNote: String? = nil
         let setFieldValue: (UUID, String) -> Void
         let revealField: (UUID) -> Void
         let editOptions: (NewDeliveryView.OptionsEditor.Focus) -> Void
@@ -396,12 +400,21 @@ extension NewDeliveryView {
 
                 if offers != .idle {
                     Section {
-                        TariffStrip(
-                            offers: offers,
-                            selectedID: selectedOfferID,
-                            select: selectOffer,
-                            retry: retryOffers
-                        )
+                        VStack(alignment: .leading, spacing: Layout.Spacing.tight) {
+                            TariffStrip(
+                                offers: offers,
+                                selectedID: selectedOfferID,
+                                select: selectOffer,
+                                retry: retryOffers
+                            )
+                            // The TTL re-price's one line — said once, under the
+                            // fresh cards.
+                            if let priceRefreshNote {
+                                Text(priceRefreshNote)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                         .listRowInsets(EdgeInsets(
                             top: Layout.Spacing.tight,
                             leading: Layout.Spacing.gutter,
@@ -411,8 +424,20 @@ extension NewDeliveryView {
                         .listRowBackground(Color.clear)
                     } header: {
                         HStack {
-                            Text("How to deliver")
+                            Text("Delivery options")
                             Spacer()
+                            // Same-class offers differ only by their windows —
+                            // the order is part of the answer (board `1b`).
+                            Menu {
+                                Picker("Sort", selection: sort) {
+                                    ForEach(OfferSort.allCases, id: \.self) { option in
+                                        Text(option.words).tag(option)
+                                    }
+                                }
+                            } label: {
+                                Label(sort.wrappedValue.words, systemSymbol: .arrowUpArrowDown)
+                                    .font(.footnote)
+                            }
                             Button(action: openExplainer) {
                                 Image(systemSymbol: .infoCircle)
                             }
@@ -872,6 +897,8 @@ extension NewDeliveryView.Content {
                             TariffCard(
                                 emoji: tariff.emoji,
                                 name: tariff.words,
+                                window: "by 00:00",
+                                pickupWindow: nil,
                                 limits: nil,
                                 priceText: "999 ₽",
                                 isSelected: false,
@@ -903,6 +930,8 @@ extension NewDeliveryView.Content {
                             TariffCard(
                                 emoji: offer.tariff.emoji,
                                 name: offer.tariff.words,
+                                window: offer.deliveryByText,
+                                pickupWindow: offer.id == selectedID ? offer.pickupByText : nil,
                                 limits: offer.id == selectedID ? offer.tariff.limitsSummary : nil,
                                 priceText: offer.priceText,
                                 isSelected: offer.id == selectedID,
@@ -939,6 +968,11 @@ extension NewDeliveryView.Content {
     struct TariffCard: View {
         let emoji: String
         let name: String
+        /// «by 11:45» — the delivery end, the card's second line. Absent when the
+        /// wire sent no window.
+        let window: String?
+        /// «pickup by 11:09» — the selected card's collection end.
+        let pickupWindow: String?
         let limits: String?
         let priceText: String
         let isSelected: Bool
@@ -961,6 +995,16 @@ extension NewDeliveryView.Content {
                     Text(name)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
+                    if let window {
+                        Text(window)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                    }
+                    if let pickupWindow {
+                        Text(pickupWindow)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if let limits {
                         Text(limits)
                             .font(.caption)
@@ -986,7 +1030,7 @@ extension NewDeliveryView.Content {
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text(verbatim: "\(name), \(priceText)\(limits.map { ", \($0)" } ?? "")"))
+            .accessibilityLabel(Text(verbatim: "\(name), \(window.map { "\($0), " } ?? "")\(priceText)\(pickupWindow.map { ", \($0)" } ?? "")\(limits.map { ", \($0)" } ?? "")"))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
     }
@@ -1415,6 +1459,8 @@ private extension MKCoordinateRegion {
         NewDeliveryView.Content.TariffCard(
             emoji: "🛵",
             name: "Courier",
+            window: "by 11:45",
+            pickupWindow: "pickup by 11:09",
             limits: "Up to 10 kg · 80 × 50 × 50 cm",
             priceText: "749 ₽",
             isSelected: true,
@@ -1423,6 +1469,8 @@ private extension MKCoordinateRegion {
         NewDeliveryView.Content.TariffCard(
             emoji: "🚚",
             name: "Cargo",
+            window: "by 15:00",
+            pickupWindow: nil,
             limits: nil,
             priceText: "3 480 ₽",
             isSelected: false,

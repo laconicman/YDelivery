@@ -781,6 +781,57 @@ struct NewDeliveryOrderingTests {
         #expect(model.ordering == .queued)
     }
 
+    /// The owned sleep to `offer_ttl` fires while the draft sits: the held quote
+    /// invalidates itself, the strip refetches, and the footnote says why. The
+    /// model's injected clock jumps the ten minutes (the `placeOrder` pattern).
+    @Test("The quote expiring re-prices the strip — and says so")
+    func expiryRepricesTheStrip() async {
+        let model = NewDeliveryView.Model(
+            estimateRoute: { _ in throw Unexpected() }, quoteClock: TestClock())
+        model.setPlace(PickedPlace(latitude: 55.75, longitude: 37.61, address: "Офис"),
+                       for: model.points[0].id)
+        model.setPlace(PickedPlace(latitude: 55.64, longitude: 37.66, address: "Дом"),
+                       for: model.points[1].id)
+
+        await model.loadOffers { _ in
+            [Offer(tariff: .courier, price: 749, currency: "RUB",
+                   pickupInterval: nil, deliveryInterval: nil,
+                   validUntil: Date.now + 600,
+                   payload: "expiring")]
+        }
+        #expect(model.quoteExpiresAt != nil)
+        let quoted = model.repriceRequests
+
+        for _ in 0..<20 where model.repriceRequests == quoted {
+            await Task.yield()
+        }
+
+        #expect(model.repriceRequests == quoted + 1,
+                "the deadline passed — the offers must be asked for again")
+        #expect(model.offers == .idle)
+        #expect(model.priceRefreshNote
+                == String(localized: "Prices refreshed — the quote expired"))
+    }
+
+    @Test("A quote that expired behind the sheet re-prices instead of queueing")
+    func expiredQuoteRepricesNotQueues() async {
+        let model = readyDraft()
+        await model.loadOffers { _ in
+            [Offer(tariff: .express, price: 1190, currency: "RUB",
+                   pickupInterval: nil, deliveryInterval: nil,
+                   validUntil: Date.now - 60,
+                   payload: "spent")]
+        }
+        let quoted = model.repriceRequests
+
+        model.confirmOrder()
+
+        #expect(model.ordering == .idle, "a spent payload must never reach create")
+        #expect(model.repriceRequests == quoted + 1)
+        #expect(model.offers == .idle, "the strip refetches rather than replaying")
+        #expect(model.orderRequest == nil)
+    }
+
     @Test("An edited retry mints a new token; an unchanged one keeps it")
     func tokenFollowsTheRequest() async {
         struct Offline: Error {}

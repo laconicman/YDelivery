@@ -83,6 +83,30 @@ struct NewDeliveryOffersTests {
                 "the strip keeps the provider's own words — a bare refusal is undiagnosable")
     }
 
+    @Test("The strip's order is the sender's — the wire order is not the answer")
+    func sortedOffersHonoursTheChoice() async {
+        let model = filledDraft()
+        let now = Date.now
+        let slow = offer("slow")
+        let quick = Offer(tariff: .express, price: 1190, currency: "RUB",
+                          pickupInterval: nil,
+                          deliveryInterval: now + 600 ... now + 900,
+                          payload: "quick")
+        await model.loadOffers { _ in [slow, quick] }
+        #expect(model.sortedOffers == .ready([quick, slow]),
+                "fastest first: the windowless card sorts last, wire order be damned")
+
+        model.offerSort = .cheapest
+        #expect(model.sortedOffers == .ready([slow, quick]))
+    }
+
+    @Test("A windowless quote never expires")
+    func timelessQuoteNeverExpires() async {
+        let model = filledDraft()
+        await model.loadOffers { _ in [self.offer("a")] }
+        #expect(model.quoteExpiresAt == nil)
+    }
+
     private struct Unexpected: Error {}
     private struct ProviderRefusal: LocalizedError {
         var errorDescription: String? { "no offers today" }
