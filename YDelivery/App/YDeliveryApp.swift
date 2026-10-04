@@ -56,7 +56,12 @@ struct YDeliveryApp: App {
         }
         // CloudKit sync starts at launch, entitlement or not — `startSync` probes and
         // degrades to a logged, stored failure rather than a CKContainer trap.
-        _syncTask = State(initialValue: Task { await database?.startSync() })
+        // Except the schema-seed launches: those drive their own isolated store
+        // and the real one must never sync its rows.
+        _syncTask = State(initialValue: Task {
+            guard !Self.isCloudKitSeed, !Self.isCloudKitSeedClean else { return }
+            await database?.startSync()
+        })
         _session = State(initialValue: session)
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
@@ -73,7 +78,8 @@ struct YDeliveryApp: App {
         Task {
             await Self.seedFieldsIfFlagged(store)
             await Self.seedHistoryIfFlagged(store, database: database)
-            await Self.seedCloudKitSchemaIfFlagged(store, database: database)
+            await Self.seedCloudKitSchemaIfFlagged()
+            await Self.cleanCloudKitSeedIfFlagged()
         }
         #endif
     }
@@ -106,8 +112,9 @@ struct YDeliveryApp: App {
     /// The App Group database — or, for the fixture launch, a throwaway one in a
     /// fresh directory with a container that resolves to nothing (`startSync`
     /// degrades to a logged failure, as it does on any unentitled install). The
-    /// `--ckschema-seed` launch is *not* hermetic — the real store and the real
-    /// container are the whole point of it.
+    /// `--ckschema-seed` launch keeps the real store too — the seed drives its
+    /// own isolated database, so the store below is constructed but never
+    /// started (see the launch `syncTask`).
     private static func database() -> AppDatabase? {
         guard !isHistoryFixture else {
             return AppDatabase(

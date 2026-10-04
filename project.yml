@@ -141,6 +141,10 @@ targets:
       # surface now, not only test seams (doc:Collaboration).
       - package: SQLiteData
         product: SQLiteData
+      # The schema seed runs raw SQL on `database.queue` — Kit's public seam —
+      # which needs the GRDB symbols linked into the testable bundle too.
+      - package: GRDB
+        product: GRDB
       # The widget extension — embeds into the app's PlugIns; the surfaces
       # inside read the shared App Group store and never the app itself.
       - target: YDeliveryWidgets
