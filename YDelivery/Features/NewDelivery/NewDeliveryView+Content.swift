@@ -234,39 +234,43 @@ extension NewDeliveryView {
 
             var body: some View {
                 VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                    switch row.kind {
-                    case .text:
-                        HStack(spacing: Layout.Spacing.unit) {
-                            TextField(row.name, text: value)
-                            requiredCaption
-                        }
-                    case .choice:
-                        Picker(selection: value) {
-                            if row.isOptional {
-                                // Clearing *is* an answer for an optional field.
-                                Text("None").tag("")
-                            } else if row.value.isEmpty {
-                                // The unset seat — a prompt, never an offered
-                                // answer: it leaves the option list once a real
-                                // choice lands (a required field can't un-answer).
-                                Text("Not set").tag("")
-                            }
-                            ForEach(row.choices, id: \.self) { choice in
-                                Text(choice).tag(choice)
-                            }
-                        } label: {
+                    Group {
+                        switch row.kind {
+                        case .text:
                             HStack(spacing: Layout.Spacing.unit) {
-                                Text(row.name) // the schema's own words, verbatim
+                                TextField(row.name, text: value)
                                 requiredCaption
+                            }
+                        case .choice:
+                            Picker(selection: value) {
+                                if row.isOptional {
+                                    // Clearing *is* an answer for an optional field.
+                                    Text("None").tag("")
+                                } else if row.value.isEmpty {
+                                    // The unset seat — a prompt, never an offered
+                                    // answer: it leaves the option list once a real
+                                    // choice lands (a required field can't un-answer).
+                                    Text("Not set").tag("")
+                                }
+                                ForEach(row.choices, id: \.self) { choice in
+                                    Text(choice).tag(choice)
+                                }
+                            } label: {
+                                HStack(spacing: Layout.Spacing.unit) {
+                                    Text(row.name) // the schema's own words, verbatim
+                                    requiredCaption
+                                }
                             }
                         }
                     }
+                    // Motion row 7: the nudge sits beside the input — the bound
+                    // line itself must not move.
+                    .modifier(FieldShake(phase: CGFloat(shakes)))
                     if unmet {
                         Notice(.bound, "Required — the order doesn't leave without it.")
                             .font(.footnote)
                     }
                 }
-                .modifier(FieldShake(phase: CGFloat(shakes)))
                 .onChange(of: unmet) { _, nowUnmet in
                     // Motion row 7: the ~2-frame nudge sits beside the input, and
                     // only on the transition into unmet — a fresh draft's
@@ -302,8 +306,12 @@ extension NewDeliveryView {
             private static let distance: CGFloat = 6
 
             func effectValue(size: CGSize) -> ProjectionTransform {
-                ProjectionTransform(CGAffineTransform(
-                    translationX: sin(phase * .pi * 3) * Self.distance * (1 - phase), y: 0))
+                // The fractional pass only — repeated clears replay the same
+                // nudge rather than magnifying it or drifting sideways.
+                let progress = phase - floor(phase)
+                return ProjectionTransform(CGAffineTransform(
+                    translationX: sin(progress * .pi * 3) * Self.distance * (1 - progress),
+                    y: 0))
             }
         }
 
