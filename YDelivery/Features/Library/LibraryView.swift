@@ -94,12 +94,17 @@ struct LibraryView: View {
                         pickedPlace = nil
                     }
                 }) {
-                    PointPickerView(prompt: "New place") { place, contact in
-                        pickedPlace = PendingNewPlace(place: place, contact: contact)
-                    }
+                    // No saved chips here — picking one could only rename the
+                    // place it already is.
+                    PointPickerView(
+                        prompt: "New place",
+                        confirm: { place, contact in
+                            pickedPlace = PendingNewPlace(place: place, contact: contact)
+                        },
+                        showsSavedPlaces: false)
                 }
                 .sheet(item: $namingPlace) { pending in
-                    PointPickerView.SavePlaceSheet(address: pending.place.displayAddress) { name, kind in
+                    PointPickerView.SavePlaceSheet(address: pending.place.displayAddress, standsAlone: true) { name, kind in
                         try await store.save(SavedPlace(
                             name: name, kind: kind,
                             point: RoutePoint(pending.place, contact: pending.contact)))
