@@ -136,6 +136,25 @@ struct NewDeliveryOrderingTests {
         #expect(model.orderBlockers.isEmpty, "a dialable number lifts the block")
     }
 
+    /// The write landed but its confirming read failed: the published schema may
+    /// predate a new *required* field, so a populated cache still blocks — the
+    /// door is the re-read (review, PR #104).
+    @Test("A stale field cache blocks the order even with definitions on hand")
+    func staleFieldCacheBlocks() async {
+        let model = readyDraft()
+        model.fieldDefinitions = [CustomFieldDefinition(name: "Заказ")]
+        model.fieldsCacheIsStale = true
+
+        #expect(model.orderBlockers.contains {
+            $0.destination == .fieldsSchema
+                && $0.message.contains("could not be re-read")
+        }, "populated but untrusted — the bound names what happened")
+
+        model.fieldsCacheIsStale = false
+        await priced(model)
+        #expect(model.orderBlockers.isEmpty, "a fresh read clears it")
+    }
+
     @Test("A dialable number with nobody attached still blocks — the wire wants a name")
     func phoneWithoutNameBlocks() async {
         let model = readyDraft()

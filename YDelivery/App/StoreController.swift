@@ -36,6 +36,11 @@ final class StoreController {
     /// The fields side of the seam — a schema that failed to read is a draft showing
     /// no fields, which is exactly the state to tell apart from "nothing configured".
     private(set) var fieldsError: (any Error)?
+    /// A schema write landed but its confirming read failed — the published
+    /// definitions are older than the disk and must not be trusted for validation,
+    /// even though they are populated (review, PR #104). Cleared by the next read
+    /// of definitions that succeeds, wherever it came from.
+    private(set) var fieldsCacheIsStale = false
     /// The write side of the same seam — a gesture the store could not carry. A
     /// reread cannot fix it, so ``refresh()`` leaves it standing; only the next
     /// successful field write clears it.
@@ -213,6 +218,7 @@ final class StoreController {
                 fieldDefinitions = try await Self.readFieldDefinitions(database)
                 orderFields = try await Self.readOrderFields(database)
                 fieldsError = nil
+                fieldsCacheIsStale = false
             } catch {
                 fieldsError = error
             }
@@ -391,8 +397,12 @@ final class StoreController {
                 // The confirming re-read succeeded — the schema is readable and
                 // the read error's news is stale.
                 fieldsError = nil
+                fieldsCacheIsStale = false
             } catch {
+                // The write landed; the read is the failure. What is published now
+                // predates it — a cache nobody may validate against.
                 fieldsError = error
+                fieldsCacheIsStale = true
             }
         }
         fieldWrites = task

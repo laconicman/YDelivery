@@ -329,8 +329,20 @@ struct StoreControllerTests {
 
         #expect(controller.fieldsError != nil, "the confirming read failed — the schema is unreadable")
         #expect(controller.fieldsWriteError == nil, "the write was not refused")
-        // No healthy-looking republication arrived: the stale copy stays as-is.
+        // No healthy-looking republication arrived: the stale copy stays as-is —
+        // and is *marked* stale, so a populated cache can never validate an order.
         #expect(controller.fieldDefinitions.map(\.name) == ["А"])
+        #expect(controller.fieldsCacheIsStale,
+                "the published schema may predate the landed write")
+
+        // The column returns; the next successful read clears the debt.
+        try await database.queue.write {
+            try $0.execute(sql: "ALTER TABLE \"customFieldDefinitions\" RENAME COLUMN \"positionRenamed\" TO \"position\"")
+        }
+        await controller.refresh()
+        #expect(!controller.fieldsCacheIsStale)
+        #expect(controller.fieldsError == nil)
+        #expect(controller.fieldDefinitions.isEmpty, "the delete did land")
     }
 
     /// The widget snapshot's cap windows history, never liveness: a delivery

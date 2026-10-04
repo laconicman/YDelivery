@@ -37,10 +37,9 @@ struct NewDeliveryView: View {
     @State private var namingTemplateItem: ParcelItem?
     @State private var editingOptions: OptionsEditor.Focus?
     @State private var showsExplainer = false
-    /// The field a blocker's door is scrolling to — cleared once the card has
-    /// brought the row into view, so a second door to the same field still
-    /// lands.
-    @State private var scrollTarget: UUID?
+    /// The row a blocker's door is scrolling to — cleared once the card has
+    /// brought it into view, so a second door to the same row still lands.
+    @State private var scrollTarget: Model.ScrollAnchor?
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @Environment(ClaimsSyncController.self) private var sync
@@ -61,6 +60,9 @@ struct NewDeliveryView: View {
     private struct FieldSync: Equatable {
         let definitions: [CustomFieldDefinition]
         let unavailable: Bool
+        /// The definitions may predate a landed write — populated, but not to be
+        /// trusted for validation (review, PR #104).
+        let cacheStale: Bool
     }
 
     /// The screen's content, assembled. The init call keeps its pre-library
@@ -148,8 +150,10 @@ struct NewDeliveryView: View {
     private func openBlocker(_ destination: Model.Blocker.Destination) {
         switch destination {
         case .point(let id), .contact(let id):
+            scrollTarget = .stop(id)
             pickingPoint = draft.point(withID: id)
         case .item(let id):
+            scrollTarget = .item(id)
             editingItem = draft.item(withID: id)
         case .newItem:
             editingItem = ParcelItem()
@@ -159,9 +163,10 @@ struct NewDeliveryView: View {
             draft.revealField(id)
             // The door lands on the row it names — the card scrolls the field
             // into view once the sheet is gone.
-            scrollTarget = id
+            scrollTarget = .field(id)
         case .offer:
-            break
+            // The class bound's door is the strip itself.
+            scrollTarget = .tariffStrip
         }
     }
 
@@ -247,9 +252,11 @@ struct NewDeliveryView: View {
             // the section without losing typed values (keyed by definition id), and
             // a read that failed keeps the draft from mistaking unread for empty.
             .task(id: FieldSync(definitions: store.fieldDefinitions,
-                                unavailable: store.fieldsError != nil)) {
+                                unavailable: store.fieldsError != nil,
+                                cacheStale: store.fieldsCacheIsStale)) {
                 draft.fieldDefinitions = store.fieldDefinitions
                 draft.fieldsUnavailable = store.fieldsError != nil
+                draft.fieldsCacheIsStale = store.fieldsCacheIsStale
             }
             .sheet(isPresented: $showsExplainer) {
                 TariffExplainer(cards: explainerCards)
