@@ -351,71 +351,109 @@ extension YDeliveryApp {
         print("ckschema-seed done")
     }
 
-    /// Every row a seed run wrote, removed. `parents: false` deletes only the
-    /// children (`routeStops`, `orderItems`, `orderProviderStates`,
-    /// `orderOptions`, `orderCustomFields`, `providerEvents`, `orderMessages`,
-    /// `orderAttachments`, `attachmentBlobs`, `orderPrivateStates`,
-    /// `parcelTemplateItems`); `parents: true` then takes the roots (`orders`,
-    /// `parcelTemplates`, `savedPlaces`, `customFieldDefinitions`,
-    /// `providerAccounts`). Kit's typed deletes cover places/templates/field
-    /// definitions; raw SQL on `queue` carries the rest, the same channel the
-    /// engine's triggers observe. Used by the seed's own take-back pass at the
-    /// end of a run — ``emptySeedStore`` is the row-blind counterpart the
-    /// clean flag and the leftover-store pre-pass use, since orphans carry
-    /// ids nothing derives.
-    private static func deleteSeedRows(database: AppDatabase, parents: Bool) async throws {
-        let orderPK = UUID.derived(
-            namespace: UUID.DerivedNamespace.orderChild, "ckschema-seed", "order"
-        ).uuidString.lowercased()
-        let templateID = UUID.derived(
-            namespace: UUID.DerivedNamespace.orderChild, "ckschema-seed", "template")
-        let placeID = UUID.derived(
-            namespace: UUID.DerivedNamespace.orderChild, "ckschema-seed", "place")
-        let fieldID = UUID.derived(
-            namespace: UUID.DerivedNamespace.orderChild, "ckschema-seed", "field")
-        if !parents {
-            try await database.queue.write { db in
-                // Blobs are keyed off the attachment, so they go before the
-                // messages that name them.
-                try db.execute(sql: """
-                    DELETE FROM "attachmentBlobs" WHERE "attachmentID" IN (
-                      SELECT "attachmentRef" FROM "orderMessages"
-                      WHERE "orderID" = ?)
-                    """, arguments: [orderPK])
-                for table in ["routeStops", "orderItems", "orderProviderStates",
-                              "orderOptions", "orderCustomFields", "providerEvents",
-                              "orderMessages", "orderAttachments",
-                              "orderPrivateStates"] {
-                    try db.execute(
-                        sql: "DELETE FROM \"\(table)\" WHERE \"orderID\" = ?",
-                        arguments: [orderPK])
-                }
-                try db.execute(sql: """
-                    DELETE FROM "parcelTemplateItems" WHERE "templateID" = ?
-                    """, arguments: [templateID.uuidString.lowercased()])
-            }
-            return
+    /// The deterministic root ids every qualifier below names — the same
+    /// `seedID` derivations the writes use, so a clean pass reaches the seed's
+    /// own rows and nothing else.
+    private static var seedRoots: (order: UUID, place: UUID, template: UUID,
+                                   field: UUID, accountKey: String) {
+        func id(_ part: String) -> UUID {
+            UUID.derived(namespace: UUID.DerivedNamespace.orderChild,
+                         "ckschema-seed", part)
         }
-        try await database.queue.write { db in
-            try db.execute(sql: """
+        return (id("order"), id("place"), id("template"), id("field"),
+                "yandex:ckschema-seed")
+    }
+
+    /// Every delete a clean pass is allowed to run — *every statement carries a
+    /// `WHERE` naming the seed's deterministic root id or a child column
+    /// hanging under it*. Unqualified deletes are forbidden here: the isolated
+    /// store shares the container's zones, so anything sync fetched — a
+    /// `fetchChanges()` call or `startSync`'s own pull — is *in this database*,
+    /// and a bare `DELETE FROM <table>` would ship a tombstone for an owner's
+    /// genuine record (Devin review, PR #90 round 4). Photo/attachment orphans
+    /// need no row-blindness — their non-deterministic ids still hang under
+    /// the seed's `orderID`. `parent` marks the two flush phases: children go
+    /// first because CloudKit validates `parent` references per batch.
+    nonisolated static func seedDeletions(
+        orderID: UUID, placeID: UUID, templateID: UUID, fieldID: UUID,
+        accountKey: String
+    ) -> [(table: String, sql: String, arguments: [String], parent: Bool)] {
+        let orderPK = orderID.uuidString.lowercased()
+        let byOrder = "DELETE FROM \"%@\" WHERE \"orderID\" = ?"
+        return [
+            // The blob keys off the attachment, whose `orderID` qualifies it.
+            ("attachmentBlobs", """
+                DELETE FROM "attachmentBlobs" WHERE "attachmentID" IN (
+                  SELECT "id" FROM "orderAttachments" WHERE "orderID" = ?)
+                """, [orderPK], false),
+            ("routeStops", String(format: byOrder, "routeStops"), [orderPK], false),
+            ("orderItems", String(format: byOrder, "orderItems"), [orderPK], false),
+            ("orderProviderStates", String(format: byOrder, "orderProviderStates"), [orderPK], false),
+            ("orderOptions", String(format: byOrder, "orderOptions"), [orderPK], false),
+            ("orderCustomFields", String(format: byOrder, "orderCustomFields"), [orderPK], false),
+            ("providerEvents", String(format: byOrder, "providerEvents"), [orderPK], false),
+            ("orderMessages", String(format: byOrder, "orderMessages"), [orderPK], false),
+            ("orderAttachments", String(format: byOrder, "orderAttachments"), [orderPK], false),
+            ("orderPrivateStates", String(format: byOrder, "orderPrivateStates"), [orderPK], false),
+            ("parcelTemplateItems", """
+                DELETE FROM "parcelTemplateItems" WHERE "templateID" = ?
+                """, [templateID.uuidString.lowercased()], false),
+            // Roots — same rule, their own ids.
+            ("orders", """
                 DELETE FROM "orders" WHERE "id" = ? AND "provider" = ?
-                """, arguments: [orderPK, "yandex"])
-            try db.execute(sql: """
+                """, [orderPK, "yandex"], true),
+            ("parcelTemplates", """
+                DELETE FROM "parcelTemplates" WHERE "id" = ?
+                """, [templateID.uuidString.lowercased()], true),
+            ("savedPlaces", """
+                DELETE FROM "savedPlaces" WHERE "id" = ?
+                """, [placeID.uuidString.lowercased()], true),
+            ("customFieldDefinitions", """
+                DELETE FROM "customFieldDefinitions" WHERE "id" = ?
+                """, [fieldID.uuidString.lowercased()], true),
+            ("providerAccounts", """
                 DELETE FROM "providerAccounts" WHERE "key" = ?
-                """, arguments: ["yandex:ckschema-seed"])
+                """, [accountKey], true),
+        ]
+    }
+
+    /// Runs one phase of ``seedDeletions`` — children or roots — through raw
+    /// SQL on `queue`, the same channel the engine's triggers observe. Returns
+    /// the deleted row count per table (`changesCount`).
+    private static func runSeedDeletions(
+        database: AppDatabase, parent: Bool
+    ) async throws -> [String: Int] {
+        let roots = seedRoots
+        let deletions = seedDeletions(
+            orderID: roots.order, placeID: roots.place,
+            templateID: roots.template, fieldID: roots.field,
+            accountKey: roots.accountKey
+        ).filter { $0.parent == parent }
+        return try await database.queue.write { db in
+            var counts: [String: Int] = [:]
+            for deletion in deletions {
+                try db.execute(
+                    sql: deletion.sql,
+                    arguments: StatementArguments(deletion.arguments))
+                let deleted = db.changesCount
+                if deleted > 0 { counts[deletion.table] = deleted }
+            }
+            return counts
         }
-        try database.deleteParcelTemplate(id: templateID)
-        try database.deletePlace(id: placeID)
-        try database.deleteFieldDefinition(id: fieldID)
+    }
+
+    /// Every row a seed run wrote, removed — the seed's own take-back pass at
+    /// the end of a run. Same qualified statements as the clean pass (a delete
+    /// in this file is *never* unqualified — see ``seedDeletions``); the caller
+    /// flushes between children and roots.
+    private static func deleteSeedRows(database: AppDatabase, parents: Bool) async throws {
+        _ = try await runSeedDeletions(database: database, parent: parents)
     }
 
     /// `--ckschema-seed-clean`: take back the rows of a seed run that died
     /// mid-flight — or of an older seed revision that left them — without
-    /// rewriting anything. Opens the isolated directory if a run left one,
-    /// pulls the remote state so the deletes bind to known record versions,
-    /// empties every synced table — every row it holds, not only the
-    /// deterministic ids, so orphaned photo/attachment rows go home too — and
-    /// ships the tombstones.
+    /// rewriting anything. Opens the isolated directory if a run left one and
+    /// ships tombstones for the seed's own rows only.
     static func cleanCloudKitSeedIfFlagged() async {
         guard isCloudKitSeedClean else { return }
         let logger = Logger(subsystem: "YDelivery", category: "ckschema-seed")
@@ -428,17 +466,21 @@ extension YDeliveryApp {
 
     /// The clean pass proper — shared by `--ckschema-seed-clean` and the head
     /// of a seed run that finds a leftover store. Assumes `seedDirectory`
-    /// exists.
+    /// exists. Never fetches: the isolated store shares the container's zones,
+    /// so a pull would install the owner's *real* rows here — and any delete
+    /// that followed could only be made safe by staying qualified, which is
+    /// why ``seedDeletions`` is the only statement list this file runs (Devin
+    /// review, PR #90 round 4). With no fetch, deletes bind to the record
+    /// versions this store last knew, which is the correct basis anyway.
     private static func emptyExistingSeedStore(logger: Logger) async {
         let database = seedDatabase(fresh: false)
         await database.startSync()
-        do { try await database.syncEngine.fetchChanges() }
-        catch {
-            logger.error("seed clean fetchChanges failed: \(error)")
-            print("ckschema-seed clean fetchChanges failed: \(error)")
-        }
         do {
-            let counts = try await emptySeedStore(database: database)
+            var counts = try await runSeedDeletions(database: database, parent: false)
+            try await database.syncEngine.sendChanges()
+            counts.merge(
+                try await runSeedDeletions(database: database, parent: true)) { $1 }
+            try await database.syncEngine.sendChanges()
             let detail = counts.sorted { $0.key < $1.key }
                 .map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
             print("ckschema-seed clean deleted \(detail.isEmpty ? "nothing" : detail)")
@@ -447,39 +489,6 @@ extension YDeliveryApp {
             logger.error("seed clean failed: \(error)")
             print("ckschema-seed clean failed: \(error)")
         }
-    }
-
-    /// Deletes *every row* of every synced table the store holds and ships the
-    /// tombstones — children first in one flush, roots in the next, because
-    /// CloudKit validates `parent` references per batch. Row-blind: unlike
-    /// ``deleteSeedRows`` it names no ids, so it also takes back orphans a
-    /// deterministic list cannot know (a photo message's attachment chain, a
-    /// previous revision's rows). Returns the deleted row count per table.
-    private static func emptySeedStore(database: AppDatabase) async throws -> [String: Int] {
-        // Children whose `parent` CKReference points at `orders`, then the
-        // template items under their root — blobs first, since they key off
-        // the attachments the messages name.
-        let children = ["attachmentBlobs", "routeStops", "orderItems",
-                        "orderProviderStates", "orderOptions", "orderCustomFields",
-                        "providerEvents", "orderMessages", "orderAttachments",
-                        "orderPrivateStates", "parcelTemplateItems"]
-        let parents = ["orders", "parcelTemplates", "savedPlaces",
-                       "customFieldDefinitions", "providerAccounts"]
-        let empty: @Sendable ([String], GRDB.Database) throws -> [String: Int] = { tables, db in
-            var counts: [String: Int] = [:]
-            for table in tables {
-                let n = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \"\(table)\"") ?? 0
-                guard n > 0 else { continue }
-                try db.execute(sql: "DELETE FROM \"\(table)\"")
-                counts[table] = n
-            }
-            return counts
-        }
-        var counts = try await database.queue.write { try empty(children, $0) }
-        try await database.syncEngine.sendChanges()
-        counts.merge(try await database.queue.write { try empty(parents, $0) }) { $1 }
-        try await database.syncEngine.sendChanges()
-        return counts
     }
 
     /// A 1×1 PNG rendered, not literal bytes — decodable by construction. The
