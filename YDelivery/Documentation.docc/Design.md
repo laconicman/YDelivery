@@ -393,6 +393,14 @@ never carry the source order's key into a new row (same review).
 mapping, no required gate — the schema is what makes the feature *organizational*);
 carrier slots as a join table (the one-FK rule, and three slots don't need it).
 
+## TestFlight builds are cut from main (2026-10-04)
+
+The `release/1.0-testflight` branch was an expedient during the first upload
+week and diverged — seven commits on it never reached `main`. From now on a
+TestFlight build is an archive of `main` at a tag `tf/<marketing>-<build>`
+(e.g. `tf/1.0-4`); the listing metadata lives on `main` (#88). GitLab-flow
+version branches return only if a hotfix for a shipped version is ever needed.
+
 ## See Also
 
 - <doc:Vision>
