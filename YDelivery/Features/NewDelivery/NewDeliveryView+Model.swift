@@ -143,6 +143,9 @@ extension NewDeliveryView {
         }
 
         private let estimateRoute: RouteEstimator
+        /// The clock the quote-expiry sleep runs on — injected so tests never wait
+        /// out a real `offer_ttl` (the `placeOrder` pattern).
+        private let quoteClock: any Clock<Duration>
 
         /// This draft's persistence identity (YD-16) — minted once, carried by
         /// ``persistedDraft`` so a re-save updates the parked row rather than
@@ -152,9 +155,11 @@ extension NewDeliveryView {
         /// honestly (`orderDrafts.createdAt`).
         private var draftCreatedAt = Date()
 
-        init(estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator) {
+        init(estimateRoute: @escaping RouteEstimator = Model.mkDirectionsEstimator,
+             quoteClock: any Clock<Duration> = ContinuousClock()) {
             points = [Point(role: .pickup), Point(role: .dropoff)]
             self.estimateRoute = estimateRoute
+            self.quoteClock = quoteClock
         }
 
         /// «Повторить» / «Наоборот» — a remembered order as a fresh draft (board `3e`):
@@ -847,6 +852,54 @@ extension NewDeliveryView {
             return OfferRequest(waypoints: waypoints, items: items, options: priced)
         }
 
+        /// «Fastest»/«Cheapest» — the strip's order. The root seeds it from
+        /// `@AppStorage` so the choice survives the sheet; the model never reads
+        /// defaults itself.
+        var offerSort: OfferSort = .fastest
+
+        /// `offers` in the sender's chosen order — what the strip renders. The wire's
+        /// order is no answer: same-class variants arrive differing only by window.
+        var sortedOffers: Offers {
+            guard case .ready(let offers) = offers else { return offers }
+            return .ready(offers.sorted(by: offerSort))
+        }
+
+        /// The soonest `offer_ttl` among the priced offers — after it the payloads
+        /// cannot be spent, which makes it the strip's re-price deadline.
+        var quoteExpiresAt: Date? {
+            guard case .ready(let offers) = offers else { return nil }
+            return offers.lazy.compactMap(\.validUntil).min()
+        }
+
+        /// «Prices refreshed — the quote expired» — the footnote the strip shows once
+        /// after a TTL-driven re-price; spent with the reprice disclosure at the next
+        /// confirm, and replaced by the next invalidation.
+        private(set) var priceRefreshNote: String?
+
+        /// Sleeps until `quoteExpiresAt` and re-prices — an owned task, re-armed by
+        /// every priced answer, dead when the offers it guards go away and on
+        /// `placeOrder`, which spends the payloads before they can lapse mid-flight.
+        @ObservationIgnored private var quoteExpiryTask: Task<Void, Never>?
+
+        private func armQuoteExpiry() {
+            quoteExpiryTask?.cancel()
+            guard let deadline = quoteExpiresAt else {
+                quoteExpiryTask = nil
+                return
+            }
+            quoteExpiryTask = Task { [weak self, quoteClock] in
+                let wait = deadline.timeIntervalSinceNow
+                if wait > 0 { try? await quoteClock.sleep(for: .seconds(wait)) }
+                guard let self, !Task.isCancelled else { return }
+                // Nothing priced, nothing to expire — a confirm that already
+                // re-priced must not be invalidated twice.
+                guard case .ready = offers else { return }
+                // An order already in flight spends the payload it holds; expiry
+                // mid-run is the provider's answer, not a reason to reprice under it.
+                if ordering == .idle { invalidateStaleQuote(fromExpiry: true) }
+            }
+        }
+
         /// Loads priced offers through the caller's fetch — the root view hands in the
         /// session controller's call, so this model never learns the transport. The
         /// selection survives a reload when the same offer returns; otherwise the first
@@ -854,9 +907,12 @@ extension NewDeliveryView {
         func loadOffers(
             _ fetch: (OfferRequest) async throws -> [Offer]
         ) async {
+            quoteExpiryTask?.cancel()
+            quoteExpiryTask = nil
             guard let request = pricingInputs else {
                 offers = .idle
                 selectedOfferID = nil
+                priceRefreshNote = nil
                 return
             }
             offers = .loading
@@ -874,18 +930,24 @@ extension NewDeliveryView {
                     let sameClass = chosenTariff.flatMap { tariff in
                         loaded.first { $0.tariff == tariff }
                     }
-                    selectedOfferID = (sameClass ?? loaded.first)?.id
+                    // The fallback is the sort's first card, not the wire's —
+                    // the strip and the selected card answer the same pick
+                    // (review, PR #117).
+                    selectedOfferID = (sameClass ?? loaded.sorted(by: offerSort).first)?.id
                 }
+                armQuoteExpiry()
             } catch is CancellationError {
             } catch is OffersUnavailable {
                 guard !Task.isCancelled else { return }
                 offers = .signedOut
                 selectedOfferID = nil
+                priceRefreshNote = nil
             } catch {
                 guard !Task.isCancelled else { return }
                 offers = .failed(
                     (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 )
+                priceRefreshNote = nil
             }
         }
 
@@ -956,12 +1018,17 @@ extension NewDeliveryView {
         /// The held offer's payload is what the provider refused — drop it and the
         /// priced snapshot so the next attempt is priced fresh rather than replayed
         /// verbatim. `chosenTariff` stays, so the reprice re-selects the same class.
-        private func invalidateStaleQuote() {
+        private func invalidateStaleQuote(fromExpiry: Bool = false) {
             if staleQuotedPrice == nil { staleQuotedPrice = selectedOffer?.priceText }
             selectedOfferID = nil
             pricedRequest = nil
             offers = .idle
             repriceRequests += 1
+            quoteExpiryTask?.cancel()
+            quoteExpiryTask = nil
+            if fromExpiry {
+                priceRefreshNote = String(localized: "Prices refreshed — the quote expired")
+            }
         }
 
         /// One order-level bound as a door — the sentence the review sheet reads plus
@@ -1248,6 +1315,15 @@ extension NewDeliveryView {
             }
             switch ordering {
             case .idle, .failed:
+                // An `offer_ttl` that passed while the sheet was open is the same kind
+                // of stale: the payload cannot be spent, so re-price rather than queue
+                // a create the provider would refuse (the expiry task misses a
+                // sheet-open confirm by sleeping). Inside the branch — a queued or
+                // running order never re-prices from a tap (review, PR #117).
+                if selectedOffer?.isExpired() == true {
+                    invalidateStaleQuote(fromExpiry: true)
+                    return
+                }
                 // Safe to rotate here and only here: `.failed` is the state that promises
                 // acceptance was never attempted. An edited draft must mint a new token —
                 // and so must one whose claim the provider itself ended: replaying that
@@ -1260,6 +1336,7 @@ extension NewDeliveryView {
                 // The disclosure is spent — a fresh attempt that fails the same way
                 // sets its own stale quote.
                 staleQuotedPrice = nil
+                priceRefreshNote = nil
                 ordering = .queued
             default:
                 break
@@ -1279,6 +1356,18 @@ extension NewDeliveryView {
             guard ordering == .queued, let request = orderRequest,
                   let offer = selectedOffer
             else { return }
+            // An expiry between the confirm and this run would send a dead
+            // payload — fail plainly and re-price rather than create what the
+            // provider will refuse (review, PR #117).
+            guard !offer.isExpired(at: .now) else {
+                invalidateStaleQuote(fromExpiry: true)
+                ordering = .failed(
+                    String(localized: "The quote expired before the order left — prices are refreshing."))
+                return
+            }
+            // The run spends the payloads it holds; the expiry sleep must not reprice
+            // under a live attempt.
+            quoteExpiryTask?.cancel()
             // Set the moment acceptance is attempted. After that point a failure is not
             // evidence that nothing happened: the provider may have accepted and lost
             // the answer on the way back.

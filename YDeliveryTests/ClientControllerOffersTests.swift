@@ -90,7 +90,9 @@ struct ClientControllerOffersTests {
                 to: Date(timeIntervalSince1970: 900)
             ),
             price: .init(currency: .rub, surgeRatio: 1.1, totalPrice: "1449", totalPriceWithVat: "1767.78"),
-            taxiClass: .express
+            taxiClass: .express,
+            description: "express_30min_longer",
+            offerTtl: Date(timeIntervalSince1970: 9500)
         )))
 
         #expect(offer.tariff == .express)
@@ -98,6 +100,11 @@ struct ClientControllerOffersTests {
         #expect(offer.currency == "RUB")
         #expect(offer.payload == "offer-token")
         #expect(offer.pickupInterval?.lowerBound == Date(timeIntervalSince1970: 500))
+        // The variant, the deadline and the surge ride the same card — `description`
+        // stays opaque, `offer_ttl` is what the re-price waits on (drive, 2026-10-03).
+        #expect(offer.variant == "express_30min_longer")
+        #expect(offer.validUntil == Date(timeIntervalSince1970: 9500))
+        #expect(offer.surgeRatio == 1.1)
     }
 
     @Test("The documented extra classes map to named cases, not the raw wire value")

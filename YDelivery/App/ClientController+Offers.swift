@@ -199,6 +199,9 @@ nonisolated extension Offer {
             currency: offer.price.currency.rawValue,
             pickupInterval: ClosedRange(saneFrom: offer.pickupInterval.from, to: offer.pickupInterval.to),
             deliveryInterval: ClosedRange(saneFrom: offer.deliveryInterval.from, to: offer.deliveryInterval.to),
+            variant: offer.description,
+            validUntil: offer.offerTtl,
+            surgeRatio: offer.price.surgeRatio,
             payload: offer.payload
         )
     }
