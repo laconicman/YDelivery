@@ -479,6 +479,22 @@ be shorter than the straight line between its ends — and retries the leg as
   the service tier visibly trails the advertised list — re-probe `.transit`
   and `.automobile` on major OS releases.
 
+## YD-32 — Same-class offers differ only by price — **open**
+
+The provider returns several offers per class — wire evidence: `courier` arrives
+as `express`, `express_30min_longer`, `2_hours_delivery` at different prices.
+The tariff card renders class name + price and nothing else:
+`Offer.pickupInterval`/`deliveryInterval` are parsed but rendered nowhere, and
+the wire's `description` — the provider's own name for the speed/price
+trade-off — isn't mapped at all. The sender sees two «Курьер» cards at
+different prices and is left to guess why.
+
+- **Cost:** choosing between same-class offers is a price lottery — speed is
+  the thing being priced, and nothing on the card names it.
+- **Discharge:** render the windows on the card (pickup ≈ «забор ~N мин»,
+  delivery ≈ «~N мин / к HH:MM») and map `description` to sender words —
+  the provider's own vocabulary for why one offer outruns another.
+
 ## YD-33 — The background-refresh launch handler has no automated test — **open**
 
 The handler registered in `YDeliveryApp.init()` only runs when iOS launches a
