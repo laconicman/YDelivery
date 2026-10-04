@@ -3,8 +3,8 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/laconicman/YDelivery)
 
 A general-purpose iOS delivery app — for people and businesses that send parcels:
-point-to-point, store-to-customer, warehouse runs. Order from a map, watch the courier,
-share the tracking, repeat the run. Delivery providers plug in behind one boundary; the
+point-to-point, store-to-customer, warehouse runs. Order from a map, hear when the courier
+arrives, share the order, repeat the run. Delivery providers plug in behind one boundary; the
 first integration is Yandex Delivery's Express (B2B Cargo) API through
 [`YandexDeliveryExpressAPI`](https://github.com/laconicman/YandexDeliveryExpress).
 

@@ -172,7 +172,8 @@ stays (<doc:Design> → "Unofficial, visibly").
 ### App Store presentation — what a listing needs from this codebase
 
 - **Name and subtitle.** `YDelivery` — a delivery-first title; the subtitle names the
-  integration (*"deliveries with Yandex business accounts — unofficial client"*).
+  integration and must fit the App Store's 30-character limit (*"Yandex Delivery —
+  unofficial"*, 28).
   Nominative use of the provider's name is the honest description; no logos,
   no color mimicry (trademark hygiene, and App Review 5.2.1 reads third-party names
   case by case — the disclaimer in the subtitle is the argument).
