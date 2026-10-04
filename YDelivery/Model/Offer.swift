@@ -11,6 +11,15 @@ nonisolated struct Offer: Hashable, Sendable, Identifiable {
     var currency: String
     var pickupInterval: ClosedRange<Date>?
     var deliveryInterval: ClosedRange<Date>?
+    /// The wire's `description` — the variant within a class (`express_30min_longer`
+    /// and kin). Kept opaque and never rendered raw: same-class offers differ only
+    /// by it and their windows, and the windows are what the card says.
+    var variant: String? = nil
+    /// `offer_ttl` — past it the payload cannot be spent, so it is the strip's
+    /// re-price deadline.
+    var validUntil: Date? = nil
+    /// `price.surge_ratio` — the demand multiplier the price already reflects.
+    var surgeRatio: Double? = nil
     /// The offer token for `claims/create`. Short-lived; never rendered.
     var payload: String
 
@@ -121,6 +130,73 @@ nonisolated extension Offer {
     var priceText: String {
         price.formatted(.currency(code: currency).precision(.fractionLength(0...2)))
     }
+
+    /// «by 11:45» — the delivery end, the card's second line. A window ending on
+    /// another day names it («by Oct 5, 11:45») rather than reading as today.
+    var deliveryByText: String? {
+        deliveryInterval.map { String(localized: "by \(Self.windowEnd($0.upperBound))") }
+    }
+
+    /// «pickup by 11:09» — the same words for the collection end, on the selected card.
+    var pickupByText: String? {
+        pickupInterval.map { String(localized: "pickup by \(Self.windowEnd($0.upperBound))") }
+    }
+
+    /// The payload stops being spendable at `offer_ttl`; absent means the wire said
+    /// nothing, so nothing expires.
+    func isExpired(at now: Date = .now) -> Bool {
+        validUntil.map { $0 <= now } ?? false
+    }
+
+    /// The window's tail in the reader's calendar — hour:minute same-day, day and
+    /// month added otherwise. Separated from the wording so tests pin the calendar.
+    static func windowEnd(_ end: Date, calendar: Calendar = .current) -> String {
+        let style: Date.FormatStyle = calendar.isDateInToday(end)
+            ? .dateTime.hour().minute()
+            : .dateTime.day().month(.abbreviated).hour().minute()
+        return end.formatted(style)
+    }
+}
+
+/// The strip's ordering — what the header menu offers. The raw value persists under
+/// `tariffSort` in `@AppStorage`.
+nonisolated enum OfferSort: String, CaseIterable, Codable, Sendable {
+    case fastest
+    case cheapest
+
+    var words: String {
+        switch self {
+        case .fastest: String(localized: "Fastest")
+        case .cheapest: String(localized: "Cheapest")
+        }
+    }
+}
+
+nonisolated extension Array where Element == Offer {
+    /// Same-class offers differ only by their windows (the drive's wire log: four
+    /// couriers, four delivery ends), so the order the strip draws is the answer.
+    /// A windowless offer sorts last — it cannot promise a time.
+    func sorted(by sort: OfferSort) -> [Offer] {
+        switch sort {
+        case .fastest:
+            sorted { lhs, rhs in
+                switch (lhs.deliveryInterval?.upperBound, rhs.deliveryInterval?.upperBound) {
+                case (let left?, let right?):
+                    left == right ? lhs.price < rhs.price : left < right
+                case (nil, _?): false
+                case (_?, nil): true
+                case (nil, nil): lhs.price < rhs.price
+                }
+            }
+        case .cheapest:
+            sorted { lhs, rhs in
+                lhs.price == rhs.price
+                    ? (lhs.deliveryInterval?.upperBound ?? .distantFuture)
+                        < (rhs.deliveryInterval?.upperBound ?? .distantFuture)
+                    : lhs.price < rhs.price
+            }
+        }
+    }
 }
 
 #if DEBUG
@@ -136,18 +212,22 @@ extension Offer {
             Offer(tariff: .courier, price: 749, currency: "RUB",
                   pickupInterval: now + 15 * 60 ... now + 30 * 60,
                   deliveryInterval: now + 50 * 60 ... now + 80 * 60,
+                  variant: "express", validUntil: now + 10 * 60, surgeRatio: 1.1,
                   payload: "uitest-courier"),
             Offer(tariff: .express, price: 1190, currency: "RUB",
                   pickupInterval: now + 10 * 60 ... now + 25 * 60,
                   deliveryInterval: now + 40 * 60 ... now + 70 * 60,
+                  variant: "express", validUntil: now + 10 * 60, surgeRatio: 1.0,
                   payload: "uitest-express"),
             Offer(tariff: .other("superexpress_d2d"), price: 1890, currency: "RUB",
                   pickupInterval: now + 5 * 60 ... now + 15 * 60,
                   deliveryInterval: now + 25 * 60 ... now + 45 * 60,
+                  variant: "2_hours_delivery", validUntil: now + 10 * 60, surgeRatio: 1.2,
                   payload: "uitest-faster"),
             Offer(tariff: .cargo, price: 3400, currency: "RUB",
                   pickupInterval: now + 30 * 60 ... now + 60 * 60,
                   deliveryInterval: now + 90 * 60 ... now + 150 * 60,
+                  variant: "cargo", validUntil: now + 10 * 60, surgeRatio: 1.0,
                   payload: "uitest-cargo"),
         ]
     }
