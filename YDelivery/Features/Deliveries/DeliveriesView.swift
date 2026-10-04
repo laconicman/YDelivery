@@ -191,6 +191,9 @@ extension DeliveriesView.Content.Row {
             destinationText: destination?.compactAddress ?? origin?.compactAddress ?? "",
             originText: hasOrigin ? origin?.compactAddress : nil,
             middleStops: hasOrigin ? max(0, (destinationIndex ?? 0) - 1) : 0,
+            // The collapse holds six waits behind one chip — on those rows the
+            // provider's phrase says which; everywhere else the chip suffices.
+            statusDetail: order.statusDetail,
             priceText: order.priceText,
             route: order.route,
             // Search hits the route's addresses, the people at the doors, the

@@ -54,6 +54,14 @@ extension OrderDetailView {
                 Section {
                     HStack {
                         StatusChip(status: order.status)
+                        // The decision rows name which wait they are — the
+                        // provider's phrase beside the chip (the list row's
+                        // statusDetail, same derivation).
+                        if let statusDetail = order.statusDetail {
+                            Text(statusDetail)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer()
                         Text(order.created.formatted(date: .abbreviated, time: .shortened))
                             .font(.footnote)
@@ -336,6 +344,16 @@ nonisolated extension Order {
             }
         }
     }
+
+    /// Which wait a `.attention` order is — the provider's own phrase beside the
+    /// collapsed chip, so the one family word never stands in for six different
+    /// decisions (the drive's D2: refused claims read "Not delivered" though
+    /// nothing was ever dispatched). `nil` for the statuses whose chip suffices.
+    var statusDetail: String? {
+        guard status == .attention else { return nil }
+        return providerStatus.flatMap(ProviderStatusPhrase.phrase(for:))
+            .map { String(localized: $0) }
+    }
 }
 
 #if DEBUG
@@ -484,6 +502,18 @@ nonisolated extension Order {
     }
 }
 
+#Preview("Refused — never dispatched, named so") {
+    NavigationStack {
+        OrderDetailView.Content(
+            order: .previewRefused,
+            cancellation: .loading,
+            reconciling: false,
+            retry: {},
+            confirm: {}
+        )
+    }
+}
+
 extension Order {
     /// Preview fixtures — a claim still being worked, and one long done.
     static var previewSearching: Order {
@@ -551,6 +581,25 @@ extension Order {
             courierName: "Сергей",
             etaMinutes: 14,
             providerStatus: "pickuped"
+        )
+    }
+
+    /// The drive's litter row: created, priced, refused at acceptance — `failed`
+    /// provider-side though nothing ever dispatched.
+    static var previewRefused: Order {
+        Order(
+            created: .init(timeIntervalSince1970: 1_800_000_000),
+            status: .attention,
+            route: [
+                RoutePoint(latitude: 55.646068, longitude: 37.668176, address: "Москва, ул Москворечье, 6", contactName: "Иван Петров"),
+                RoutePoint(latitude: 55.652212, longitude: 37.648210, address: "Москва, Каширское шоссе, 52", contactName: "Анна"),
+            ],
+            price: "1767.78",
+            currency: "RUB",
+            tariff: "express",
+            claimID: "claim-preview-refused",
+            providerStatus: "failed",
+            providerObservedAt: .init(timeIntervalSince1970: 1_800_000_300)
         )
     }
 }

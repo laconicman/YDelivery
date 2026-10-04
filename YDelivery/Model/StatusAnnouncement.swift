@@ -41,7 +41,7 @@ nonisolated enum StatusAnnouncement {
             Content(body: String(localized: "No courier found — the order needs attention"),
                     isTerminal: false, isTimeSensitive: true)
         case "failed":
-            Content(body: String(localized: "Delivery failed"),
+            Content(body: String(localized: "The order ended before delivery"),
                     isTerminal: true, isTimeSensitive: true)
         case "cancelled", "cancelled_with_payment", "cancelled_by_taxi",
              "cancelled_with_items_on_hands":

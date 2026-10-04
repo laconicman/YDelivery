@@ -52,6 +52,10 @@ struct StatusAnnouncementTests {
             #expect(content?.isTimeSensitive == true,
                     "\(status) is an ending the sender must handle — it interrupts")
         }
+        // `failed` speaks the kit's phrase — a claim refused at acceptance never
+        // dispatched, so "Delivery failed" would presume what never happened.
+        #expect(StatusAnnouncement.content(for: "failed")?.body ==
+                "The order ended before delivery")
         // performer_not_found is a failure the order survives — the sender can
         // retry — so it interrupts but does not clear the thread.
         let content = StatusAnnouncement.content(for: "performer_not_found")
