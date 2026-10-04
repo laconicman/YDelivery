@@ -142,7 +142,7 @@ extension NewDeliveryView {
         /// A blocker's field door, landed: the root sets the row to bring into
         /// view; `onScrolled` clears it so the next door to the same row still
         /// reads as a change. Plain value + closure, like every other input.
-        var scrollTarget: UUID? = nil
+        var scrollTarget: NewDeliveryView.Model.ScrollAnchor? = nil
         var onScrolled: () -> Void = {}
         let setFieldValue: (UUID, String) -> Void
         let revealField: (UUID) -> Void
@@ -403,14 +403,19 @@ extension NewDeliveryView {
                             .accessibilityLabel(Text("About the delivery classes"))
                         }
                     }
+                    // The class bound's door lands here — the strip is the row
+                    // that answers it.
+                    .id("tariffStrip")
                 }
 
                 Section {
                     if let templatesError {
+                        // A failed read stays quiet — glyph + words + the in-place
+                        // retry, never the error hue (the `EstimateBar` convention).
                         VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                            Text(templatesError)
+                            Label(templatesError, systemSymbol: .exclamationmarkTriangle)
                                 .font(.footnote)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(.secondary)
                             Button("Retry", action: retryTemplates)
                                 .font(.footnote)
                         }
@@ -511,10 +516,11 @@ extension NewDeliveryView {
                 if fieldsError != nil || !fieldRows.isEmpty || !hiddenFieldRows.isEmpty {
                     Section {
                         if let fieldsError {
+                            // Same read-failure convention as the templates row.
                             VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                                Text(fieldsError)
+                                Label(fieldsError, systemSymbol: .exclamationmarkTriangle)
                                     .font(.footnote)
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(.secondary)
                                 Button("Retry", action: retryFields)
                                     .font(.footnote)
                             }
@@ -584,7 +590,7 @@ extension NewDeliveryView {
                 // brings the field to center so the bound is seen where it is
                 // answered.
                 guard let target else { return }
-                withAnimation { proxy.scrollTo(target, anchor: .center) }
+                withAnimation { proxy.scrollTo(target.id, anchor: .center) }
                 onScrolled()
             }
             }

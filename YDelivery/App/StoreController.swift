@@ -36,6 +36,15 @@ final class StoreController {
     /// The fields side of the seam — a schema that failed to read is a draft showing
     /// no fields, which is exactly the state to tell apart from "nothing configured".
     private(set) var fieldsError: (any Error)?
+    /// A schema write landed but its confirming read failed — the published
+    /// definitions are older than the disk and must not be trusted for validation,
+    /// even though they are populated (review, PR #104). Cleared by the next read
+    /// of definitions that succeeds, wherever it came from.
+    private(set) var fieldsCacheIsStale = false
+    /// The write side of the same seam — a gesture the store could not carry. A
+    /// reread cannot fix it, so ``refresh()`` leaves it standing; only the next
+    /// successful field write clears it.
+    private(set) var fieldsWriteError: (any Error)?
     /// The parcel library's side of the seam — same rule: a template list that
     /// could not be read must not render as an empty one (the chip row's
     /// absence would otherwise read as "you have saved nothing").
@@ -209,6 +218,7 @@ final class StoreController {
                 fieldDefinitions = try await Self.readFieldDefinitions(database)
                 orderFields = try await Self.readOrderFields(database)
                 fieldsError = nil
+                fieldsCacheIsStale = false
             } catch {
                 fieldsError = error
             }
@@ -343,27 +353,31 @@ final class StoreController {
             reindexSpotlightIfHealthy()
             renderWidgetSnapshotIfHealthy()
         } catch {
-            fieldsError = error
+            fieldsWriteError = error
         }
     }
 
     /// Forgets a definition — values already on orders keep their name snapshot.
     /// Mirrors ``deletePlace(_:)``: nobody renders a thrown error, so a failure lands
-    /// on ``fieldsError``.
+    /// on ``fieldsWriteError``.
     func deleteField(_ id: CustomFieldDefinition.ID) async {
         do {
             try await enqueueFieldWrite { try $0.deleteFieldDefinition(id: id) }
             reindexSpotlightIfHealthy()
             renderWidgetSnapshotIfHealthy()
         } catch {
-            fieldsError = error
+            fieldsWriteError = error
         }
     }
 
     /// The schema-write serializer: each caller's work runs after the previous
     /// write finished (a failed one must not strand the queue), then republishes the
-    /// schema as the write's own confirmation. Errors land on ``fieldsError`` *and*
-    /// propagate — the editor renders them, gestures only record them.
+    /// schema as the write's own confirmation. The two steps fail differently: a
+    /// refused write lands on ``fieldsWriteError`` *and* propagates — the editor
+    /// renders it, gestures only record it — while a failed confirming read is a
+    /// read failure. The write already landed, so nothing rethrows: ``fieldsError``
+    /// says the schema is unreadable and the draft stops believing its stale copy
+    /// is the healthy set (review, PR #104).
     private func enqueueFieldWrite(
         _ work: @escaping @concurrent @Sendable (AppDatabase) async throws -> Void
     ) async throws {
@@ -371,17 +385,28 @@ final class StoreController {
         let prior = fieldWrites
         let task = Task {
             _ = try? await prior?.value
-            try await work(database)
-            fieldDefinitions = try await Self.readFieldDefinitions(database)
-            fieldsError = nil
+            do {
+                try await work(database)
+                fieldsWriteError = nil
+            } catch {
+                fieldsWriteError = error
+                throw error
+            }
+            do {
+                fieldDefinitions = try await Self.readFieldDefinitions(database)
+                // The confirming re-read succeeded — the schema is readable and
+                // the read error's news is stale.
+                fieldsError = nil
+                fieldsCacheIsStale = false
+            } catch {
+                // The write landed; the read is the failure. What is published now
+                // predates it — a cache nobody may validate against.
+                fieldsError = error
+                fieldsCacheIsStale = true
+            }
         }
         fieldWrites = task
-        do {
-            try await task.value
-        } catch {
-            fieldsError = error
-            throw error
-        }
+        try await task.value
     }
 
     /// Keeps a place and republishes the set.

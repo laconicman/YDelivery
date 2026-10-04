@@ -99,6 +99,10 @@ extension NewDeliveryView {
         /// an unread schema hides required fields rather than waiving them, so the
         /// draft must not treat it as "nothing configured" (review, PR #42).
         var fieldsUnavailable = false
+        /// The published definitions may be older than a write that landed — a
+        /// populated cache is still untrustworthy, so ordering re-reads first
+        /// (review, PR #104).
+        var fieldsCacheIsStale = false
         var fieldValues: [UUID: String] = [:]
         /// The «Add field» disclosure — definitions not shown by default stay
         /// behind the menu until asked for; a required one is never hidden (the
@@ -1080,6 +1084,16 @@ extension NewDeliveryView {
                         "Your fields couldn't load — the order waits until the schema is readable."),
                     destination: .fieldsSchema
                 ))
+            } else if fieldsCacheIsStale {
+                // The write landed, its confirming read did not — a populated cache
+                // can still hide a *new* required field, so the order re-reads first
+                // (review, PR #104). The door is the same re-read.
+                blockers.append(.init(
+                    id: "fieldSchemaStale",
+                    message: String(localized:
+                        "Your fields changed but could not be re-read — try again before ordering."),
+                    destination: .fieldsSchema
+                ))
             }
             for field in fieldDefinitions where !field.isOptional {
                 if (fieldValues[field.id]?.trimmingCharacters(in: .whitespaces) ?? "").isEmpty {
@@ -1119,6 +1133,23 @@ extension NewDeliveryView {
 
         func revealField(_ id: CustomFieldDefinition.ID) {
             revealedFieldIDs.insert(id)
+        }
+
+        /// Where a bound's door lands on the draft card — a row id, or the strip
+        /// itself for the class bound (review, PR #104). Rows answer to their
+        /// subject's raw id; `.tariffStrip` answers to its constant.
+        nonisolated enum ScrollAnchor: Hashable {
+            case field(UUID)
+            case item(UUID)
+            case stop(UUID)
+            case tariffStrip
+
+            var id: AnyHashable {
+                switch self {
+                case .field(let id), .item(let id), .stop(let id): id
+                case .tariffStrip: "tariffStrip"
+                }
+            }
         }
 
         /// What a choice field's picker offers — the authored choices, plus the
