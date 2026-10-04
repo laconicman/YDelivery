@@ -798,11 +798,8 @@ extension NewDeliveryView.Content {
             if let title {
                 Button(action: openReview) {
                     Text(title)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .primaryAction()
                 .disabled(!canOrder)
                 .padding(.horizontal, Layout.Spacing.edge)
                 .padding(.vertical, Layout.Spacing.unit)
