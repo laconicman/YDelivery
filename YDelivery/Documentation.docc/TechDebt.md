@@ -412,6 +412,8 @@ order and survive sync. Test fixtures and production data share one store.
 - **Discharge:** a fixture quarantine — prefix-marked writes the seeded paths
   recognise and a cleanup hook that purges them, or a fixture-scoped store the
   seeds can target without touching the sender's data.
+- **Partly discharged** — the schema seed writes an isolated database and
+  deletes its rows (#90); the `--uitest-*` fixtures still write the real store
 
 ## YD-27 — A point's coordinates can drift on a contact-only save — **open**
 
@@ -556,9 +558,10 @@ the one write shape that always re-marks the row save-pending.
   serializer only runs on an upload, and no upload is ever queued.
 - **Discharge:** an upstream fix that un-deletes metadata on a conflicting insert
   (or a report Point-Free accepts); locally, `recordOrder`/`savePlace` could write
-  children as diffed UPDATEs instead of delete+insert. The seed's two-flush
-  resurrection (`UPDATE … SET col = col` after the deletes ship) is the working
-  proof of the minimal repair, not the fix.
+  children as diffed UPDATEs instead of delete+insert. A plain UPDATE
+  (`UPDATE … SET col = col`) re-marks the row save-pending — the minimal
+  repair, proven by the seed's earlier resurrection pass before it moved to an
+  isolated always-fresh database.
 
 ## See Also
 
