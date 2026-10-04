@@ -8,6 +8,7 @@ struct DeliveriesView: View {
     @Environment(ClientController.self) private var session
     @Environment(StoreController.self) private var store
     @Environment(ClaimsSyncController.self) private var sync
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let compose: () -> Void
     /// «Повторить»/«Наоборот» — forwarded up beside `compose`; the order and whether
     /// the route runs backwards. `RootView` turns it into a pre-filled draft.
@@ -39,7 +40,10 @@ struct DeliveriesView: View {
                     repeatOrder(order, reversed)
                 },
                 toggleTrail: { id in
-                    model.toggleTrail(of: id) { try await store.providerEvents(for: id) }
+                    model.toggleTrail(
+                        of: id,
+                        using: { try await store.providerEvents(for: id) },
+                        reduceMotion: reduceMotion)
                 }
             )
                 .navigationTitle("Deliveries")
@@ -90,48 +94,127 @@ extension DeliveriesView {
         /// Why the trail could not be read, when it could not — a storage failure
         /// must not wear «nothing reported» (review, PR #77).
         private(set) var trailError: String?
-        private var loading: Task<Void, Never>?
-        /// The open row's fetch, kept so a store republication can re-read the
-        /// trail without the row being closed and reopened.
+        /// The row whose trail is being read — opening is one publish, so a tap
+        /// on a still-opening row must know about it to close.
+        private var pendingID: UUID?
+        /// The pending open's task — its own handle: a republish re-read must
+        /// never cancel an open in flight, nor an open cancel a re-read.
+        private var opening: Task<Void, Never>?
+        /// The republish re-read's task; a new tick cancels only the previous
+        /// re-read, never `opening`.
+        private var refreshing: Task<Void, Never>?
+        /// Which expansion the screen is showing. Bumped by every publish (open
+        /// commit, collapse): a `refreshing` task captures it at start and
+        /// publishes only while it stands — a re-read that outlives "B opens, A
+        /// reopens" must not overwrite the newer trail (review, PR #109).
+        private var generation = 0
+        /// The *committed* row's fetch, kept so a store republication can re-read
+        /// the trail without the row being closed and reopened. Assigned only in
+        /// the publish block — while another row is still opening, a republish
+        /// re-reads the shown row's trail, not the pending one's (review, PR
+        /// #109: holding the pending fetch here mixed B's events into A's row).
         private var fetchTrail: (() async throws -> [ProviderEvent])?
 
-        /// Open the trail of `id`, or close it if it is the one already open.
-        func toggleTrail(of id: UUID, using fetch: @escaping () async throws -> [ProviderEvent]) {
-            loading?.cancel()
-            guard expandedID != id else {
-                expandedID = nil
-                trail = nil
-                trailError = nil
-                fetchTrail = nil
+        /// Open the trail of `id`, or close it if it is the one already open —
+        /// or still opening (`pendingID`), which reads the same to a sender.
+        /// Expansion publishes ONCE inside `withAnimation`: `expandedID` and the
+        /// trail arrive together, and because the trail is a *row of its own*
+        /// the transaction animates a row insertion — the one thing the List
+        /// does natively — rather than an in-row growth whose interpolated
+        /// frame floated the collapsed lines mid-cell (review, PR #109 frame
+        /// captures). A local SQLite read is milliseconds, so the row answering
+        /// after the read is imperceptible; `nil`-while-expanded stays only for
+        /// `refreshTrail`. `reduceMotion` drops the transaction — a row
+        /// insertion cannot cross-fade, so under the preference the trail
+        /// appears and vanishes instantly instead of sliding (the motion rule's
+        /// fallback for an animation with no opacity equivalent).
+        func toggleTrail(
+            of id: UUID,
+            using fetch: @escaping () async throws -> [ProviderEvent],
+            reduceMotion: Bool = false
+        ) {
+            opening?.cancel()
+            // A second tap on a still-opening row cancels only its own pending
+            // open — the committed row's trail stays put (review, PR #109:
+            // pending and expanded are the same to a sender, never to the row
+            // already showing).
+            if pendingID == id {
+                pendingID = nil
                 return
             }
-            expandedID = id
-            trail = nil
-            trailError = nil
-            fetchTrail = fetch
-            read(for: id, replacing: true)
+            guard expandedID != id else {
+                refreshing?.cancel()
+                withAnimation(reduceMotion ? nil : .default) {
+                    generation += 1
+                    expandedID = nil
+                    trail = nil
+                    trailError = nil
+                    fetchTrail = nil
+                }
+                return
+            }
+            pendingID = id
+            // The fetch rides inside the task — it is committed to `fetchTrail`
+            // only when this open wins the publish.
+            opening = Task {
+                do {
+                    let fetched = try await fetch()
+                    guard !Task.isCancelled, pendingID == id else { return }
+                    // The committed row changes — a re-read of the previous one
+                    // is dead the moment this publish lands.
+                    refreshing?.cancel()
+                    withAnimation(reduceMotion ? nil : .default) {
+                        generation += 1
+                        pendingID = nil
+                        expandedID = id
+                        trail = fetched
+                        trailError = nil
+                        fetchTrail = fetch
+                    }
+                } catch {
+                    guard !Task.isCancelled, pendingID == id else { return }
+                    let message = (error as? LocalizedError)?.errorDescription
+                        ?? error.localizedDescription
+                    refreshing?.cancel()
+                    withAnimation(reduceMotion ? nil : .default) {
+                        generation += 1
+                        pendingID = nil
+                        expandedID = id
+                        trail = nil
+                        trailError = message
+                        fetchTrail = fetch
+                    }
+                }
+            }
         }
 
         /// The store republished — sync recorded events, a pull refreshed — so the
         /// open row's trail is re-read in place. The trail on screen stays until the
-        /// new read lands; only a success replaces it.
+        /// new read lands; only a success replaces it. Touches `refreshing` only:
+        /// an open still in flight is the sender's tap and is left alone.
         func refreshTrail() {
             guard let id = expandedID else { return }
-            read(for: id, replacing: false)
+            read(for: id)
         }
 
-        private func read(for id: UUID, replacing: Bool) {
+        /// A store-republish re-read assigns plainly — a sync tick must not
+        /// restart an animation on a row that is already open, and the shown
+        /// trail stays on a failed re-read.
+        private func read(for id: UUID) {
             guard let fetchTrail else { return }
-            loading?.cancel()
-            loading = Task {
+            refreshing?.cancel()
+            let generation = generation
+            refreshing = Task {
                 do {
                     let fetched = try await fetchTrail()
-                    guard !Task.isCancelled, expandedID == id else { return }
+                    guard !Task.isCancelled,
+                          expandedID == id, generation == self.generation else { return }
                     trail = fetched
                     trailError = nil
                 } catch {
-                    guard !Task.isCancelled, expandedID == id else { return }
-                    if replacing || trail == nil {
+                    guard !Task.isCancelled,
+                          expandedID == id, generation == self.generation else { return }
+                    if trail == nil {
                         trailError = (error as? LocalizedError)?.errorDescription
                             ?? error.localizedDescription
                     }

@@ -122,14 +122,16 @@ struct DeliveriesRowsTests {
         let event = ProviderEvent(orderID: a, providerEventID: 1, at: .now, kind: "status",
                                   providerStatus: "pickuped", source: "journal")
         model.toggleTrail(of: a) { [event] }
+        for _ in 0..<50 where model.expandedID == nil { await Task.yield() }
         #expect(model.expandedID == a)
-        #expect(model.trail == nil, "asking, not empty, until the read lands")
-        for _ in 0..<50 where model.trail == nil { await Task.yield() }
-        #expect(model.trail == [event])
+        #expect(model.trail == [event],
+                "one publish: the trail arrives with the expansion, no asking phase")
         model.toggleTrail(of: b) { [] }
+        for _ in 0..<50 where model.expandedID == a { await Task.yield() }
         #expect(model.expandedID == b)
-        #expect(model.trail == nil, "the new row's read starts from asking")
+        #expect(model.trail == [], "the new row opens on its own read")
         model.toggleTrail(of: b) { [] }
+        await Task.yield()
         #expect(model.expandedID == nil)
     }
 
@@ -139,6 +141,7 @@ struct DeliveriesRowsTests {
         let id = UUID()
         model.toggleTrail(of: id) { throw StoreController.StoreUnavailable() }
         for _ in 0..<50 where model.trailError == nil { await Task.yield() }
+        #expect(model.expandedID == id, "the row still opens — wearing the error")
         #expect(model.trail == nil)
         #expect(model.trailError != nil)
     }
@@ -160,7 +163,7 @@ struct DeliveriesRowsTests {
             default: throw StoreController.StoreUnavailable()
             }
         }
-        for _ in 0..<50 where model.trail == nil { await Task.yield() }
+        for _ in 0..<50 where model.expandedID == nil { await Task.yield() }
         #expect(model.trail == [first])
         model.refreshTrail()
         for _ in 0..<50 where model.trail?.count != 2 { await Task.yield() }
@@ -174,5 +177,130 @@ struct DeliveriesRowsTests {
         _ = DeliveriesView.Model().refreshTrail()
     }
 
+    @Test("A republish while another row is opening re-reads the open row, never the pending one")
+    func republishKeepsPendingAndShownApart() async {
+        let model = DeliveriesView.Model()
+        let a = UUID(), b = UUID()
+        func event(_ id: Int64, order: UUID) -> ProviderEvent {
+            ProviderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+                          providerStatus: "pickuped", source: "journal")
+        }
+        let counter = Counter()
+        // A is open with its first read; every later read is the republished one.
+        model.toggleTrail(of: a) {
+            counter.n += 1
+            return counter.n == 1 ? [event(1, order: a)] : [event(1, order: a), event(2, order: a)]
+        }
+        for _ in 0..<50 where model.expandedID == nil { await Task.yield() }
+        #expect(model.expandedID == a)
+        // B's open starts but its read is held — the pending state in the report.
+        let gate = Gate()
+        model.toggleTrail(of: b) {
+            await gate.wait()
+            return [event(9, order: b)]
+        }
+        await Task.yield()
+        // A sync tick lands while B is in flight: it must re-read A with A's own
+        // fetch, leave B pending, and not be cancelled by B's open.
+        model.refreshTrail()
+        for _ in 0..<50 where model.trail?.count != 2 { await Task.yield() }
+        #expect(model.expandedID == a, "B has not committed — the shown row is still A")
+        #expect(model.trail?.map(\.providerEventID) == [1, 2],
+                "A's fetch answered the republish, not B's")
+        await gate.release()
+        for _ in 0..<50 where model.expandedID != b { await Task.yield() }
+        #expect(model.expandedID == b)
+        #expect(model.trail?.map(\.providerEventID) == [9],
+                "the pending open lands as its own row with its own events")
+    }
+
+    @Test("A second tap on a still-opening row cancels only that open — the shown row stays")
+    func pendingCancelLeavesCommittedAlone() async {
+        let model = DeliveriesView.Model()
+        let a = UUID(), b = UUID()
+        func event(_ id: Int64, order: UUID) -> ProviderEvent {
+            ProviderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+                          providerStatus: "pickuped", source: "journal")
+        }
+        model.toggleTrail(of: a) { [event(1, order: a)] }
+        for _ in 0..<50 where model.expandedID == nil { await Task.yield() }
+        #expect(model.expandedID == a)
+        // B's open is in flight, its read held — a second tap on B.
+        let gate = Gate()
+        model.toggleTrail(of: b) {
+            await gate.wait()
+            return [event(9, order: b)]
+        }
+        await Task.yield()
+        model.toggleTrail(of: b) { [event(7, order: b)] }
+        #expect(model.expandedID == a,
+                "the committed row never moved — only B's pending open died")
+        #expect(model.trail?.map(\.providerEventID) == [1],
+                "A's trail is intact, not cleared with B's cancel")
+        // The dead fetch must never publish, even released.
+        await gate.release()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(model.expandedID == a)
+        #expect(model.trail?.map(\.providerEventID) == [1])
+        #expect(model.trailError == nil)
+    }
+
+    @Test("A republish re-read that outlives a reopen never overwrites the newer trail")
+    func staleRefreshDrops() async {
+        let model = DeliveriesView.Model()
+        let a = UUID(), b = UUID()
+        func event(_ id: Int64, order: UUID) -> ProviderEvent {
+            ProviderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+                          providerStatus: "pickuped", source: "journal")
+        }
+        let counter = Counter()
+        let gate = Gate()
+        // A's reads: the open, the held republish re-read (a stale [1]), the
+        // re-open's fresh read ([1, 2]).
+        let aFetch: () async throws -> [ProviderEvent] = {
+            counter.n += 1
+            switch counter.n {
+            case 1: return [event(1, order: a)]
+            case 2:
+                await gate.wait()
+                return [event(1, order: a)]
+            default: return [event(1, order: a), event(2, order: a)]
+            }
+        }
+        model.toggleTrail(of: a, using: aFetch)
+        for _ in 0..<50 where model.expandedID == nil { await Task.yield() }
+        #expect(model.trail?.map(\.providerEventID) == [1])
+        model.refreshTrail()
+        await Task.yield()  // the re-read is parked on the gate
+        model.toggleTrail(of: b) { [event(9, order: b)] }
+        for _ in 0..<50 where model.expandedID != b { await Task.yield() }
+        model.toggleTrail(of: a, using: aFetch)
+        for _ in 0..<50 where model.trail?.count != 2 { await Task.yield() }
+        #expect(model.expandedID == a)
+        #expect(model.trail?.map(\.providerEventID) == [1, 2])
+        await gate.release()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(model.trail?.map(\.providerEventID) == [1, 2],
+                "the stale re-read must not overwrite the reopened trail")
+        #expect(model.trailError == nil)
+    }
+
     private final class Counter: @unchecked Sendable { var n = 0 }
+
+    /// A one-shot hold for a fetch under test: `wait()` parks until `release()`.
+    private actor Gate {
+        private var continuation: CheckedContinuation<Void, Never>?
+        private var released = false
+        func wait() async {
+            if released { return }
+            await withCheckedContinuation { c in
+                if released { c.resume() } else { continuation = c }
+            }
+        }
+        func release() {
+            released = true
+            continuation?.resume()
+            continuation = nil
+        }
+    }
 }
