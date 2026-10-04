@@ -1321,21 +1321,31 @@ extension NewDeliveryView {
                     do {
                         claim = try await accept(claim.id, claim.version)
                     } catch let refusal as ProviderRefusal {
-                        // The provider *answered* — a documented refusal, so nothing
-                        // was lost on the wire. What it refuses on is the requirements
-                        // the claim carries, built from the held offer's payload. One
-                        // re-read decides before anything is called failed: a searching
-                        // claim means "already confirmed" and is recorded (buying a
-                        // second courier over that is exactly what the token guard
-                        // exists against); a dead or still-waiting claim makes the
-                        // held quote stale — re-price, then re-confirm, never re-send.
+                        // Only a *definitive* refusal is proof nothing executed:
+                        // a 4xx validated and declined. A 5xx or undocumented
+                        // answer may have run anyway — that is `.unresolved`'s
+                        // truth, and its reconcile path already knows how to ask.
+                        guard refusal.isDefinitive else { throw refusal }
+                        // The provider answered and nothing moved. What it refuses
+                        // on is the requirements the claim carries, built from the
+                        // held offer's payload. One re-read decides before anything
+                        // is called failed: a searching claim means "already
+                        // confirmed" and is recorded (buying a second courier over
+                        // that is exactly what the token guard exists against); a
+                        // dead or still-waiting claim makes the held quote stale —
+                        // re-price, then re-confirm, never re-send.
                         let standing = try? await watch(claim.id)
                         if standing?.status == .searching {
                             claim = standing ?? claim
                             break // already accepted — the courier search is running
                         }
                         if let standing, standing.status == .readyToAccept || standing.status == .failed {
-                            orderRequestIsTerminated = standing.status == .failed
+                            // A claim whose accept was refused is dead to this flow
+                            // whether the provider calls it failed yet or not —
+                            // replaying its key would re-accept the same refused
+                            // requirements, so the create key rotates even when the
+                            // reprice yields an identical payload.
+                            orderRequestIsTerminated = true
                             invalidateStaleQuote()
                             ordering = .failed(
                                 refusal.errorDescription

@@ -366,7 +366,7 @@ struct NewDeliveryOrderingTests {
             create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
             // The claim answered the re-read provider-terminal — the refusal was real.
             watch: { id in PlacedClaim(id: id, version: 2, status: .failed, failureText: nil) },
-            accept: { _, _ in throw ProviderRefusal(message: "The door-to-door option changed") },
+            accept: { _, _ in throw ProviderRefusal(message: "The door-to-door option changed", status: 400) },
             clock: TestClock()
         )
 
@@ -390,7 +390,7 @@ struct NewDeliveryOrderingTests {
             create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
             // «Заявка уже подтверждена» — the re-read proves the order exists.
             watch: { id in PlacedClaim(id: id, version: 2, status: .searching, failureText: nil) },
-            accept: { _, _ in throw ProviderRefusal(message: "already confirmed") },
+            accept: { _, _ in throw ProviderRefusal(message: "already confirmed", status: 409) },
             clock: TestClock()
         )
 
@@ -408,7 +408,7 @@ struct NewDeliveryOrderingTests {
         await model.placeOrder(
             create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
             watch: { id in PlacedClaim(id: id, version: 2, status: .readyToAccept, failureText: nil) },
-            accept: { _, _ in throw ProviderRefusal(message: "requirements changed") },
+            accept: { _, _ in throw ProviderRefusal(message: "requirements changed", status: 400) },
             clock: TestClock()
         )
 
@@ -417,6 +417,70 @@ struct NewDeliveryOrderingTests {
             return
         }
         #expect(model.selectedOffer == nil && model.repriceRequests == 1)
+    }
+
+    @Test("A refused accept's claim is dead either way — the retry's key rotates")
+    func refusedClaimKeyIsSpent() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let first = model.orderRequestID
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            // Still standing at the re-read — refused, not failed — and dead to
+            // this flow all the same.
+            watch: { id in PlacedClaim(id: id, version: 2, status: .readyToAccept, failureText: nil) },
+            accept: { _, _ in throw ProviderRefusal(message: "requirements changed", status: 400) },
+            clock: TestClock()
+        )
+        guard case .failed = model.ordering else {
+            Issue.record("a definitive refusal is .failed, got \(model.ordering)")
+            return
+        }
+
+        // The reprice may answer the identical payload — the refused claim's key
+        // must still not be replayed.
+        await priced(model)
+        model.confirmOrder()
+        #expect(model.ordering == .queued)
+        #expect(model.orderRequestID != first, "the refused claim's token is spent")
+    }
+
+    @Test("A 5xx accept stays unresolved — the quote, and the token, are kept")
+    func serverErrorAtAcceptIsUnresolved() async {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+
+        await model.placeOrder(
+            create: { _, _ in PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil) },
+            // A 5xx refusal never reaches the re-read — it may have executed.
+            watch: { _ in
+                Issue.record("a non-definitive refusal must not re-read as failed")
+                return PlacedClaim(id: "claim-1", version: 1, status: .readyToAccept, failureText: nil)
+            },
+            accept: { _, _ in throw ProviderRefusal(message: nil, status: 500) },
+            clock: TestClock()
+        )
+
+        guard case .unresolved = model.ordering else {
+            Issue.record("a 5xx may have executed — unresolved, not refused: \(model.ordering)")
+            return
+        }
+        #expect(model.selectedOffer != nil && model.repriceRequests == 0,
+                "a 5xx proves nothing about the quote — nothing is re-priced")
+    }
+
+    @Test("Only the provider's door-to-door phrase earns the annotation")
+    func doorMeansTheOption() {
+        #expect("Invalid door code".namingKnownRequirements == "Invalid door code",
+                "a bare 'door' — a code, an address detail — is not the option")
+        #expect("Неверный код двери".namingKnownRequirements == "Неверный код двери",
+                "a bare «двер» is not the option either")
+        #expect("Опция „От двери до двери“ изменилась".namingKnownRequirements
+                .contains("to the door"),
+                "the option's own phrase names the option in the draft")
     }
 
     @Test("A transport failure at accept keeps the quote — and the unresolved truth")
@@ -448,7 +512,7 @@ struct NewDeliveryOrderingTests {
         model.confirmOrder()
 
         await model.placeOrder(
-            create: { _, _ in throw ProviderRefusal(message: "no shipments for destination point 2") },
+            create: { _, _ in throw ProviderRefusal(message: "no shipments for destination point 2", status: 400) },
             watch: { id in PlacedClaim(id: id, version: 1, status: .readyToAccept, failureText: nil) },
             accept: { _, _ in Issue.record("never reached"); return PlacedClaim(id: "x", version: 1, status: .searching, failureText: nil) },
             clock: TestClock()

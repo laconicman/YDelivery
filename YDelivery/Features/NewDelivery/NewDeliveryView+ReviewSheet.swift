@@ -360,14 +360,17 @@ extension NewDeliveryView {
     }
 }
 
-private extension String {
+nonisolated extension String {
     /// The provider's refusal beside the app's own term — «От двери до двери» is
     /// this draft's «to the door» option (C2: the provider's phrase and the
-    /// sender's vocabulary name the same switch). Unrecognized refusals pass
-    /// through verbatim.
+    /// sender's vocabulary name the same switch). Only that phrase earns the
+    /// annotation: a bare «двер»/"door" — a door code, a до-двери address
+    /// detail — is not the option. Unrecognized refusals pass through verbatim.
     var namingKnownRequirements: String {
         let lowered = lowercased()
-        guard lowered.contains("двер") || lowered.contains("door") else { return self }
+        guard lowered.contains("от двери до двери")
+                || lowered.contains("door to door")
+                || lowered.contains("door_to_door") else { return self }
         return String(localized: "\(self) — the «to the door» option in your draft.")
     }
 }
