@@ -59,6 +59,9 @@ nonisolated enum ClaimsSync {
         case .statusChanged:
             if let status = event.newStatus {
                 orders[index].status = OrderStatus(claimStatus: status)
+                // The wire word moves with the decision — `statusDetail` reads it,
+                // and a stale one keeps saying the old phrase under the new state.
+                orders[index].providerStatus = status.rawValue
             }
         case .priceChanged:
             if let price = event.newPrice { orders[index].price = price }

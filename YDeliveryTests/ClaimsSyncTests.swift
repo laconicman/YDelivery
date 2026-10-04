@@ -200,6 +200,19 @@ struct ClaimsSyncTests {
         #expect(updated[0].status == .done)
     }
 
+    @Test("A status event moves the provider word too — the phrase follows the decision")
+    func statusEventMovesProviderStatus() {
+        var waiting = order(claimID: "claim-1", status: .attention)
+        waiting.providerStatus = "ready_for_approval"
+
+        let updated = ClaimsSync.applying(event(newStatus: .failed), to: [waiting])
+
+        #expect(updated[0].providerStatus == "failed",
+                "the wire word moves with the status — a stale one keeps the old phrase")
+        #expect(updated[0].statusDetail == "Ended before delivery",
+                "the decision label reads the new word, not the wait that was showing")
+    }
+
     @Test("A price event updates money, leaving status alone")
     func priceEventApplies() {
         let orders = [order(claimID: "claim-1", status: .active)]
