@@ -22,7 +22,7 @@ settings:
     DEVELOPMENT_TEAM: WEJF495R4D
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: 1
+    CURRENT_PROJECT_VERSION: 3
     # The floor and the language mode are load-bearing decisions (Design → "The floor is
     # iOS 17, in Swift 6 language mode"); MainActor default isolation is applied on the
     # app target only, matching the project this file replaces.
@@ -208,6 +208,9 @@ targets:
         # NSExtension + NSSupportsLiveActivities ride a partial plist — the same
         # merge pattern as the app's INFOPLIST_FILE.
         INFOPLIST_FILE: YDeliveryWidgets-Info.plist
+        # App Store upload requires a display name on every appex (the widget
+        # gallery credits the host by it); Share carries the same key.
+        INFOPLIST_KEY_CFBundleDisplayName: YDelivery
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
         SKIP_INSTALL: YES
         STRING_CATALOG_GENERATE_SYMBOLS: NO
