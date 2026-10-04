@@ -60,8 +60,9 @@ Concurrency — all deliberate, see `Design`.
     suggestion via GitHub's "Apply suggestion" is an accepted cheap path — hand-crafted
     commits are for the code this repo exists to ship.
     *Enforced since 2026-09-29:* a ruleset on `main` blocks force-push and deletion and
-    requires the `Build and test` check, with no bypass; merges are squash-only and merged
-    branches delete themselves. So nobody watches CI: read Devin's round (minutes), clear
+    requires the `Build and test` and `Build Release` checks (two parallel jobs — Debug's
+    test run alone fills a 30-minute runner; owner decision, 2026-10-04), with no bypass;
+    merges are squash-only and merged branches delete themselves. So nobody watches CI: read Devin's round (minutes), clear
     `contrib in laconicman/YDelivery --pr N` to owed 0 / re-read 0, then
     `gh pr merge N --squash --auto` merges on green (`docs/GitHubWorkflowProposal.md` §3–§4).
 
