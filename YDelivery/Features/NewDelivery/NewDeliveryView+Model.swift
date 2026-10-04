@@ -1,6 +1,7 @@
 import Foundation
 import MapKit
 import Observation
+import os
 import OSLog
 import YDeliveryKit
 // SwiftUI supplies `remove(atOffsets:)` / `move(fromOffsets:toOffset:)` — the exact
@@ -619,23 +620,88 @@ extension NewDeliveryView {
         }
 
         /// Races an operation against a deadline — Swift concurrency has no
-        /// `withTimeout`; the task-group form is the idiom. Loser is cancelled either
-        /// way, so a hung `MKDirections` await cannot outlive the deadline.
+        /// `withTimeout`, and the task-group form is the wrong idiom here: a group
+        /// waits for EVERY child, so an operation that ignores cancellation (an
+        /// `MKDirections` await stuck on an uncooperative XPC call) parks the
+        /// deadline past its own firing. Instead a lock-guarded one-shot resumes
+        /// a continuation exactly once: whichever of the operation or the timer
+        /// lands first wins, the loser is cancelled, and a late result is dropped.
         private nonisolated static func withTimeout<T: Sendable>(
             _ seconds: TimeInterval,
             operation: @escaping @Sendable () async throws -> T
         ) async throws -> T {
-            try await withThrowingTaskGroup(of: T.self) { group in
-                group.addTask { try await operation() }
-                group.addTask {
-                    try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                    throw EstimateTimeout()
+            let gate = TimeoutGate<T>()
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    gate.arm(continuation)
+                    gate.startWork(operation)
+                    gate.startTimer(seconds)
                 }
-                defer { group.cancelAll() }
-                guard let result = try await group.next() else {
-                    throw EstimateTimeout()
+            } onCancel: {
+                gate.resume(with: .failure(CancellationError()))
+            }
+        }
+
+        /// The one-shot behind ``withTimeout``: the first resume wins, the rest
+        /// are dropped. The state lives behind one lock so «who won» and «whom to
+        /// cancel» can never disagree.
+        private nonisolated final class TimeoutGate<T: Sendable>: @unchecked Sendable {
+            private struct State {
+                var continuation: CheckedContinuation<T, any Error>?
+                /// A winner that landed before `arm` — cancellation can fire
+                /// ahead of the continuation's registration, and dropping it
+                /// would leave the caller waiting out the whole deadline.
+                var result: Result<T, any Error>?
+                var work: Task<Void, Never>?
+                var timer: Task<Void, Never>?
+            }
+
+            private let state = OSAllocatedUnfairLock<State>(initialState: State())
+
+            func arm(_ continuation: CheckedContinuation<T, any Error>) {
+                let pending = state.withLock { state -> Result<T, any Error>? in
+                    if let result = state.result { return result }
+                    state.continuation = continuation
+                    return nil
                 }
-                return result
+                if let pending { continuation.resume(with: pending) }
+            }
+
+            func startWork(_ operation: @escaping @Sendable () async throws -> T) {
+                state.withLock {
+                    $0.work = Task {
+                        do {
+                            resume(with: .success(try await operation()))
+                        } catch {
+                            resume(with: .failure(error))
+                        }
+                    }
+                }
+            }
+
+            func startTimer(_ seconds: TimeInterval) {
+                state.withLock {
+                    $0.timer = Task {
+                        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                        resume(with: .failure(EstimateTimeout()))
+                    }
+                }
+            }
+
+            func resume(with result: Result<T, any Error>) {
+                let won = state.withLock { state -> State in
+                    guard state.result == nil else { return State() }
+                    state.result = result
+                    defer {
+                        state.continuation = nil
+                        state.work = nil
+                        state.timer = nil
+                    }
+                    return state
+                }
+                won.work?.cancel()
+                won.timer?.cancel()
+                won.continuation?.resume(with: result)
             }
         }
 
@@ -1284,21 +1350,34 @@ extension NewDeliveryView.Model {
     /// `MKDirections`, one request per leg, summed — the map's honest guess until
     /// provider figures replace it (decision #14). Any leg without a route fails the
     /// whole estimate: a number covering half the route would be a lie.
+    /// `MKDirections`, one request per leg, summed — the map's honest distance
+    /// until provider figures land (decision #14; the provider's windows are the
+    /// time of record, so no ETA is summed at all). Any leg without a route fails
+    /// the whole estimate: a number covering half the route would be a lie.
     nonisolated static let mkDirectionsEstimator: RouteEstimator = { waypoints in
         var distance: Double = 0
-        var time: TimeInterval = 0
         var legs: [[RouteEstimate.Coordinate]] = []
         for (from, to) in zip(waypoints, waypoints.dropFirst()) {
-            var route = try await routeLeg(from: from, to: to, transportType: .automobile)
+            var route: MKRoute?
+            do {
+                route = try await routeLeg(from: from, to: to, transportType: .automobile)
+            } catch let error as MKError
+                // «No road route» is not an estimate failure — the walking
+                // fallback still gets its turn. Cancellation and every other
+                // error (throttle, auth, the network) rethrow honestly.
+                where error.code == .directionsNotFound
+                    || error.code == .placemarkNotFound
+                    || error.code == .serverFailure {
+                route = nil
+            }
             if route == nil {
                 route = try await routeLeg(from: from, to: to, transportType: .walking)
             }
             guard let route else { throw NoRouteFound() }
             distance += route.distance
-            time += route.expectedTravelTime
             legs.append(route.polyline.coordinateRun)
         }
-        return RouteEstimate(distanceMeters: distance, travelTime: time, legs: legs)
+        return RouteEstimate(distanceMeters: distance, legs: legs)
     }
 
     /// One `MKDirections` leg — `nil` when the service has no route, and also when
@@ -1320,7 +1399,15 @@ extension NewDeliveryView.Model {
             coordinate: CLLocationCoordinate2D(latitude: to.latitude, longitude: to.longitude)
         ))
         request.transportType = transportType
-        let response = try await MKDirections(request: request).calculate()
+        let directions = MKDirections(request: request)
+        // `calculate()` can ignore plain cancellation — the request object takes
+        // a real `cancel()`, so the deadline's loser actually stops.
+        let cancellable = DirectionsCancelBox(directions)
+        let response = try await withTaskCancellationHandler {
+            try await directions.calculate()
+        } onCancel: {
+            cancellable.directions.cancel()
+        }
         guard let route = response.routes.first else { return nil }
         // Snap tolerance: endpoints move meters to the nearest road, so the tripwire
         // fires only when the answer is an order of magnitude too short.
@@ -1329,9 +1416,17 @@ extension NewDeliveryView.Model {
         return route
     }
 
+    /// `MKDirections` isn't Sendable, yet its `cancel()` must be callable from the
+    /// task's `@Sendable` cancellation handler — cancelling an in-flight request
+    /// is exactly the race the method exists for, so the box is honest.
+    private nonisolated final class DirectionsCancelBox: @unchecked Sendable {
+        let directions: MKDirections
+        init(_ directions: MKDirections) { self.directions = directions }
+    }
+
     nonisolated struct NoRouteFound: LocalizedError {
         var errorDescription: String? {
-            String(localized: "No drivable route between these points.")
+            String(localized: "No route between these points.")
         }
     }
 }

@@ -23,7 +23,6 @@ struct NewDeliveryEstimateTests {
     func completeRouteEstimates() async {
         let estimate = RouteEstimate(
             distanceMeters: 12400,
-            travelTime: 2100,
             legs: [[.init(latitude: 55.7558, longitude: 37.6173)]]
         )
         let model = draft { waypoints in
@@ -78,14 +77,54 @@ struct NewDeliveryEstimateTests {
                 "without the deadline this is the «Estimating…» spinner forever")
     }
 
-    @Test("The summary speaks in kilometres and minutes, not raw meters and seconds")
+    @Test("The bar says how far — the provider's windows own the when (decision #14)")
     func summaryReadsHuman() {
-        let estimate = RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])
+        let estimate = RouteEstimate(distanceMeters: 12400, legs: [])
         let summary = estimate.summary
 
+        #expect(!summary.isEmpty)
         #expect(!summary.contains("12400"))
-        #expect(!summary.contains("2100"))
-        #expect(summary.contains("~"))
+        #expect(!summary.contains("·") && !summary.contains("~"),
+                "two times on one screen is a bug report — no second measure rides along")
+    }
+
+    /// The deadline cannot wait on an uncooperative operation: this estimator
+    /// never returns *and* swallows cancellation, so only a race that drops the
+    /// loser reaches `.failed`. A task group would hang here forever.
+    @Test("A stalled estimator that ignores cancellation still meets the deadline")
+    func uncooperativeEstimatorFails() async {
+        let model = draft { _ in
+            while true { try? await Task.sleep(nanoseconds: 100_000_000) }
+        }
+        model.estimateTimeout = 0.05
+        let start = Date()
+        await model.calculateEstimate()
+        #expect(model.estimate == .failed)
+        #expect(Date().timeIntervalSince(start) < 5,
+                "the deadline fired without waiting for the loser's cooperation")
+    }
+
+    @Test("A cooperative estimator still publishes .ready inside the deadline")
+    func cooperativeEstimatorReadies() async {
+        let estimate = RouteEstimate(distanceMeters: 12400, legs: [])
+        let model = draft { _ in estimate }
+        model.estimateTimeout = 0.05
+        await model.calculateEstimate()
+        #expect(model.estimate == .ready(estimate))
+    }
+
+    @Test("Cancelling the run itself publishes nothing")
+    func cancelledRunPublishesNothing() async {
+        let model = draft { _ in
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+            throw Unexpected()
+        }
+        model.estimateTimeout = 0.05
+        let task = Task { await model.calculateEstimate() }
+        task.cancel()
+        await task.value
+        #expect(model.estimate == .calculating,
+                "a cancelled run leaves the state to the next run — no .ready, no .failed")
     }
 
     private struct Unexpected: Error {}

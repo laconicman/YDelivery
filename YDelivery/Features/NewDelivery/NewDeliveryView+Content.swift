@@ -1227,7 +1227,7 @@ private extension MKCoordinateRegion {
                   parts: nil, contactSummary: nil, contactPhone: nil,
                   parcelsLeaving: 0, parcelsArriving: 2),
         ],
-        estimate: .ready(RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])),
+        estimate: .ready(RouteEstimate(distanceMeters: 12400, legs: [])),
         offers: .ready([
             Offer(tariff: .courier, price: 749, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-1"),
             Offer(tariff: .express, price: 1190, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-2"),
@@ -1321,7 +1321,7 @@ private extension MKCoordinateRegion {
     VStack(spacing: 12) {
         NewDeliveryView.Content.EstimateBar(estimate: .calculating, retry: {})
         NewDeliveryView.Content.EstimateBar(
-            estimate: .ready(RouteEstimate(distanceMeters: 12400, travelTime: 2100, legs: [])),
+            estimate: .ready(RouteEstimate(distanceMeters: 12400, legs: [])),
             retry: {}
         )
         NewDeliveryView.Content.EstimateBar(estimate: .failed, retry: {})
