@@ -419,8 +419,9 @@ extension YDeliveryApp {
 
     /// Runs one phase of ``seedDeletions`` — children or roots — through raw
     /// SQL on `queue`, the same channel the engine's triggers observe. Returns
-    /// the deleted row count per table (`changesCount`).
-    private static func runSeedDeletions(
+    /// the deleted row count per table (`changesCount`). `internal` so the
+    /// test suite can prove the isolation on a real database.
+    static func runSeedDeletions(
         database: AppDatabase, parent: Bool
     ) async throws -> [String: Int] {
         let roots = seedRoots
