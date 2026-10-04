@@ -191,6 +191,9 @@ identity), and bounded — but none of that narrows what a *deliberate* share ca
   on share (names and door codes masked, addresses and statuses kept), or a capture
   window toggle so the log is opt-in rather than always-on. Neither is worth building
   before the first shared log proves the mechanism earns its keep.
+  The planned event records (Design → The rest of the app is not in the file)
+  widen what the shared file holds and must stay PII-free by construction —
+  identifiers and error descriptions only.
 
 ## YD-13 — A superseded sync pass can complete one in-flight write — **open**
 
@@ -491,9 +494,9 @@ different prices and is left to guess why.
 
 - **Cost:** choosing between same-class offers is a price lottery — speed is
   the thing being priced, and nothing on the card names it.
-- **Discharge:** render the windows on the card (pickup ≈ «забор ~N мин»,
-  delivery ≈ «~N мин / к HH:MM») and map `description` to sender words —
-  the provider's own vocabulary for why one offer outruns another.
+- **Discharge:** the tariff-cards slice (<doc:Roadmap> → Now): the provider's
+  pickup/delivery windows on every card, Fastest/Cheapest sort, and a re-price
+  when the ten-minute `offer_ttl` lapses.
 
 ## YD-33 — The background-refresh launch handler has no automated test — **open**
 
