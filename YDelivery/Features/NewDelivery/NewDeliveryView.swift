@@ -308,7 +308,15 @@ struct NewDeliveryView: View {
                 // dismissing sheet lands the next editor nowhere.
                 if let door = blockerDoor {
                     blockerDoor = nil
-                    openBlocker(door)
+                    // The sheet's doors are gated on `ordering`; this is the same
+                    // guard again so a tap queued before the state moved can't
+                    // route into a draft a live run is reading.
+                    switch draft.ordering {
+                    case .idle, .failed:
+                        openBlocker(door)
+                    default:
+                        break
+                    }
                 }
             }) {
                 ReviewSheet(

@@ -72,6 +72,14 @@ extension NewDeliveryView {
                                 .buttonStyle(.plain)
                                 .font(.subheadline)
                                 .accessibilityHint(Text(blocker.destination.doorHint))
+                                // The same lock as Back and the dismiss gesture:
+                                // while an order run is in flight or has landed,
+                                // `placeOrder` writes history from these very
+                                // points — a door that opened the editable draft
+                                // underneath would let the run record a route the
+                                // courier was never given. The rows stay; the
+                                // door just won't open.
+                                .disabled(!doorsOpen)
                             }
                             // Blocked is still a button — disabled, not absent, and
                             // here beside the bounds rather than a screen-height
@@ -157,6 +165,16 @@ extension NewDeliveryView {
 
         private var isBusy: Bool {
             ordering == .creating || ordering == .estimating || ordering == .accepting
+        }
+
+        /// Doors open only while the run hasn't started — or after it failed,
+        /// where editing is the recovery. A queued or placed run, an unresolved
+        /// acceptance: the draft stays read-only behind the sheet.
+        private var doorsOpen: Bool {
+            switch ordering {
+            case .idle, .failed: true
+            default: false
+            }
         }
 
         @ViewBuilder

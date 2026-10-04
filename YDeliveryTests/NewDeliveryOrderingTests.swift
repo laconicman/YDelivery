@@ -77,6 +77,29 @@ struct NewDeliveryOrderingTests {
         #expect(model.orderRequest != nil)
     }
 
+    @Test("Two invalid items earn two doors, each named")
+    func everyInvalidItemGetsItsDoor() async {
+        let model = readyDraft()
+        await priced(model)
+        var second = ParcelItem()
+        second.name = "Зарядка"
+        // The seeded item's cost stays; the new one has none — and a third
+        // joins with no name and no value at all.
+        model.setItem(second)
+        var third = ParcelItem()
+        third.name = ""
+        // A wholly blank item saves as nothing — weight makes it real; the
+        // name and the value stay the miss.
+        third.weightKg = 0.2
+        model.setItem(third)
+
+        let specBlockers = model.orderBlockers.filter { $0.id.hasPrefix("itemSpec/") }
+        #expect(specBlockers.count == 2, "each miss is its own door, not the first one twice")
+        #expect(specBlockers.map(\.destination) == [.item(second.id), .item(third.id)])
+        #expect(specBlockers[0].message.contains("Зарядка"), "the named item names itself")
+        #expect(specBlockers[1].message.contains("item 3"), "a nameless item falls back to its ordinal")
+    }
+
     @Test("A phone the editor let through half-typed still blocks the order")
     func undialablePhoneBlocks() async {
         let model = readyDraft()

@@ -857,6 +857,13 @@ extension NewDeliveryView {
             let destination: Destination
         }
 
+        /// An invalid item's name in the blocker's sentence — its own name, or its
+        /// ordinal when the name is the thing missing.
+        private func itemLabel(_ item: ParcelItem, at index: Int) -> String {
+            let name = item.name.trimmingCharacters(in: .whitespaces)
+            return name.isEmpty ? String(localized: "item \(index + 1)") : name
+        }
+
         /// Everything that must be true before the confirm button exists — every bound
         /// stated as a sentence the review sheet renders *and* the door that resolves
         /// it (the wire would otherwise say it as a 400).
@@ -899,37 +906,53 @@ extension NewDeliveryView {
                     message: String(localized: "Say what's inside — the parcel is insured by its declared value."),
                     destination: .newItem
                 ))
-            } else if let item = items.first(where: {
-                $0.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.cost == nil
-            }) {
-                blockers.append(.init(
-                    id: "itemSpec/\(item.id)",
-                    message: String(localized: "Every item needs a name and a declared value."),
-                    destination: .item(item.id)
-                ))
-            } else if let item = items.first(where: { ($0.cost ?? 0) <= 0 }) {
-                // A declared value is what the parcel is insured for, so zero is not a
-                // value — and the bound is stated here rather than discovered as a 400
-                // (review, PR #22).
-                blockers.append(.init(
-                    id: "itemValue/\(item.id)",
-                    message: String(localized: "A declared value of nothing insures nothing — say what each item is worth."),
-                    destination: .item(item.id)
-                ))
-            }
-            if let item = items.first(where: { ($0.weightKg ?? 1) <= 0 }) {
-                blockers.append(.init(
-                    id: "itemWeight/\(item.id)",
-                    message: String(localized: "A stated weight has to be more than zero."),
-                    destination: .item(item.id)
-                ))
-            }
-            if let item = items.first(where: { $0.quantity < 1 }) {
-                blockers.append(.init(
-                    id: "itemCount/\(item.id)",
-                    message: String(localized: "Every item needs a count of at least one."),
-                    destination: .item(item.id)
-                ))
+            } else {
+                // One door per invalid item, named when it isn't the only one — a
+                // single generic row would leave the second bound invisible after
+                // the first is fixed.
+                let specMisses = items.enumerated().filter {
+                    $0.element.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.element.cost == nil
+                }
+                for (offset, item) in specMisses {
+                    blockers.append(.init(
+                        id: "itemSpec/\(item.id)",
+                        message: specMisses.count > 1
+                            ? String(localized: "«\(itemLabel(item, at: offset))» needs a name and a declared value.")
+                            : String(localized: "Every item needs a name and a declared value."),
+                        destination: .item(item.id)))
+                }
+                if specMisses.isEmpty {
+                    // A declared value is what the parcel is insured for, so zero is
+                    // not a value — and the bound is stated here rather than
+                    // discovered as a 400 (review, PR #22).
+                    let valueMisses = items.enumerated().filter { ($0.element.cost ?? 0) <= 0 }
+                    for (offset, item) in valueMisses {
+                        blockers.append(.init(
+                            id: "itemValue/\(item.id)",
+                            message: valueMisses.count > 1
+                                ? String(localized: "A declared value of nothing insures nothing — say what «\(itemLabel(item, at: offset))» is worth.")
+                                : String(localized: "A declared value of nothing insures nothing — say what each item is worth."),
+                            destination: .item(item.id)))
+                    }
+                }
+                let weightMisses = items.enumerated().filter { ($0.element.weightKg ?? 1) <= 0 }
+                for (offset, item) in weightMisses {
+                    blockers.append(.init(
+                        id: "itemWeight/\(item.id)",
+                        message: weightMisses.count > 1
+                            ? String(localized: "«\(itemLabel(item, at: offset))» has to weigh more than zero.")
+                            : String(localized: "A stated weight has to be more than zero."),
+                        destination: .item(item.id)))
+                }
+                let countMisses = items.enumerated().filter { $0.element.quantity < 1 }
+                for (offset, item) in countMisses {
+                    blockers.append(.init(
+                        id: "itemCount/\(item.id)",
+                        message: countMisses.count > 1
+                            ? String(localized: "«\(itemLabel(item, at: offset))» needs a count of at least one.")
+                            : String(localized: "Every item needs a count of at least one."),
+                        destination: .item(item.id)))
+                }
             }
             if fieldsUnavailable && fieldDefinitions.isEmpty {
                 // An unread schema is not an empty one — required fields may exist
