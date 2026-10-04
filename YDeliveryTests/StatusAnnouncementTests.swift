@@ -117,9 +117,10 @@ struct StatusAnnouncementTests {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // A fixture store must not reach the simulator's widget snapshot (YD-26's class).
         let store = StoreController(database: AppDatabase(
             directory: directory, providerAccountRef: "test:unattributed",
-            containerIdentifier: "iCloud.test"))
+            containerIdentifier: "iCloud.test"), republishing: .none)
         await store.refresh()
 
         let definition = CustomFieldDefinition(
