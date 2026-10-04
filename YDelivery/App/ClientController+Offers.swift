@@ -41,15 +41,15 @@ extension ClientController {
             guard offers.isEmpty == wire.isEmpty else { throw OffersUnreadable() }
             return offers
         case .badRequest(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 400)
         case .unauthorized(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 401)
         case .conflict(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 409)
         case .tooManyRequests(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 429)
         case .internalServerError(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 500)
         case .undocumented(let statusCode, _):
             throw ProviderRefusal(message: nil, status: statusCode)
         }

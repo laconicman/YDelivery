@@ -178,8 +178,12 @@ nonisolated struct OffersUnavailable: LocalizedError, Hashable {
 /// on the response and hand the decoded message here instead.
 nonisolated struct ProviderRefusal: LocalizedError, Hashable {
     let message: String?
-    /// The status code, for the case no decodable body arrived.
+    /// The HTTP status, set on every documented case; `isDefinitive` reads it.
     var status: Int?
+
+    /// The request was validated and declined — nothing executed. 5xx and
+    /// unknown statuses may have executed, so they are not definitive.
+    var isDefinitive: Bool { status.map { (400..<500).contains($0) } ?? false }
 
     var errorDescription: String? {
         if let message, !message.isEmpty { return message }

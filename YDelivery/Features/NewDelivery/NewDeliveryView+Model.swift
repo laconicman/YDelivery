@@ -944,6 +944,26 @@ extension NewDeliveryView {
         /// one rather than replay the dead claim (review, PR #48).
         private var orderRequestIsTerminated = false
 
+        /// Bumped when a documented refusal proves the held quote's payload stale —
+        /// folded into the offers task's id by the root, so the strip refetches
+        /// instead of letting "Try again" replay the requirements the provider
+        /// just refused (the drive's dead-retry finding: four identical attempts).
+        private(set) var repriceRequests = 0
+        /// The refused attempt's price — held so the sheet can say "was ₽X, now ₽Y"
+        /// when the reprice moved (B4). Spent at the next confirm.
+        private(set) var staleQuotedPrice: String?
+
+        /// The held offer's payload is what the provider refused — drop it and the
+        /// priced snapshot so the next attempt is priced fresh rather than replayed
+        /// verbatim. `chosenTariff` stays, so the reprice re-selects the same class.
+        private func invalidateStaleQuote() {
+            if staleQuotedPrice == nil { staleQuotedPrice = selectedOffer?.priceText }
+            selectedOfferID = nil
+            pricedRequest = nil
+            offers = .idle
+            repriceRequests += 1
+        }
+
         /// One order-level bound as a door — the sentence the review sheet reads plus
         /// the destination that resolves it (DesignSystemSemantics → the audit's rule;
         /// the device drive found blockers listed where nothing could be done about
@@ -1237,6 +1257,9 @@ extension NewDeliveryView {
                 }
                 orderRequestIsTerminated = false
                 tokenedRequest = request
+                // The disclosure is spent — a fresh attempt that fails the same way
+                // sets its own stale quote.
+                staleQuotedPrice = nil
                 ordering = .queued
             default:
                 break
@@ -1295,7 +1318,45 @@ extension NewDeliveryView {
                 case .readyToAccept:
                     ordering = .accepting
                     acceptAttempted = true
-                    claim = try await accept(claim.id, claim.version)
+                    do {
+                        claim = try await accept(claim.id, claim.version)
+                    } catch let refusal as ProviderRefusal {
+                        // Only a *definitive* refusal is proof nothing executed:
+                        // a 4xx validated and declined. A 5xx or undocumented
+                        // answer may have run anyway — that is `.unresolved`'s
+                        // truth, and its reconcile path already knows how to ask.
+                        guard refusal.isDefinitive else { throw refusal }
+                        // The provider answered and nothing moved. What it refuses
+                        // on is the requirements the claim carries, built from the
+                        // held offer's payload. One re-read decides before anything
+                        // is called failed: a searching claim means "already
+                        // confirmed" and is recorded (buying a second courier over
+                        // that is exactly what the token guard exists against); a
+                        // dead or still-waiting claim makes the held quote stale —
+                        // re-price, then re-confirm, never re-send.
+                        let standing = try? await watch(claim.id)
+                        if standing?.status == .searching {
+                            claim = standing ?? claim
+                            break // already accepted — the courier search is running
+                        }
+                        if let standing, standing.status == .readyToAccept || standing.status == .failed {
+                            // A claim whose accept was refused is dead to this flow
+                            // whether the provider calls it failed yet or not —
+                            // replaying its key would re-accept the same refused
+                            // requirements, so the create key rotates even when the
+                            // reprice yields an identical payload.
+                            orderRequestIsTerminated = true
+                            invalidateStaleQuote()
+                            ordering = .failed(
+                                refusal.errorDescription
+                                    ?? String(localized: "The provider refused the order.")
+                            )
+                            return
+                        }
+                        // The re-read was inconclusive or lost — the answer is still
+                        // missing, which is `.unresolved`'s truth, not `.failed`'s.
+                        throw refusal
+                    }
                     // The answer is not assumed. Anything but a claim now being worked
                     // means the acceptance did not land the way this flow believes, and
                     // guessing "placed" would record a delivery that may not exist.
@@ -1347,6 +1408,14 @@ extension NewDeliveryView {
                         claimID: createdClaimID
                     )
                 } else {
+                    // A documented refusal — the request itself was turned down —
+                    // makes the held quote's payload the suspect: drop it so
+                    // "Try again" re-prices rather than replaying the requirements
+                    // the provider just refused. Untyped failures (a dropped
+                    // connection, a timeout) prove nothing about the quote.
+                    if error is ProviderRefusal || error is OrderingRefused {
+                        invalidateStaleQuote()
+                    }
                     ordering = .failed(
                         sentence
                             ?? String(localized: "The order didn't go through. Nothing was charged — try again.")
@@ -1371,6 +1440,9 @@ extension NewDeliveryView {
                 // The token is spent along with it (review, PR #48).
                 if claim.status == .failed {
                     orderRequestIsTerminated = true
+                    // The claim carried the held quote's requirements — they are
+                    // dead either way, so the retry re-prices rather than replays.
+                    invalidateStaleQuote()
                     ordering = .failed(
                         claim.failureText
                             ?? String(localized: "The provider ended this order."))

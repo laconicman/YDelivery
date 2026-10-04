@@ -29,13 +29,13 @@ extension ClientController {
         case .ok(let ok):
             return PlacedClaim(try ok.body.json)
         case .badRequest(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 400)
         case .unauthorized(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 401)
         case .tooManyRequests(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 429)
         case .internalServerError(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 500)
         case .undocumented(let statusCode, _):
             throw ProviderRefusal(message: nil, status: statusCode)
         }
@@ -69,15 +69,15 @@ extension ClientController {
         case .ok(let ok):
             return try ok.body.json
         case .badRequest(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 400)
         case .unauthorized(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 401)
         case .notFound(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 404)
         case .tooManyRequests(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 429)
         case .internalServerError(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 500)
         case .undocumented(let statusCode, _):
             throw ProviderRefusal(message: nil, status: statusCode)
         }
@@ -109,15 +109,15 @@ extension ClientController {
                 id: accepted.id, version: version,
                 status: .init(accepted.status), failureText: nil)
         case .badRequest(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 400)
         case .unauthorized(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 401)
         case .conflict(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 409)
         case .tooManyRequests(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 429)
         case .internalServerError(let error):
-            throw ProviderRefusal(message: (try? error.body.json.message))
+            throw ProviderRefusal(message: (try? error.body.json.message), status: 500)
         case .undocumented(let statusCode, _):
             throw ProviderRefusal(message: nil, status: statusCode)
         }
