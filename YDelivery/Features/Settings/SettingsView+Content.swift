@@ -110,9 +110,9 @@ private extension UNAuthorizationStatus {
     /// state machine dump.
     var words: String {
         switch self {
-        case .notDetermined: "Not asked yet"
-        case .denied: "Off"
-        case .authorized, .provisional, .ephemeral: "On"
+        case .notDetermined: String(localized: "Not asked yet")
+        case .denied: String(localized: "Off")
+        case .authorized, .provisional, .ephemeral: String(localized: "On")
         @unknown default: "—"
         }
     }
