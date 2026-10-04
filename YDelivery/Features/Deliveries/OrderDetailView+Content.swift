@@ -115,14 +115,12 @@ extension OrderDetailView {
                             // `.unavailable` owes nothing, so it stays quiet words.
                             switch current.terms {
                             case .free:
-                                // TODO: Notice(.success) once the kit tags it
-                                Label {
-                                    Text(current.terms.explanation)
-                                } icon: {
-                                    Image(systemSymbol: .checkmarkCircle)
-                                }
-                                .font(.footnote)
-                                .foregroundStyle(OrderStatus.done.color)
+                                // The ruble glyph, not the checkmark: a
+                                // pre-decision that merely costs nothing must
+                                // not read «done» (review, PR #105).
+                                Notice(.success, current.terms.explanation,
+                                       symbol: .rublesignCircle)
+                                    .font(.footnote)
                             case .paid:
                                 Notice(.warning, current.terms.explanation)
                                     .font(.footnote)
