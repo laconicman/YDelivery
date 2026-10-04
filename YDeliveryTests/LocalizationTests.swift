@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import YDeliveryKit
 
 @Suite("The app string catalog")
 struct LocalizationTests {
@@ -93,5 +94,21 @@ struct LocalizationTests {
     func englishFallback() {
         #expect(Bundle.main.localizedString(forKey: "New delivery",
                                             value: nil, table: nil) == "New delivery")
+    }
+
+    /// The widgets' status words carry `bundle:` `.data`/`.kit`, not the
+    /// widget's own table — so a `LocalizedStringResource` resolves in the
+    /// kit's resource bundle, which ships `ru.lproj` into every target that
+    /// links the package (verified: it sits inside `YDeliveryWidgets.appex`
+    /// beside the appex's own). The same lookup the appex performs.
+    @Test("Kit resources resolve Russian from the app's host")
+    func kitResourcesResolveRussian() throws {
+        var phrase = try #require(ProviderStatusPhrase.phrase(for: "delivery_arrived"))
+        phrase.locale = Locale(identifier: "ru")
+        #expect(String(localized: phrase) == "Курьер у двери получателя")
+
+        var words = OrderStatus.active.words
+        words.locale = Locale(identifier: "ru")
+        #expect(String(localized: words) == "Курьер в пути")
     }
 }
