@@ -11,18 +11,26 @@ options:
   bundleIdPrefix: com.learnable
   deploymentTarget:
     iOS: "17.0"
-  xcodeVersion: "26.6"
+  # Drives LastUpgradeCheck: Xcode's "Update to recommended settings" moves it, and the
+  # settings it recommends live in settings.base below, so a regeneration keeps both.
+  xcodeVersion: "27.0"
   # Buildable folders, as the hand-made project had them: file lists never enter the
   # pbxproj, and adding a file needs no regeneration (XcodeGen ≥ 2.44, projectFormat
   # xcode16_0 — its default).
   defaultSourceDirectoryType: syncedFolder
+  # One cost of synced folders: XcodeGen derives knownRegions from the .lproj folders and
+  # catalog locales it scans in group-type sources (SourceGenerator.knownRegions) and never
+  # scans a synced folder — so the generated project knows Base and en only, and Xcode adds
+  # `ru` to its own copy when it opens the project. Only the Localizations list in project
+  # Info and the Export-for-Localization dialog read that list; the build emits ru.lproj and
+  # the catalogs' Russian regardless.
 
 settings:
   base:
     DEVELOPMENT_TEAM: WEJF495R4D
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: 3
+    CURRENT_PROJECT_VERSION: 5
     # The floor and the language mode are load-bearing decisions (Design → "The floor is
     # iOS 17, in Swift 6 language mode"); MainActor default isolation is applied on the
     # app target only, matching the project this file replaces.
@@ -32,6 +40,12 @@ settings:
     # Compile-time symbols for catalog colors — what DesignSystem's semantic set builds on.
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    # Xcode 27's recommended settings, accepted in the generated project on 2026-10-05 and
+    # carried here so a regeneration cannot drop them: catalog symbols at the project level
+    # (the app target already said YES; the extensions and test bundles keep their explicit
+    # NO below) and the analyzer's missing-localizability check.
+    STRING_CATALOG_GENERATE_SYMBOLS: YES
+    CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     GCC_C_LANGUAGE_STANDARD: gnu17
     CLANG_CXX_LANGUAGE_STANDARD: gnu++20
@@ -182,7 +196,7 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
-        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
         STRING_CATALOG_GENERATE_SYMBOLS: YES
         SWIFT_EMIT_LOC_STRINGS: YES
     scheme:
@@ -220,7 +234,7 @@ targets:
         # App Store upload requires a display name on every appex (the widget
         # gallery credits the host by it); Share carries the same key.
         INFOPLIST_KEY_CFBundleDisplayName: YDelivery
-        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"]
         SKIP_INSTALL: YES
         STRING_CATALOG_GENERATE_SYMBOLS: NO
         SWIFT_EMIT_LOC_STRINGS: YES
@@ -251,7 +265,7 @@ targets:
         # The share sheet lists the extension under this name — and installd
         # refuses an appex without one.
         INFOPLIST_KEY_CFBundleDisplayName: YDelivery
-        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"]
         SKIP_INSTALL: YES
         STRING_CATALOG_GENERATE_SYMBOLS: NO
         SWIFT_EMIT_LOC_STRINGS: YES
