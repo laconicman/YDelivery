@@ -127,17 +127,21 @@ extension LibraryView {
                     }
                 } else if !visiblePlaceRows.isEmpty {
                     List {
-                        ForEach(visiblePlaceRows) { row in
-                            placeRow(row)
+                        Section {
+                            ForEach(visiblePlaceRows) { row in
+                                placeRow(row)
+                            }
+                        } footer: {
+                            Text("Places also come from «Save as a place» on a point while composing.")
                         }
                     }
                 } else if !searchText.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else {
                     ContentUnavailableView {
-                        Label("No places yet", systemSymbol: .star)
+                        Label("No places yet", systemSymbol: .bookmark)
                     } description: {
-                        Text("Star a stop while composing a delivery, or add one with «+».")
+                        Text("Save a stop as a place while composing a delivery, or add one with «+».")
                     }
                 }
             }
@@ -160,13 +164,13 @@ extension LibraryView {
                     }
                 } else if !visibleParcelRows.isEmpty {
                     List {
-                        ForEach(visibleParcelRows) { row in
-                            parcelRow(row)
+                        Section {
+                            ForEach(visibleParcelRows) { row in
+                                parcelRow(row)
+                            }
+                        } footer: {
+                            Text("Templates also come from «Save as a template» while composing.")
                         }
-                        Text("Templates also come from «Save as a template» while composing.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .listRowSeparator(.hidden)
                     }
                 } else if !searchText.isEmpty {
                     ContentUnavailableView.search(text: searchText)
@@ -188,32 +192,40 @@ extension LibraryView {
         }
 
         /// A place as a row — glyph · name · pin; address, then the contact.
-        /// The menu carries the three verbs; the delete ask parks the row in
-        /// the root's confirm dialog.
+        /// The row itself is the door: a tap opens the editor (the draft's item
+        /// rows are the precedent — Button › plain style › context menu). The
+        /// menu and the swipes are the secondary doors — «Edit» stays in the
+        /// menu for discoverability; the delete ask parks the row in the root's
+        /// confirm dialog.
         private func placeRow(_ row: PlaceRow) -> some View {
-            HStack(alignment: .top, spacing: Layout.Spacing.tight) {
-                Image(systemSymbol: row.symbol)
-                    .foregroundStyle(.secondary)
-                    .frame(width: Self.glyphColumn)
-                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                    HStack {
-                        Text(row.name)
-                        if row.pinned {
-                            Image(systemSymbol: .pinFill)
+            Button { editPlace(row.id) } label: {
+                HStack(alignment: .top, spacing: Layout.Spacing.tight) {
+                    Image(systemSymbol: row.symbol)
+                        .foregroundStyle(.secondary)
+                        .frame(width: Self.glyphColumn)
+                    VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                        HStack {
+                            Text(row.name)
+                            if row.pinned {
+                                Image(systemSymbol: .pinFill)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text(row.address)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        if let contact = row.contact {
+                            Text(contact)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Text(row.address)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    if let contact = row.contact {
-                        Text(contact)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .contextMenu {
                 Button { pinPlace(row.id) } label: {
                     Label(row.pinned ? "Unpin" : "Pin",
@@ -226,6 +238,14 @@ extension LibraryView {
                     Label("Delete", systemSymbol: .trash)
                 }
             }
+            // Once a row has any swipeActions, `onDelete`'s synthesized delete is
+            // gone — the trailing Delete is the delete, so none is declared.
+            .swipeActions(edge: .leading) {
+                Button { pinPlace(row.id) } label: {
+                    Label(row.pinned ? "Unpin" : "Pin",
+                          systemSymbol: row.pinned ? .pinSlash : .pin)
+                }
+            }
             .swipeActions(edge: .trailing) {
                 Button(role: .destructive) { deletePlace(row.id) } label: {
                     Label("Delete", systemSymbol: .trash)
@@ -233,22 +253,28 @@ extension LibraryView {
             }
         }
 
-        /// A template as a row — the library name plus the item summary; same
-        /// menu shape as the places' half.
+        /// A template as a row — the library name plus the item summary; the row
+        /// is the door, the menu and swipes the secondary doors, same shape as
+        /// the places' half.
         private func parcelRow(_ row: ParcelRow) -> some View {
-            VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                HStack {
-                    Text(row.name)
-                    if row.pinned {
-                        Image(systemSymbol: .pinFill)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            Button { editParcel(row.id) } label: {
+                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                    HStack {
+                        Text(row.name)
+                        if row.pinned {
+                            Image(systemSymbol: .pinFill)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    Text(row.summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
-                Text(row.summary)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .contextMenu {
                 Button { pinParcel(row.id) } label: {
                     Label(row.pinned ? "Unpin" : "Pin",
@@ -259,6 +285,12 @@ extension LibraryView {
                 }
                 Button(role: .destructive) { deleteParcel(row.id) } label: {
                     Label("Delete", systemSymbol: .trash)
+                }
+            }
+            .swipeActions(edge: .leading) {
+                Button { pinParcel(row.id) } label: {
+                    Label(row.pinned ? "Unpin" : "Pin",
+                          systemSymbol: row.pinned ? .pinSlash : .pin)
                 }
             }
             .swipeActions(edge: .trailing) {
