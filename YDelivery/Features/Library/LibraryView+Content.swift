@@ -135,6 +135,9 @@ extension LibraryView {
                             Text("Places also come from «Save as a place» on a point while composing.")
                         }
                     }
+                    // The pin toggle reorders pinned-first and the typed filter
+                    // adds and removes rows — both animate off the store's re-read.
+                    .animation(.default, value: visiblePlaceRows)
                 } else if !searchText.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else {
@@ -172,6 +175,7 @@ extension LibraryView {
                             Text("Templates also come from «Save as a template» while composing.")
                         }
                     }
+                    .animation(.default, value: visibleParcelRows)
                 } else if !searchText.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else {
