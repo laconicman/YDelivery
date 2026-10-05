@@ -97,6 +97,16 @@ struct ClaimsMappingTests {
         #expect(request.offerPayload == "offer-token")
     }
 
+    /// An unparseable spelling falls back to courier, so before the spec carried
+    /// `superexpress_d2d` a priced super-express card would have been placed as courier.
+    @Test("A super-express order is placed as super-express, not the courier fallback")
+    func superexpressReachesTheWire() {
+        var order = order()
+        order.tariffWireValue = TariffClass.superexpressD2D.wireValue
+        let request = ClientController.createRequest(for: order)
+        #expect(request.clientRequirements?.taxiClass == .superexpressD2d)
+    }
+
     @Test("Custom fields ride their carriers — document, order number, item tag")
     func fieldCarriersMapToTheWire() throws {
         let request = ClientController.createRequest(for: OrderRequest(
