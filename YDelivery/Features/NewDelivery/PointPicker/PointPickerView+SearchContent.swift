@@ -44,7 +44,8 @@ extension PointPickerView {
 
         let pickChip: (Chip.ID) -> Void
         /// The `3e` editor's asks, off the chip's long-press menu: rename/retype and
-        /// forget. Defaulted so previews stay terse.
+        /// forget — the menu says «Rename…» because that is all it does; the
+        /// Library's row owns the full edit. Defaulted so previews stay terse.
         var editChip: (Chip.ID) -> Void = { _ in }
         var deleteChip: (Chip.ID) -> Void = { _ in }
         /// Pin/Unpin on the same menu — the Library's curation from the use path.
@@ -170,7 +171,7 @@ extension PointPickerView {
                             Button {
                                 editChip(chip.id)
                             } label: {
-                                Label("Edit…", systemSymbol: .pencil)
+                                Label("Rename…", systemSymbol: .pencil)
                             }
                             Button(role: .destructive) {
                                 deleteChip(chip.id)

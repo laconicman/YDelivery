@@ -89,6 +89,85 @@ struct LibraryViewTests {
         #expect(back.sizeHeightCm == original.sizeHeightCm)
     }
 
+    @Test("Editing a place keeps its identity and its pin's ground")
+    func editedKeepsIdentityAndGeo() {
+        let place = place
+        let parts = AddressParts(entrance: "А", floor: "3", apartment: "301")
+        let edited = place.edited(name: "Офис", kind: .warehouse, parts: parts,
+                                  contact: Contact(at: place.point) ?? Contact())
+        #expect(edited.id == place.id)
+        #expect(edited.pinned == place.pinned)
+        #expect(edited.name == "Офис")
+        #expect(edited.kind == .warehouse)
+        #expect(edited.point.latitude == place.point.latitude)
+        #expect(edited.point.longitude == place.point.longitude)
+        #expect(edited.point.address == place.point.address)
+        #expect(edited.point.addressParts == parts)
+    }
+
+    @Test("Empty door details and an empty contact store as absence")
+    func editedStoresEmptinessAsAbsence() {
+        let edited = place.edited(name: "Home", kind: .home,
+                                  parts: AddressParts(), contact: Contact())
+        #expect(edited.point.addressParts == nil)
+        #expect(edited.point.contactName == nil)
+        #expect(edited.point.contactGivenName == nil)
+        #expect(edited.point.contactFamilyName == nil)
+        #expect(edited.point.contactPhone == nil)
+        #expect(edited.point.contactPhoneExtension == nil)
+    }
+
+    @Test("The stored phone lands in E.164 and the name stays componented")
+    func editedNormalisesTheContact() {
+        let edited = place.edited(
+            name: "Home", kind: .home, parts: AddressParts(),
+            contact: Contact(givenName: "Иван", familyName: "Петров",
+                             phone: "+7 (912) 345-67-89"))
+        #expect(edited.point.contactPhone == "+79123456789")
+        #expect(edited.point.contactGivenName == "Иван")
+        #expect(edited.point.contactFamilyName == "Петров")
+        // The formatted whole rides along for the wire and legacy readers —
+        // the components are in it; their order is the locale's, not ours.
+        #expect(edited.point.contactName?.contains("Иван") == true)
+        #expect(edited.point.contactName?.contains("Петров") == true)
+    }
+
+    @Test("A save from a stale snapshot never moves the pin")
+    func staleSnapshotSaveKeepsThePin() async throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("LibraryViewTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = StoreController(
+            database: AppDatabase(directory: directory, providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test"),
+            republishing: .none)
+
+        // The suite's place is pinned; the store's copy starts unpinned.
+        var unpinned = place
+        unpinned.pinned = false
+        try await store.save(unpinned)
+        await store.refresh()
+        guard let saved = store.savedPlaces.first else {
+            Issue.record("A saved place must be readable")
+            return
+        }
+        await store.setPlacePinned(saved.id, pinned: true)
+        #expect(store.savedPlaces.first?.pinned == true)
+
+        // `saved` was captured before the pin — its snapshot says false, exactly
+        // like a sheet opened before the toggle. The save must not revert it.
+        try await store.save(saved.edited(name: "Склад", kind: .warehouse,
+                                        parts: AddressParts(), contact: Contact()))
+        #expect(store.savedPlaces.first?.pinned == true)
+        #expect(store.savedPlaces.first?.name == "Склад")
+
+        // A *new* place's pin is still honoured — the rebasing touches known ids only.
+        try await store.save(SavedPlace(
+            name: "Дом", kind: .home,
+            point: RoutePoint(latitude: 59, longitude: 30, address: "Невский, 100"),
+            pinned: true))
+        #expect(store.savedPlaces.first(where: { $0.name == "Дом" })?.pinned == true)
+    }
+
     @Test("Pinning and forgetting a template ride the store")
     func templatePinAndDelete() async throws {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())

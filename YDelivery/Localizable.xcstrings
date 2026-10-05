@@ -1736,16 +1736,6 @@
         }
       }
     },
-    "Edit…" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Изменить…"
-          }
-        }
-      }
-    },
     "end" : {
       "localizations" : {
         "ru" : {
@@ -3515,8 +3505,8 @@
       "localizations" : {
         "ru" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "Метка"
+            "state" : "machine_translated",
+            "value" : "Закрепить"
           }
         }
       }
@@ -3558,6 +3548,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Места сохраняются из точки при составлении доставки."
+          }
+        }
+      }
+    },
+    "Places also come from «Save as a place» on a point while composing." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Места также появляются через «Сохранить как место» на точке при составлении."
           }
         }
       }
@@ -3753,6 +3753,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Уточнить точку"
+          }
+        }
+      }
+    },
+    "Rename…" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Переименовать…"
+          }
+        }
+      }
+    },
+    "Rename the place" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Переименовать место"
           }
         }
       }
@@ -3975,6 +3995,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Сохранить как место"
+          }
+        }
+      }
+    },
+    "Save a stop as a place while composing a delivery, or add one with «+»." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Сохраните точку как место при составлении доставки или добавьте кнопкой «+»."
           }
         }
       }
@@ -4331,16 +4361,6 @@
         }
       }
     },
-    "Star a stop while composing a delivery, or add one with «+»." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Отметьте точку при составлении доставки или добавьте кнопкой «+»."
-          }
-        }
-      }
-    },
     "start" : {
       "localizations" : {
         "ru" : {
@@ -4472,6 +4492,16 @@
         }
       }
     },
+    "The address is what makes it this place — to move it, add a new place." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Адрес и есть это место: чтобы перенести его, добавьте новое место."
+          }
+        }
+      }
+    },
     "The cancellation was accepted, but checking the claim failed — try again." : {
       "localizations" : {
         "ru" : {
@@ -4498,6 +4528,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Курьер звонит заранее — у каждой точки нужен человек: имя и телефон."
+          }
+        }
+      }
+    },
+    "The courier calls this number on arrival — leave it empty if nobody will be there." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Курьер позвонит по этому номеру по прибытии — оставьте пустым, если никого не будет."
           }
         }
       }

@@ -78,6 +78,7 @@ struct YDeliveryApp: App {
         Task {
             await Self.seedFieldsIfFlagged(store)
             await Self.seedTemplatesIfFlagged(store)
+            await Self.seedPlacesIfFlagged(store)
             await Self.seedHistoryIfFlagged(store, database: database)
             await Self.seedCloudKitSchemaIfFlagged()
             await Self.cleanCloudKitSeedIfFlagged()
@@ -179,6 +180,26 @@ struct YDeliveryApp: App {
         item.name = name
         item.cost = 1000
         try? await store.saveTemplate(item, name: name)
+    }
+
+    /// `--uitest-places`: seed one saved place through the real save path — the
+    /// write «Save as a place» performs — so the Library's Places list has a row
+    /// whose tap the UI test can drive into the place editor. Idempotent by the
+    /// fixture's name, not by the store being empty (review, #131). Like the
+    /// other `--uitest-*` seeds it writes the real simulator store — YD-26 names
+    /// that residue.
+    private static func seedPlacesIfFlagged(_ store: StoreController) async {
+        guard ProcessInfo.processInfo.arguments.contains("--uitest-places") else { return }
+        await store.refresh()
+        let name = "Склад на Невском"
+        guard !store.savedPlaces.contains(where: { $0.name == name }) else { return }
+        try? await store.save(SavedPlace(
+            name: name, kind: .warehouse,
+            point: RoutePoint(latitude: 59.9343, longitude: 30.3351,
+                              address: "Санкт-Петербург, Невский проспект, 100",
+                              contactName: "Иван Петров",
+                              contactGivenName: "Иван", contactFamilyName: "Петров",
+                              contactPhone: "+79123456789")))
     }
 
     /// `--uitest-history`: seed a history the Deliveries screen can show — five

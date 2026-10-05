@@ -5,8 +5,10 @@ import YDeliveryKit
 extension PointPickerView {
     /// Keeping a place: a name for the chip and a kind for its glyph. The point itself —
     /// address, parts, coordinates — is already on the refine stage; this sheet only
-    /// asks what to call it (the cheap save affordance, author 2026-08-30; the full 3e
-    /// editor is a later slice).
+    /// asks what to call it (the cheap save affordance, author 2026-08-30; the full
+    /// edit — door details and the person included — is the Library's `PlaceEditor`,
+    /// which owns «Edit the place»; this sheet's editing title says «Rename» because
+    /// that is all it does).
     ///
     /// The sheet owns the write rather than firing it at dismissal, so a store that
     /// cannot take the place says so here, with the name still typed and Save still
@@ -71,7 +73,7 @@ extension PointPickerView {
                         }
                     }
                 }
-                .navigationTitle(isEditing ? "Edit the place" : "Save the place")
+                .navigationTitle(isEditing ? "Rename the place" : "Save the place")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

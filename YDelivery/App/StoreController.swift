@@ -463,9 +463,20 @@ final class StoreController {
     /// it has a caller standing in front of the sender: the naming sheet, which can stay
     /// open, say what went wrong, and offer the write again. A bookmark that did not
     /// persist must never look like one that did (review, PR #18). The error is a filled
-    /// `LocalizedError`, so the sheet renders it as it arrives.
+    /// `LocalizedError`, so the sheet renders it as it arrives. A save also never
+    /// moves a known place's pin — ``setPlacePinned`` owns that flag.
     func save(_ place: SavedPlace) async throws {
         guard let database else { throw StoreUnavailable() }
+        var place = place
+        // A save never moves a known place's pin. The editors write whole rows
+        // from a snapshot as old as their sheet, and a pin toggled meanwhile —
+        // another device's, arriving through sync and the next re-read — must
+        // not be reverted by a save that never meant to touch it (review, #132).
+        // `setPlacePinned` owns the flag; the Kit's adoption path keeps a
+        // remembered door's curation the same way for a *new* id.
+        if let current = savedPlaces.first(where: { $0.id == place.id }) {
+            place.pinned = current.pinned
+        }
         try await Self.write(place, to: database)
         do {
             savedPlaces = try await Self.readPlaces(database)

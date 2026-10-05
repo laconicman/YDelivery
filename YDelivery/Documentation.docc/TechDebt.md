@@ -425,6 +425,9 @@ contact. The save persists the whole point, position included.
   chose — the class of wrong that reads plausible, not broken.
 - **Discharge:** confirm-before-writing the geo half — a save that notices the
   pin moved asks first — or split "Save the point" (geo) from "Save" (contact).
+- **Partly** — the Library's place editor (`SavedPlace.edited`) rewrites door
+  details and the person and never touches the pin; the draft's
+  describe→"Save the point" path still writes the whole point.
 
 ## YD-28 — "Who receives" rows are indistinguishable across stops — **open**
 

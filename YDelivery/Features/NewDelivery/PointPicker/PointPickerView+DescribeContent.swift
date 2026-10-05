@@ -40,39 +40,13 @@ extension PointPickerView {
                     }
                 }
 
-                Section {
-                    PartsFields(parts: $parts)
-                } header: {
-                    Text("Door details")
-                } footer: {
-                    Text("Building, entrance, floor, apartment, intercom — what the pin can't know.")
-                }
+                DoorDetailsSection(parts: $parts)
 
-                Section {
-                    // Explicit components, concatenated only by the name formatter
-                    // (author's standing preference); each field autofills from its
-                    // own content type.
-                    TextField("Given name", text: $contact.givenName)
-                        .textContentType(.givenName)
-                    TextField("Family name", text: $contact.familyName)
-                        .textContentType(.familyName)
-                    PhoneField(text: $contact.phone)
-                    // No `textContentType`: UIKit has none for a dial extension.
-                    TextField("Extension", text: $contact.phoneExtension)
-                        .keyboardType(.numberPad)
-                } header: {
-                    Text("Who's at the door")
-                } footer: {
-                    // The hint states the bound without blocking: a point may be kept
-                    // half-typed, and ordering's blockers say the rest.
-                    if !contact.phone.isEmpty, PhoneFormat.dialable(contact.phone) == nil {
-                        Notice(.bound, "This isn't a dialable number yet — the courier calls it on arrival.")
-                    } else {
-                        // Steering, not a gate (author, 2026-09-18): prices need only
-                        // the address, so someone pricing options may skip this — but
-                        // filling it early is welcome; ordering asks for it.
-                        Text("Only the order asks who's at the door — prices don't. The courier calls this number on arrival; leave it empty if nobody will be there.")
-                    }
+                ContactSection(contact: $contact) {
+                    // Steering, not a gate (author, 2026-09-18): prices need only
+                    // the address, so someone pricing options may skip this — but
+                    // filling it early is welcome; ordering asks for it.
+                    Text("Only the order asks who's at the door — prices don't. The courier calls this number on arrival; leave it empty if nobody will be there.")
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -107,6 +81,62 @@ extension PointPickerView {
                 }
                 .padding()
                 .background(.bar)
+            }
+        }
+    }
+
+    /// The door details as a Form section — header, `PartsFields`, the footer that
+    /// says what the pin can't know. One home: the picker's describe stage and the
+    /// Library's place editor both ask it.
+    struct DoorDetailsSection: View {
+        @Binding var parts: AddressParts
+
+        var body: some View {
+            Section {
+                PartsFields(parts: $parts)
+            } header: {
+                Text("Door details")
+            } footer: {
+                Text("Building, entrance, floor, apartment, intercom — what the pin can't know.")
+            }
+        }
+    }
+
+    /// The person at the door as a Form section — the four fields and the dialable
+    /// bound in the footer; `footer` is what the section says when the phone is
+    /// fine, because each site steers differently.
+    struct ContactSection<Footer: View>: View {
+        @Binding var contact: Contact
+        private let footer: Footer
+
+        init(contact: Binding<Contact>, @ViewBuilder footer: () -> Footer) {
+            _contact = contact
+            self.footer = footer()
+        }
+
+        var body: some View {
+            Section {
+                // Explicit components, concatenated only by the name formatter
+                // (author's standing preference); each field autofills from its
+                // own content type.
+                TextField("Given name", text: $contact.givenName)
+                    .textContentType(.givenName)
+                TextField("Family name", text: $contact.familyName)
+                    .textContentType(.familyName)
+                PhoneField(text: $contact.phone)
+                // No `textContentType`: UIKit has none for a dial extension.
+                TextField("Extension", text: $contact.phoneExtension)
+                    .keyboardType(.numberPad)
+            } header: {
+                Text("Who's at the door")
+            } footer: {
+                // The hint states the bound without blocking: a point may be kept
+                // half-typed, and ordering's blockers say the rest.
+                if !contact.phone.isEmpty, PhoneFormat.dialable(contact.phone) == nil {
+                    Notice(.bound, "This isn't a dialable number yet — the courier calls it on arrival.")
+                } else {
+                    footer
+                }
             }
         }
     }
@@ -159,6 +189,22 @@ extension PointPickerView {
             save: {}
         )
         .navigationTitle("The point")
+    }
+}
+
+#Preview("Door details section") {
+    @Previewable @State var parts = AddressParts(entrance: "А", floor: "3", apartment: "301")
+    Form {
+        PointPickerView.DoorDetailsSection(parts: $parts)
+    }
+}
+
+#Preview("Contact section") {
+    @Previewable @State var contact = Contact(givenName: "Иван", familyName: "Петров")
+    Form {
+        PointPickerView.ContactSection(contact: $contact) {
+            Text("The courier calls this number on arrival — leave it empty if nobody will be there.")
+        }
     }
 }
 

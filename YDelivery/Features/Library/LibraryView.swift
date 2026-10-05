@@ -4,9 +4,10 @@ import YDeliveryKit
 
 /// Root view of the Library tab — the sender's saved places and parcel
 /// templates, bridged from the store's memory into the content's rows. This is
-/// the *curate* path: places are earned at the use path (the picker's star,
-/// «Save as a template»), so the list only renames, retypes, pins and forgets
-/// — parcels can additionally be authored here, where a template is the noun.
+/// the *curate* path: places are earned at the use path (the picker's bookmark,
+/// «Save as a template»), so the list re-describes, pins and forgets — a place's
+/// editor rewrites everything but the point itself; parcels can additionally be
+/// authored here, where a template is the noun.
 struct LibraryView: View {
     @Environment(StoreController.self) private var store
 
@@ -16,7 +17,7 @@ struct LibraryView: View {
     @State private var pendingDeletePlace: SavedPlace?
     /// Same ceremony for a template.
     @State private var pendingDeleteTemplate: ParcelTemplate?
-    /// The place `SavePlaceSheet` is renaming/retyping — `sheet(item:)` identity
+    /// The place `PlaceEditor` is re-describing — `sheet(item:)` identity
     /// is the place's own.
     @State private var editingPlace: SavedPlace?
     /// The template the editor is re-shaping; `isAdding` asks the same editor
@@ -69,15 +70,12 @@ struct LibraryView: View {
                 addParcel: { isAddingTemplate = true }
             )
                 .navigationTitle("Library")
-                // Rename/retype only — the point is uneditable by construction
-                // (task doc «curate-only»): a place is its point plus a name and
-                // a kind, and moving it would make it a different place.
+                // The editor rewrites name, kind, the door details and the
+                // person; the pin and address stay — a place is its point
+                // (task doc ruling, owner 2026-10-05), and a describe-only
+                // save never moves geo (YD-27).
                 .sheet(item: $editingPlace) { place in
-                    PointPickerView.SavePlaceSheet(address: place.point.address, editing: place) { name, kind in
-                        try await store.save(SavedPlace(
-                            id: place.id, name: name, kind: kind,
-                            point: place.point, pinned: place.pinned))
-                    }
+                    PlaceEditor(place: place) { try await store.save($0) }
                 }
                 .sheet(item: $editingTemplate) { template in
                     ParcelTemplateEditor(template: template) { try await store.save($0) }
