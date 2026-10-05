@@ -674,7 +674,7 @@ calques where Russian has its own word (author, 2026-10-05).
 
 A control's look is decided where it is written, not by what it does. The inventory
 today: `Button.primaryAction()` for the screen's one standing action (DesignSystem →
-"Order bar and CTAs") — the only role with a name; borderless tinted words for row
+"The gateway", then "Order bar and CTAs") — the only role with a name; borderless tinted words for row
 actions (the route card's `actions`, the add-doors, the callout's pair, `PointRow`'s
 contact line); `.plain` where the whole row is the door (item rows, blockers, the
 Options summary); `.bordered` beside a prominent sibling on the paste and location
