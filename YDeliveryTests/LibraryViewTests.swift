@@ -89,6 +89,49 @@ struct LibraryViewTests {
         #expect(back.sizeHeightCm == original.sizeHeightCm)
     }
 
+    @Test("Editing a place keeps its identity and its pin's ground")
+    func editedKeepsIdentityAndGeo() {
+        let place = place
+        let parts = AddressParts(entrance: "А", floor: "3", apartment: "301")
+        let edited = place.edited(name: "Офис", kind: .warehouse, parts: parts,
+                                  contact: Contact(at: place.point) ?? Contact())
+        #expect(edited.id == place.id)
+        #expect(edited.pinned == place.pinned)
+        #expect(edited.name == "Офис")
+        #expect(edited.kind == .warehouse)
+        #expect(edited.point.latitude == place.point.latitude)
+        #expect(edited.point.longitude == place.point.longitude)
+        #expect(edited.point.address == place.point.address)
+        #expect(edited.point.addressParts == parts)
+    }
+
+    @Test("Empty door details and an empty contact store as absence")
+    func editedStoresEmptinessAsAbsence() {
+        let edited = place.edited(name: "Home", kind: .home,
+                                  parts: AddressParts(), contact: Contact())
+        #expect(edited.point.addressParts == nil)
+        #expect(edited.point.contactName == nil)
+        #expect(edited.point.contactGivenName == nil)
+        #expect(edited.point.contactFamilyName == nil)
+        #expect(edited.point.contactPhone == nil)
+        #expect(edited.point.contactPhoneExtension == nil)
+    }
+
+    @Test("The stored phone lands in E.164 and the name stays componented")
+    func editedNormalisesTheContact() {
+        let edited = place.edited(
+            name: "Home", kind: .home, parts: AddressParts(),
+            contact: Contact(givenName: "Иван", familyName: "Петров",
+                             phone: "+7 (912) 345-67-89"))
+        #expect(edited.point.contactPhone == "+79123456789")
+        #expect(edited.point.contactGivenName == "Иван")
+        #expect(edited.point.contactFamilyName == "Петров")
+        // The formatted whole rides along for the wire and legacy readers —
+        // the components are in it; their order is the locale's, not ours.
+        #expect(edited.point.contactName?.contains("Иван") == true)
+        #expect(edited.point.contactName?.contains("Петров") == true)
+    }
+
     @Test("Pinning and forgetting a template ride the store")
     func templatePinAndDelete() async throws {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
