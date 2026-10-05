@@ -231,6 +231,15 @@ Library tab. Search reaches both lists. Two evenings.
 - **Extract the map components into a public SPM** once the destination design has shipped —
   point picker, pin taxonomy, link-paste geocoding. The demo repo becomes the second
   consumer (its own roadmap wants maps); before that, extraction is speculation.
+- **Many providers, docked legs, independent couriers** (owner direction, 2026-10-05 —
+  <doc:Vision>): a second provider as its own package behind the controller boundary;
+  legs under one order with docks between them (`LegState` per leg, events per leg);
+  the courier edition as a share participant granted a leg. Schema rules to respect
+  meanwhile in <doc:Schema> → "Direction — legs and participants".
+- **Signing for every writer** (<doc:Collaboration> → "Generalised 2026-10-05"):
+  `participantKeys` as an append-only shared table, `signingKeyID`/`signature` on the
+  mirror and the events, read-time verdicts that never refuse. Supersedes the owner-only
+  draft (Kit #36 / #92, parked as the quarry).
 
 ### Deferred, deliberately (no stubs)
 

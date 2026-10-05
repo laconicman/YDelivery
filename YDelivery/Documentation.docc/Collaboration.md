@@ -205,6 +205,50 @@ Author direction, recorded 2026-09-24:
    right weight: two columns, one Keychain item, one verify per row read. Sequenced after
    the device pass of share acceptance, since verification needs two accounts to test.
 
+### Generalised 2026-10-05 — every writer signs, not only the owner
+
+The owner's direction (<doc:Vision>) adds writers to the shared hierarchy who are not the
+owner: an independent courier granted a leg writes that leg's events. The 2026-09-29
+design — one owner key on the `Order` root, two owner-written tables signed — becomes a
+special case of a general one. Recorded now so the first implementation (parked PRs
+Kit #36 / app #92) is reshaped rather than shipped and migrated:
+
+- **A key per writer, published where readers already look.** A shared, append-only
+  `participantKeys` table (`keyID`, `participantRef`, `publicKey`, `role`, `addedAt`,
+  owner-signed when the owner adds a courier's key, self-signed when a participant
+  rotates its own) replaces `ownerSigningKey` on the root. The owner's keys are rows in
+  it like anyone's. Trust is pinned per **participant**, not per key: the first key seen
+  for a participant is taken on trust (TOFU), and every later key row of that participant
+  must be signed by one of their already-pinned keys — a chain, so a read-write
+  participant who adds a fresh `keyID` claiming to be the owner's cannot slip past the
+  changed-key warning as merely *new* (review of the first draft). An unchained key row
+  is itself *unverified*, and so is every row signed with it.
+- **Every signed row names its key.** `signingKeyID` + `signature` on `OrderProviderState`
+  (later per leg), `ProviderEvent`, and — once couriers write — the courier's event rows;
+  `OrderMessage` may follow for the chat's own accountability. The verdict a reader
+  renders is "signed by a key entitled to write this row kind for this leg", never a bare
+  valid/invalid.
+- **Entitlement is role × leg.** The owner may sign anything; a courier's key is entitled
+  to the events of its leg only. The entitlement table is the `participantKeys.role`
+  column plus the leg's assignment — small, owner-written, itself signed.
+- **Verification stays read-time and never refuses.** Unverified rows render beside their
+  as-of stamp as *unverified*; a changed key is a warning. The verdict is never persisted
+  into the row or into Codable JSON (review of #92: read-time verdicts leaked into the
+  wire-shaped model — the general design keeps them a view of the row, not a column).
+- **Key custody.** Owner keys: iCloud Keychain, synchronizable, so the owner's devices
+  agree. A courier's key: their own device's Keychain. Two offline owner devices rotating
+  keys was the hard case in the parked PR; with keys as *rows*, rotation is an append
+  (both keys valid from their `addedAt`), not a replace — the conflict dissolves.
+- **Transient Keychain failure must not disable signing permanently** (the other hard
+  case): signing is attempted per write; a write that could not be signed is stored
+  unsigned and re-signed on the next successful write of that row — the reader sees
+  *unsigned* in between, which is the truth.
+
+Sequencing: design review of this section (owner) → Kit schema PR (`participantKeys`,
+the two columns, read-time verdict API) → app adoption behind the same `Notice` roles →
+the two-device test the earlier draft lacked. The two parked PRs are the quarry, not the
+plan.
+
 ## Open verifications before committing
 
 Closed by the spike, recorded above: `Data`→`CKAsset`, the API surface, floor/license/

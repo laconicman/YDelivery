@@ -480,12 +480,16 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   What stays open is *shared* tags: a tag vocabulary a team shares is the workspace-root
   question above; private tags wait until someone names a use pin doesn't cover.
 - **Signed provider state**: `signature BLOB` + `signingKeyID` on `OrderProviderState` and
-  `ProviderEvent` (owner-written), `ownerSigningKey` on `Order`; Curve25519 over a canonical
-  serialisation; the private key in the iCloud Keychain, so the owner's devices sign and
-  everyone verifies (<doc:Collaboration> → "Where this landed", 5). Additive DDL; rows
-  written before the columns exist read as *unsigned*, not *forged*. *Who* wrote a row is
-  already free from CloudKit's `lastModifiedUserRecordID`; the signature answers *whether
-  the owner's key wrote it*, which permissions cannot.
+  `ProviderEvent`; Curve25519 over a canonical serialisation; the owner's private key in
+  the iCloud Keychain, so the owner's devices sign and everyone verifies
+  (<doc:Collaboration> → "Where this landed", 5). **Superseded 2026-10-05 in one
+  respect:** the public key does *not* ride the `Order` root as `ownerSigningKey` — keys
+  are rows of a shared, append-only `participantKeys` table so that couriers and other
+  writers can publish theirs too (<doc:Collaboration> → "Generalised 2026-10-05"); the
+  Kit migration follows that contract, not this bullet's earlier wording. Additive DDL;
+  rows written before the columns exist read as *unsigned*, not *forged*. *Who* wrote a
+  row is already free from CloudKit's `lastModifiedUserRecordID`; the signature answers
+  *whether a key entitled to write it did*, which permissions cannot.
 - **Accountless couriers and support staff**: out of this design's reach — a private
   `CKShare` requires an iCloud account per participant, and an App Clip changes the
   install experience, not the identity requirement (Devin Review, second round — an
@@ -546,6 +550,38 @@ UPDATEs remain. The production exposure in `recordOrder` stays open as
 
 Nothing here promotes anything: the schema lives in **development**, and
 "Deploy Schema Changes" in CloudKit Console remains a deliberate, separate act.
+
+## Direction — legs and participants: what not to cement (2026-10-05)
+
+The owner's direction (<doc:Vision> → "Direction — many providers, docked legs,
+independent couriers") does not change the schema today. It changes what a new column
+may assume. Three rules for every schema PR from here:
+
+1. **Provider-specific state goes on the mirror, never on `Order`.** `OrderProviderState`
+   is 1:1 today and becomes *one row per leg* later (`LegState`, keyed by a `legID`); a
+   column added to `Order` because "there is only one claim" is the thing the migration
+   would have to unpick. `claimID`, `tariff`, `price`, courier fields stay on the mirror.
+2. **Events name their writer.** `ProviderEvent` is "owner-written" today; a courier's
+   leg will have events the courier writes. New event columns must not assume the owner —
+   an `authorRef` (the `*Ref` convention: a participant reference, not a user record id)
+   and the signing columns (<doc:Collaboration>) are the shape; until they exist, nothing
+   should read "the owner wrote this" from the table alone.
+3. **A stop may be a dock.** `RouteStop.role` is `pickup`/`dropoff`/`return` from the
+   sender's point of view; a dock is not a fourth role but a leg boundary — the stop where
+   leg *n* ends and leg *n+1* begins, whatever the sender calls it (a `return` stop can be
+   a dock too: the parcel comes back to the sender through a hand-over). Keep `role` the
+   sender's word and let legs carry their own stop references later — do not add a `role`
+   value that bakes the two-leg case into the sender's route.
+
+Identity, for the record: `providerAccountRef` is the Yandex account's name for the
+owner and stays that; a courier is a **share participant** (a CloudKit user the owner
+granted), so their identity rides the share, not a provider account. The private tier is
+the owner's and stays unshared; a courier's own private notes would be their own
+database's private tier — the courier edition is a participant, not a second owner.
+
+Known schema work that respects these rules and is next: `OrderPrivateState.archivedAt`
+(archive — owner's view, private tier, <doc:Design>); the signing columns once the
+participant key table is designed (<doc:Collaboration>).
 
 ## See Also
 
