@@ -9,7 +9,8 @@ extension Button {
     /// this capsule would have to redraw it and lose the system's chrome (tint,
     /// disabled dimming, the pressed and glass treatments). The recipe bundles the
     /// modifiers instead, which keeps the platform look *and* gives the idea one
-    /// name; per-site padding stays with the site.
+    /// name; per-site padding stays with the site. The first of the role recipes —
+    /// YD-39 names the rest.
     func primaryAction() -> some View {
         self
             .font(.headline)
