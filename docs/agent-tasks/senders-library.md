@@ -139,3 +139,11 @@ Own PR — the spec survives the session that writes it.
   no template→tariff memory, no bundles UI. B and C are door-open schema choices,
   not features.
 - Places are not creatable from the Library — the picker owns their birth.
+
+## Amendments
+
+- 2026-10-02 (#112): Places gained a «+» — the picker flow, then the naming sheet.
+- 2026-10-05 (this PR): the Places segment edits a place whole except its point
+  (name, kind, door details, the person — `LibraryView.PlaceEditor`); the row is
+  the door in both lists; Pin rides the leading swipe; the picker's chip menu
+  says «Rename…».
