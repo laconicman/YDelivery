@@ -58,13 +58,13 @@ struct ClaimsMappingTests {
             items: [item],
             options: options,
             offerPayload: "offer-token",
-            tariffWireValue: "express"
+            tariff: .express
         )
     }
 
     @Test("The create request carries every §4 answer at once")
     func createRequestCarriesTheTraps() throws {
-        let request = ClientController.createRequest(for: order())
+        let request = try ClientController.createRequest(for: order())
 
         let first = try #require(request.routePoints.first)
         #expect(first.address.coordinates == [37.668176, 55.646068], "lon,lat — always")
@@ -97,19 +97,28 @@ struct ClaimsMappingTests {
         #expect(request.offerPayload == "offer-token")
     }
 
-    /// An unparseable spelling falls back to courier, so before the spec carried
-    /// `superexpress_d2d` a priced super-express card would have been placed as courier.
-    @Test("A super-express order is placed as super-express, not the courier fallback")
-    func superexpressReachesTheWire() {
+    @Test("A super-express order is placed as super-express")
+    func superexpressReachesTheWire() throws {
         var order = order()
-        order.tariffWireValue = TariffClass.superexpressD2D.wireValue
-        let request = ClientController.createRequest(for: order)
+        order.tariff = .superexpressD2D
+        let request = try ClientController.createRequest(for: order)
         #expect(request.clientRequirements?.taxiClass == .superexpressD2d)
+    }
+
+    /// The create used to fall back to courier here: a request for a class the
+    /// sender never picked and the provider never offered.
+    @Test("A class the wire can't spell refuses to send — it never becomes courier")
+    func unspellableTariffRefuses() {
+        var order = order()
+        order.tariff = .other("future_class")
+        #expect(throws: UnsendableTariff(tariff: .other("future_class"))) {
+            try ClientController.createRequest(for: order)
+        }
     }
 
     @Test("Custom fields ride their carriers — document, order number, item tag")
     func fieldCarriersMapToTheWire() throws {
-        let request = ClientController.createRequest(for: OrderRequest(
+        let request = try ClientController.createRequest(for: OrderRequest(
             points: [
                 .init(
                     pointID: UUID(), latitude: 55.64, longitude: 37.66,
@@ -132,7 +141,8 @@ struct ClaimsMappingTests {
                       value: "БП-208"),
                 .init(definition: .init(name: "Заметка"), value: "stays local"),
             ],
-            options: DeliveryOptions()
+            options: DeliveryOptions(),
+            tariff: .courier
         ))
 
         #expect(request.shippingDocument == "НД-77", "claim-level carrier")

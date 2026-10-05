@@ -575,6 +575,26 @@ the one write shape that always re-marks the row save-pending.
   documented in the Kit README as a write rule rather than fixed upstream, so a
   future raw write could regress it — that stays as this item's last line.
 
+## YD-36 — `sdd_long`'s meaning is unsourced — **open**
+
+`TariffClass.sddLong` shows as «Same-day» / «День в день» with the blurb "A longer
+run, still within the day". It has no weight or size bounds, so every parcel fits.
+None of that is sourced. The package spec has carried `sdd_long` since its first
+layout with only «принят на веру из документации», and Yandex's own pages (the
+package's `Upstream/yandex-docs` cache) never mention it. Every `taxi_class` list
+there reads `courier, express, cargo, sdd_multislot`. Same-day delivery is documented
+as a separate path: `claims/create` with `same_day_data` (dimensions and weight) and
+no `client_requirements`. Another reading, a larger vehicle such as a minivan or
+truck, is unsourced too.
+
+- **Cost:** a sender can pick a class whose name, promise and limits the app made up.
+  A parcel too big for whatever `sdd_long` really is gets no warning.
+- **Discharge:** a live `offers/calculate` on a real account showing what an
+  `sdd_long` offer carries (`description`, intervals, price against `cargo`). Then
+  set its words, glyph and limits from that evidence and cite it here.
+  `sdd_multislot`, the documented class, gets the same treatment once the package
+  spells it.
+
 ## See Also
 
 - <doc:Design>

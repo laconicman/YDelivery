@@ -14,7 +14,7 @@ extension ClientController {
         let response = try await client.createClaim(.init(
             query: .init(requestId: requestID.uuidString),
             headers: .init(acceptLanguage: .ru),
-            body: .json(Self.createRequest(for: order))
+            body: .json(try Self.createRequest(for: order))
         ))
         return try Self.createdClaim(from: response)
     }
@@ -128,9 +128,15 @@ extension ClientController {
     /// POSIX decimal string, roles to `source`/`destination`/`return`, door details into
     /// `porch`/`sfloor`/`sflat`/`door_code`, and the extension into
     /// `phone_additional_code` — never folded into the number.
+    ///
+    /// The tariff goes out as the chosen offer named it, or not at all: a class the
+    /// wire enum cannot spell throws ``UnsendableTariff`` rather than becoming
+    /// another class the sender never picked and the provider never offered.
     nonisolated static func createRequest(
         for order: OrderRequest
-    ) -> Components.Schemas.ClaimCreateRequest {
+    ) throws -> Components.Schemas.ClaimCreateRequest {
+        guard let taxiClass = Components.Schemas.TaxiClass(rawValue: order.tariff.wireValue)
+        else { throw UnsendableTariff(tariff: order.tariff) }
         let pointID: (UUID?, _ fallback: Int) -> Int64 = { id, fallback in
             Int64(id.flatMap { candidate in
                 order.points.firstIndex { $0.pointID == candidate }.map { $0 + 1 }
@@ -160,7 +166,7 @@ extension ClientController {
                 Self.wirePoint($1, at: $0, orderNumber: orderNumber)
             },
             clientRequirements: .init(
-                taxiClass: order.tariffWireValue.flatMap(Components.Schemas.TaxiClass.init(rawValue:)) ?? .courier,
+                taxiClass: taxiClass,
                 cargoLoaders: order.options.loaders > 0 ? order.options.loaders : nil,
                 cargoOptions: order.options.thermobag ? [.thermobag] : nil,
                 proCourier: order.options.proCourier ? true : nil
@@ -250,7 +256,8 @@ nonisolated struct OrderRequest: Hashable, Sendable {
     var fieldEntries: [FieldEntry]
     var options: DeliveryOptions
     var offerPayload: String?
-    var tariffWireValue: String?
+    /// The chosen offer's class — required, so no create can go out without one.
+    var tariff: TariffClass
 
     /// Item stops are normalised against these points on the way in, exactly as
     /// ``OfferRequest`` does it: an id naming no point here becomes `nil`. That keeps
@@ -263,13 +270,13 @@ nonisolated struct OrderRequest: Hashable, Sendable {
         fieldEntries: [FieldEntry] = [],
         options: DeliveryOptions,
         offerPayload: String? = nil,
-        tariffWireValue: String? = nil
+        tariff: TariffClass
     ) {
         self.points = points
         self.fieldEntries = fieldEntries
         self.options = options
         self.offerPayload = offerPayload
-        self.tariffWireValue = tariffWireValue
+        self.tariff = tariff
         let live = Set(points.map(\.pointID))
         self.items = items.map { item in
             var item = item

@@ -276,4 +276,15 @@ nonisolated struct ProviderRefusal: LocalizedError, Hashable {
     }
 }
 
+/// The chosen class has no spelling in the wire enum this build carries. Thrown
+/// before anything is sent, so nothing was created and nothing was charged; the
+/// create never swaps in another class instead.
+nonisolated struct UnsendableTariff: LocalizedError, Hashable {
+    let tariff: TariffClass
+
+    var errorDescription: String? {
+        String(localized: "This version of the app can't order «\(tariff.words)» yet. Choose another class, or update the app.")
+    }
+}
+
 

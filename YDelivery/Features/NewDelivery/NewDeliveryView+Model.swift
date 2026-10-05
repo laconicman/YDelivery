@@ -1282,7 +1282,7 @@ extension NewDeliveryView {
                 // produce the order it was quoting (review, PR #22).
                 options: options.effective(),
                 offerPayload: offer.payload,
-                tariffWireValue: offer.tariff.wireValue
+                tariff: offer.tariff
             )
         }
 

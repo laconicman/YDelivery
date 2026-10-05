@@ -4083,6 +4083,16 @@
         }
       }
     },
+    "This version of the app can't order «%@» yet. Choose another class, or update the app." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Эта версия приложения пока не умеет заказывать «%@». Выберите другой класс доставки или обновите приложение."
+          }
+        }
+      }
+    },
     "To the door" : {
       "localizations" : {
         "ru" : {
