@@ -26,6 +26,7 @@ fine on a simulator and is why this walk never runs on a device.
 | `--uitest-history` | five orders across every status, a nine-event provider trail on the live one, a two-message chat on the delivered one |
 | `--uitest-three-stop-draft` | a draft with three stops and an item (opens composing) |
 | `--uitest-three-stop-draft --uitest-fields` | the same plus a «Ваши поля» schema |
+| `--uitest-three-stop-draft --uitest-templates` | the same plus one parcel template, so «Add from library» has a door to open |
 
 Screenshots: `xcrun simctl io booted screenshot <name>.png`. Save under
 `/tmp/ydelivery-walk/<flag>/<NN>-<screen>.png`, numbered in the order taken.

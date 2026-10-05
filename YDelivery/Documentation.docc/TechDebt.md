@@ -661,6 +661,36 @@ calques where Russian has its own word (author, 2026-10-05).
   `xcstringstool`/Xcode, never by hand (the catalogs are structured files); YD-35's
   locale-aware tests are the guard that a rewording breaks nothing.
 
+## YD-39 — Button appearance is chosen per site, not per role — **open**
+
+A control's look is decided where it is written, not by what it does. The inventory
+today: `Button.primaryAction()` for the screen's one standing action (DesignSystem →
+"Order bar and CTAs") — the only role with a name; borderless tinted words for row
+actions (the route card's `actions`, the add-doors, the callout's pair, `PointRow`'s
+contact line); `.plain` where the whole row is the door (item rows, blockers, the
+Options summary); `.bordered` beside a prominent sibling on the paste and location
+cards; and the List/Form default everywhere else (Settings' Sign In / Sign Out, «Add
+field», the Retry-beside-an-error rows, the picker's «My location» / «Choose on the
+map»). Each choice is defensible alone; together they give a tap target no single
+signature. And the same silhouette serves both sides of the line: `StatusChip` is a
+capsule that *reports*, the picker's saved-place chips are capsules that *act*, and
+the pin glyph marks state on chips that are themselves doors (author, 2026-10-05, out
+of the add-row misfire — PR #131).
+
+- **Cost:** a sighted sender learns whether a thing is a button by tapping it — the
+  acting capsule and the reporting one look alike until then (VoiceOver is told, the one
+  channel where the line is drawn). Every new surface re-decides the style, so the drift
+  compounds; and the borderline that matters — control vs indicator, actionable vs
+  informative — is drawn nowhere in the design system yet.
+- **Discharge:** a UI design task, not a sweep. Name the roles first — primary action,
+  secondary action, row action (inline words), row door (the whole row), chip-as-control
+  apart from chip-as-indicator — and give each one recipe with one name beside
+  `primaryAction()`; state the rule in DesignSystem with the pin table's own test (a
+  control and an indicator of one shape must still read apart with color removed). Then
+  one pass over the sites above, a preview per role, and a REVIEW.md cue that a bare
+  `.buttonStyle(…)` at a call site is the smell. `primaryAction()` is the step already
+  taken.
+
 ## See Also
 
 - <doc:Design>
