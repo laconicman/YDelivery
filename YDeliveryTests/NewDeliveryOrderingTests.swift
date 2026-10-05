@@ -78,6 +78,22 @@ struct NewDeliveryOrderingTests {
         #expect(model.orderRequest != nil)
     }
 
+    /// Same-day goes through `same_day_data`, which this app doesn't send yet
+    /// (package TD-25); the unified create would be refused. The review sheet says
+    /// so before confirm, with the strip as the door (review, PR #124).
+    @Test("A class the create can't place blocks at review and points at the strip")
+    func unorderableClassBlocks() async {
+        let model = readyDraft()
+        await model.loadOffers { _ in
+            [Offer(tariff: .sddMultislot, price: 900, currency: "RUB", pickupInterval: nil, deliveryInterval: nil, payload: "offer-sdd")]
+        }
+        #expect(model.orderBlockers.map(\.id) == ["offerUnorderable"])
+        #expect(model.orderBlockers.map(\.destination) == [.offer])
+        #expect(model.orderBlockers.map(\.message)
+                == [UnsendableTariff(tariff: .sddMultislot).localizedDescription])
+        #expect(model.orderRequest == nil, "nothing to confirm, so nothing is sent")
+    }
+
     @Test("Two invalid items earn two doors, each named")
     func everyInvalidItemGetsItsDoor() async {
         let model = readyDraft()

@@ -128,6 +128,18 @@ nonisolated extension TariffClass {
     var limitsSummary: String? {
         limits.isEmpty ? nil : limits.joined(separator: " · ")
     }
+
+    /// Whether the one create path this app has (`client_requirements.taxi_class`
+    /// with the offer's payload) can place the class. Same-day goes through
+    /// `same_day_data` instead, and the unified create is its documented refusal,
+    /// `sdd_client_requirements_forbidden` (package TD-25). A class this build can't
+    /// name can't be sent either.
+    var isOrderable: Bool {
+        switch self {
+        case .courier, .express, .cargo, .sddLong, .superexpressD2D: true
+        case .sddMultislot, .other: false
+        }
+    }
 }
 
 nonisolated extension Offer {

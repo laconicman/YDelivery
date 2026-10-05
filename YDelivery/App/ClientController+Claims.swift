@@ -129,13 +129,15 @@ extension ClientController {
     /// `porch`/`sfloor`/`sflat`/`door_code`, and the extension into
     /// `phone_additional_code` — never folded into the number.
     ///
-    /// The tariff goes out as the chosen offer named it, or not at all: a class the
-    /// wire enum cannot spell throws ``UnsendableTariff`` rather than becoming
-    /// another class the sender never picked and the provider never offered.
+    /// The tariff goes out as the chosen offer named it, or not at all: a class this
+    /// create can't place (``TariffClass/isOrderable``) or the wire enum can't spell
+    /// throws ``UnsendableTariff`` rather than becoming another class the sender never
+    /// picked and the provider never offered.
     nonisolated static func createRequest(
         for order: OrderRequest
     ) throws -> Components.Schemas.ClaimCreateRequest {
-        guard let taxiClass = Components.Schemas.TaxiClass(rawValue: order.tariff.wireValue)
+        guard order.tariff.isOrderable,
+              let taxiClass = Components.Schemas.TaxiClass(rawValue: order.tariff.wireValue)
         else { throw UnsendableTariff(tariff: order.tariff) }
         let pointID: (UUID?, _ fallback: Int) -> Int64 = { id, fallback in
             Int64(id.flatMap { candidate in

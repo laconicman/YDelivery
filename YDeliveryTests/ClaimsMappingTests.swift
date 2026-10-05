@@ -116,6 +116,17 @@ struct ClaimsMappingTests {
         }
     }
 
+    /// Spellable, but not through this create: same-day wants `same_day_data` and
+    /// no `client_requirements` (package TD-25).
+    @Test("Same-day refuses to send through the unified create")
+    func sameDayRefuses() {
+        var order = order()
+        order.tariff = .sddMultislot
+        #expect(throws: UnsendableTariff(tariff: .sddMultislot)) {
+            try ClientController.createRequest(for: order)
+        }
+    }
+
     @Test("Custom fields ride their carriers — document, order number, item tag")
     func fieldCarriersMapToTheWire() throws {
         let request = try ClientController.createRequest(for: OrderRequest(
