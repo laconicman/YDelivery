@@ -1199,6 +1199,15 @@ extension NewDeliveryView {
                     message: String(localized: "Pick a delivery class once prices arrive."),
                     destination: .offer
                 ))
+            } else if let offer = selectedOffer, !offer.tariff.isOrderable {
+                // Said here, with the strip as the door, rather than discovered at
+                // confirm, where the create would be the provider's refusal (review,
+                // PR #124).
+                blockers.append(.init(
+                    id: "offerUnorderable",
+                    message: UnsendableTariff(tariff: offer.tariff).localizedDescription,
+                    destination: .offer
+                ))
             }
             return blockers
         }
@@ -1282,7 +1291,7 @@ extension NewDeliveryView {
                 // produce the order it was quoting (review, PR #22).
                 options: options.effective(),
                 offerPayload: offer.payload,
-                tariffWireValue: offer.tariff.wireValue
+                tariff: offer.tariff
             )
         }
 

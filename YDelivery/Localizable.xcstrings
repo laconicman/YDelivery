@@ -3203,6 +3203,16 @@
         }
       }
     },
+    "Same-day delivery — every item needs its size and weight" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Доставка в течение дня — у каждого предмета должны быть габариты и вес"
+          }
+        }
+      }
+    },
     "Save" : {
       "localizations" : {
         "ru" : {
@@ -4165,6 +4175,16 @@
         }
       }
     },
+    "This version of the app can't order «%@» yet. Choose another class, or update the app." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Эта версия приложения пока не умеет заказывать «%@». Выберите другой класс доставки или обновите приложение."
+          }
+        }
+      }
+    },
     "To the door" : {
       "localizations" : {
         "ru" : {
@@ -4463,6 +4483,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ширина"
+          }
+        }
+      }
+    },
+    "Within the day" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "В течение дня"
           }
         }
       }

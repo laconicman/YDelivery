@@ -32,10 +32,13 @@ nonisolated enum TariffClass: Hashable, Sendable {
     case courier
     case express
     case cargo
-    /// `sdd_long` — same-day delivery on a longer run.
+    /// `sdd_long` — its words and limits below are unsourced (YD-36).
     case sddLong
     /// `superexpress_d2d` — the vendor's «Быстрее»: door to door in minimum time.
     case superexpressD2D
+    /// `sdd_multislot` — the same-day class the API pages document: «доставка в
+    /// течение дня», which needs every item's size and weight (IntegrationV2ClaimsCreate).
+    case sddMultislot
     /// A class this app does not know yet — rendered by its wire name rather than
     /// dropped, so new provider vocabulary stays visible (the demo's lesson: advisory
     /// vocabulary grows without announcement).
@@ -50,6 +53,7 @@ nonisolated extension TariffClass {
         case .cargo: String(localized: "Cargo van")
         case .sddLong: String(localized: "Same-day")
         case .superexpressD2D: String(localized: "Super-express")
+        case .sddMultislot: String(localized: "Within the day")
         case .other(let name): name
         }
     }
@@ -61,6 +65,7 @@ nonisolated extension TariffClass {
         case .cargo: "🚚"
         case .sddLong: "🛣️"
         case .superexpressD2D: "⚡️"
+        case .sddMultislot: "🕒"
         case .other: "📦"
         }
     }
@@ -73,6 +78,7 @@ nonisolated extension TariffClass {
         case .cargo: String(localized: "A van, loaders available")
         case .sddLong: String(localized: "A longer run, still within the day")
         case .superexpressD2D: String(localized: "Door to door in the least time")
+        case .sddMultislot: String(localized: "Same-day delivery — every item needs its size and weight")
         case .other: nil
         }
     }
@@ -88,7 +94,7 @@ nonisolated extension TariffClass {
         case .courier: 10
         case .express: 20
         case .cargo: 300
-        case .sddLong, .superexpressD2D, .other: nil
+        case .sddLong, .superexpressD2D, .sddMultislot, .other: nil
         }
     }
 
@@ -98,7 +104,7 @@ nonisolated extension TariffClass {
         case .courier: [80, 50, 50]
         case .express: [100, 60, 50]
         case .cargo: [170, 96, 90]
-        case .sddLong, .superexpressD2D, .other: nil
+        case .sddLong, .superexpressD2D, .sddMultislot, .other: nil
         }
     }
 
@@ -121,6 +127,18 @@ nonisolated extension TariffClass {
     /// The selected card's one constraint line (board `1b`).
     var limitsSummary: String? {
         limits.isEmpty ? nil : limits.joined(separator: " · ")
+    }
+
+    /// Whether the one create path this app has (`client_requirements.taxi_class`
+    /// with the offer's payload) can place the class. Same-day goes through
+    /// `same_day_data` instead, and the unified create is its documented refusal,
+    /// `sdd_client_requirements_forbidden` (package TD-25). A class this build can't
+    /// name can't be sent either.
+    var isOrderable: Bool {
+        switch self {
+        case .courier, .express, .cargo, .sddLong, .superexpressD2D: true
+        case .sddMultislot, .other: false
+        }
     }
 }
 
@@ -273,6 +291,17 @@ nonisolated struct ProviderRefusal: LocalizedError, Hashable {
         if let message, !message.isEmpty { return message }
         if let status { return String(localized: "The provider answered \(status).") }
         return String(localized: "The provider refused the request.")
+    }
+}
+
+/// The chosen class has no spelling in the wire enum this build carries. Thrown
+/// before anything is sent, so nothing was created and nothing was charged; the
+/// create never swaps in another class instead.
+nonisolated struct UnsendableTariff: LocalizedError, Hashable {
+    let tariff: TariffClass
+
+    var errorDescription: String? {
+        String(localized: "This version of the app can't order «\(tariff.words)» yet. Choose another class, or update the app.")
     }
 }
 

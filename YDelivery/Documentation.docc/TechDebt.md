@@ -604,6 +604,49 @@ the dependence never shows up in CI.
   - Whichever is chosen, `englishFallback` needs a bundle it can force to English.
     The question it asks only exists in that language.
 
+## YD-36 — `sdd_long`'s meaning is unsourced — **open**
+
+`TariffClass.sddLong` shows as «Same-day» / «День в день» with the blurb "A longer
+run, still within the day". It has no weight or size bounds, so every parcel fits.
+None of that is sourced. The package spec has carried `sdd_long` since its first
+layout with only «принят на веру из документации», and Yandex's own pages (the
+package's `Upstream/yandex-docs` cache) never mention it. Every `taxi_class` list
+there reads `courier, express, cargo, sdd_multislot`. Same-day delivery is documented
+as a separate path: `claims/create` with `same_day_data` (dimensions and weight) and
+no `client_requirements`. Another reading, a larger vehicle such as a minivan or
+truck, is unsourced too.
+
+- **Cost:** a sender can pick a class whose name, promise and limits the app made up.
+  A parcel too big for whatever `sdd_long` really is gets no warning.
+- **Discharge:** a live `offers/calculate` on a real account showing what an
+  `sdd_long` offer carries (`description`, intervals, price against `cargo`). Then
+  set its words, glyph and limits from that evidence and cite it here.
+- **The documented sibling:** `sdd_multislot` arrived with API 0.3.3 as
+  `TariffClass.sddMultislot`. Its words come from the docs: «В течение дня», needing
+  every item's size and weight. Its limits stay unset because the docs give no
+  numbers. Whether such an order can be placed at all through the unified create path
+  is the package's `same_day_data` question.
+
+## YD-37 — Same-day can be offered but not ordered — **open, deferred**
+
+The app has one create path: `client_requirements.taxi_class` plus the offer's payload.
+Same-day doesn't fit it. Yandex routes it through `same_day_data` (a delivery slot),
+needs every item's size and weight, and refuses the unified create with
+`sdd_client_requirements_forbidden` (package TD-25). Until then an `sdd_multislot`
+card can show in the strip, but the review sheet blocks it
+(`TariffClass.isOrderable`), naming the class and pointing back at the strip.
+`createRequest` refuses it as a second line.
+
+- **Cost:** a sender outside Russia can be shown a class they can't order. The docs
+  say the tariff is unavailable in Russia, so this app's main market shouldn't meet it.
+- **Deferred deliberately** (author, 2026-10-05): ordering same-day probably changes
+  the UX significantly. Choosing a slot is a different step from picking a card,
+  and the measurements become mandatory rather than optional. That should be
+  designed, not patched in. The blocker is the stopgap, not the design.
+- **Discharge:** answers from Yandex support (the slot's source, whether
+  `offer_payload` applies, availability by country), then the package's TD-25, then
+  a design round for the same-day flow.
+
 ## See Also
 
 - <doc:Design>

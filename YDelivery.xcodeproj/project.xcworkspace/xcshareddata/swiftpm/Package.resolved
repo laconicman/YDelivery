@@ -258,8 +258,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/laconicman/YandexDeliveryExpress",
       "state" : {
-        "revision" : "c3095117ad6f57fd55905665261f264dd43993a3",
-        "version" : "0.3.1"
+        "revision" : "7908b40239590a8e48a719b5d850bebd29598f3e",
+        "version" : "0.3.3"
       }
     },
     {
