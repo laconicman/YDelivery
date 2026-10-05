@@ -5,7 +5,7 @@ Delivery providers plug in behind one boundary. The first integration is Yandex 
 • Order from a map, not from coordinates — pick points visually, use saved places and recents, or paste a link.
 • The price before you commit — every tariff shown up front, on the review sheet, before the tap.
 • Every order you sent, on every device you own — synced through your private iCloud, searchable by address and your own fields.
-• A page you never refresh — status changes arrive as notifications when the app checks in, and a Live Activity follows the delivery on your Lock Screen.
+• A page you never refresh — a notification on every status change, and a Live Activity that follows the delivery on your Lock Screen.
 • Share a delivery without sharing your account — a recipient or colleague follows the order, chats per order, confirms receipt — no provider login needed for them.
 • Plans change — cancel with the fee shown before you tap.
 • The sender's library — parcel templates, pinned places, and the fields your paperwork needs, ready for the next order.
