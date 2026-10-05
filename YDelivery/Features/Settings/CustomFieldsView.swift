@@ -35,7 +35,7 @@ struct CustomFieldsView: View {
                 Notice(.error, fieldsWriteError.localizedDescription)
             }
             ForEach(store.fieldDefinitions) { field in
-                Button {
+                RowDoor {
                     editing = field
                 } label: {
                     LabeledContent {
@@ -46,7 +46,6 @@ struct CustomFieldsView: View {
                         Text(field.name)
                     }
                 }
-                .buttonStyle(.plain)
             }
             .onDelete { offsets in
                 // Ids resolve *now*, against the list this gesture saw — a task per
@@ -174,7 +173,7 @@ private struct FieldEditor: View {
                         // The invariant, said where it's enforced: a required
                         // field the sender cannot see is a trap — the order would
                         // block on a value nothing asked for.
-                        Notice(.bound, "Required fields always show by default — a hidden required field would block ordering on a value nobody sees.")
+                        Notice(.bound, Text("Required fields always show by default — a hidden required field would block ordering on a value nobody sees."))
                     } else {
                         Text("Fields not shown by default wait behind «Add field» in the draft.")
                     }

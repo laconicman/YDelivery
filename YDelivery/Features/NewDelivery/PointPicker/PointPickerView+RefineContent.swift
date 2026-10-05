@@ -199,11 +199,8 @@ extension PointPickerView.RefineContent {
 
                 Button(action: continueToDescribe) {
                     Text("Continue")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .primaryAction()
                 .disabled(!hasPin || isResolving)
             }
             .padding()

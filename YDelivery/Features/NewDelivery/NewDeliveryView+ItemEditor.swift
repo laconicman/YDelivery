@@ -325,6 +325,8 @@ extension NewDeliveryView.ItemEditor {
                         }
                         .contentShape(Rectangle())
                     }
+                    // A selection row, not a door — plain words, the checkmark
+                    // states the pick (DesignSystem → "Control roles").
                     .buttonStyle(.plain)
                     .disabled(reason != nil)
                 }

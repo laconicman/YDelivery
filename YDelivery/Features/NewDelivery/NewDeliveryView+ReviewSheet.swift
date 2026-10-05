@@ -4,11 +4,13 @@ import YDeliveryKit
 
 extension NewDeliveryView {
     /// The confirmation the irreversible action owes (board `5f`, finding 2): route,
-    /// price and class restated in full, and one Confirm. When something still blocks
-    /// ordering, the sheet states every bound *and* keeps the Order button — disabled,
-    /// not absent, so the sheet never reads as a dead end; the placed state
-    /// acknowledges itself — bounce and haptic, no confetti, money just moved
-    /// (DesignSystem → "Motion").
+    /// price and class restated in full, and one Confirm. The sheet is the
+    /// consent-and-run surface only — it no longer lists bounds (the card's rows
+    /// state those, and the blocked bar lands on them); `blockers` remains purely
+    /// as a guard for a bound that arrived *after* opening — a stale schema read,
+    /// an expired quote — where the confirm disables beside the reason
+    /// (DesignSystem → "The gateway"). The placed state acknowledges itself —
+    /// bounce and haptic, no confetti, money just moved (DesignSystem → "Motion").
     struct ReviewSheet: View {
         /// One stop, restated.
         struct Stop: Identifiable {
@@ -48,10 +50,6 @@ extension NewDeliveryView {
         let recordWarning: String?
         let confirm: () -> Void
         let done: () -> Void
-        /// A blocker tapped — each bound is a door to the place that resolves it,
-        /// never a dead end (the device drive's discoverability finding). The root
-        /// routes the destination once this sheet has let go.
-        var resolveBlocker: (Model.Blocker) -> Void = { _ in }
         /// Leaving an unresolved acceptance. Deliberately *not* `done`: nothing has been
         /// confirmed or recorded, so the draft, its idempotency token and its claim
         /// context all have to survive — retiring the draft here would let the next
@@ -71,56 +69,6 @@ extension NewDeliveryView {
         var body: some View {
             NavigationStack {
                 List {
-                    if !blockers.isEmpty {
-                        Section("Before ordering") {
-                            ForEach(blockers) { blocker in
-                                Button {
-                                    resolveBlocker(blocker)
-                                } label: {
-                                    HStack(spacing: Layout.Spacing.gutter) {
-                                        Notice(.bound, blocker.message)
-                                        Spacer()
-                                        // The door reads as a door — the chevron is
-                                        // the summary row's own trailing convention.
-                                        Image(systemSymbol: .chevronForward)
-                                            .font(.footnote.weight(.semibold))
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .font(.subheadline)
-                                .accessibilityHint(Text(blocker.destination.doorHint))
-                                // The same lock as Back and the dismiss gesture:
-                                // while an order run is in flight or has landed,
-                                // `placeOrder` writes history from these very
-                                // points — a door that opened the editable draft
-                                // underneath would let the run record a route the
-                                // courier was never given. The rows stay; the
-                                // door just won't open.
-                                .disabled(!doorsOpen)
-                            }
-                            // Blocked is still a button — disabled, not absent, and
-                            // here beside the bounds rather than a screen-height
-                            // below them. A missing CTA reads as a dead sheet; a
-                            // greyed one says these rows are what's left between
-                            // the sender and the order. Only while ordering has not
-                            // begun, though: blockers can stay non-empty past
-                            // placement, and a placed or unresolved order must not
-                            // sit under a disabled Order action it no longer owns.
-                            if ordering == .idle || ordering == .queued {
-                                Button(action: confirm) {
-                                    Text(priceText.map { "Order for \($0)" } ?? "Order")
-                                        .font(.headline)
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.large)
-                                .disabled(true)
-                            }
-                        }
-                    }
-
                     Section("Route") {
                         ForEach(stops) { stop in
                             HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
@@ -160,7 +108,7 @@ extension NewDeliveryView {
 
                     footerSection
                 }
-                .navigationTitle("Review the order")
+                .navigationTitle("Checkout")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -186,35 +134,26 @@ extension NewDeliveryView {
             ordering == .creating || ordering == .estimating || ordering == .accepting
         }
 
-        /// Doors open only while the run hasn't started — or after it failed,
-        /// where editing is the recovery. A queued or placed run, an unresolved
-        /// acceptance: the draft stays read-only behind the sheet.
-        private var doorsOpen: Bool {
-            switch ordering {
-            case .idle, .failed: true
-            default: false
-            }
-        }
-
         @ViewBuilder
         private var footerSection: some View {
-            // Borderless for the plain buttons: an automatic-styled button makes
-            // its whole `List` row the target, and these rows are words a sender
-            // reads before deciding — a tap on the refusal or on the moved price
-            // must not be the «Try again» (the draft card's add-row, same ruling).
-            // The prominent buttons keep their own style.
             Section {
                 switch ordering {
                 case .idle, .queued:
-                    if blockers.isEmpty {
-                        Button(action: confirm) {
-                            Text(priceText.map { "Order for \($0)" } ?? "Order")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                    // A bound that arrived after the sheet opened — a stale
+                    // schema read, an expired quote — is stated above the dead
+                    // confirm, and Back is the way out: the bound's door is the
+                    // card's row, not a second remediation surface here
+                    // (DesignSystem → "The gateway").
+                    if let first = blockers.first {
+                        Notice(.bound, Text(first.message))
+                            .font(.subheadline)
                     }
+                    Button(action: confirm) {
+                        Text(priceText.map { "Order for \($0)" } ?? "Order")
+                            .font(.headline)
+                    }
+                    .primaryAction()
+                    .disabled(!blockers.isEmpty)
                 case .creating, .estimating, .accepting:
                     HStack(spacing: Layout.Spacing.unit) {
                         ProgressView()
@@ -245,22 +184,12 @@ extension NewDeliveryView {
                             // take that copy with it, so the offer here is to write it
                             // again rather than to leave (review, PR #22).
                             Button("Save it again", action: retryRecording)
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.large)
-                                .frame(maxWidth: .infinity)
-                            Button(action: unresolvedDone) {
-                                Text("Leave it for now")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .controlSize(.large)
+                                .primaryAction()
+                            Button("Leave it for now", action: unresolvedDone)
+                                .secondaryAction()
                         } else {
-                            Button(action: done) {
-                                Text("Done")
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
+                            Button("Done", action: done)
+                                .primaryAction()
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -282,22 +211,26 @@ extension NewDeliveryView {
                         case .moved(let was, let now):
                             // The re-confirm's consent: the price it will pay is said
                             // in numbers, where the decision is made.
-                            Notice(.bound, "The price moved — was \(was), now \(now).")
+                            Notice(.bound, Text("The price moved — was \(was), now \(now)."))
                                 .font(.footnote)
                             Button("Try again", action: confirm)
+                                .primaryAction()
                         case .unchanged:
                             Text("Requirements re-checked — the price stands.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                             Button("Try again", action: confirm)
+                                .primaryAction()
                         case .failed(let repriceReason):
                             // The reprice is a read — its failure stays a warning
                             // with its own retry, never a second order attempt.
-                            Notice(.warning, "Re-pricing failed — \(repriceReason)")
+                            Notice(.warning, Text("Re-pricing failed — \(repriceReason)"))
                                 .font(.footnote)
                             Button("Check prices again", action: retryPrices)
+                                .secondaryAction()
                         case .none:
                             Button("Try again", action: confirm)
+                                .primaryAction()
                         }
                     }
                 case .unresolved(let reason, _):
@@ -316,14 +249,9 @@ extension NewDeliveryView {
                         // it is always safe, which is what makes it the first offer here
                         // rather than a second «Try again» (review, PR #22).
                         Button("Check again", action: reconcile)
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                            .frame(maxWidth: .infinity)
-                        Button(action: unresolvedDone) {
-                            Text("Close")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .controlSize(.large)
+                            .primaryAction()
+                        Button("Close", action: unresolvedDone)
+                            .secondaryAction()
                     }
                 }
             } footer: {
@@ -331,7 +259,6 @@ extension NewDeliveryView {
                     Text("Money moves and a courier is dispatched — cancelling later can cost the call-out fee.")
                 }
             }
-            .buttonStyle(.borderless)
         }
 
         private var phaseWords: LocalizedStringKey {
@@ -381,20 +308,7 @@ nonisolated extension String {
     }
 }
 
-private extension NewDeliveryView.Model.Blocker.Destination {
-    /// What the tap does, for the rotor — a bound's door says where it goes.
-    var doorHint: LocalizedStringKey {
-        switch self {
-        case .point, .contact: "Opens this stop's editor."
-        case .item, .newItem: "Opens the parcel editor."
-        case .fieldsSchema: "Reads your fields again."
-        case .field: "Back to the draft — the field waits there."
-        case .offer: "Back to the draft — the delivery classes wait there."
-        }
-    }
-}
-
-#Preview("Blocked — every bound stated") {
+#Preview("A bound arrived after opening") {
     Color.clear.sheet(isPresented: .constant(true)) {
         NewDeliveryView.ReviewSheet(
             stops: [
@@ -407,10 +321,10 @@ private extension NewDeliveryView.Model.Blocker.Destination {
             tariffName: "Courier",
             priceText: "749 ₽",
             blockers: [
-                .init(id: "contact", message: "The courier calls ahead — every stop needs a person with a phone.",
-                      destination: .contact(UUID())),
-                .init(id: "items", message: "Say what's inside — the parcel is insured by its declared value.",
-                      destination: .newItem),
+                .init(id: "fieldSchemaStale",
+                      message: "Your fields changed but could not be re-read — try again before ordering.",
+                      step: "Re-read your fields",
+                      destination: .fieldsSchema),
             ],
             ordering: .idle,
             recordWarning: nil,
