@@ -197,7 +197,9 @@ struct YDeliveryApp: App {
             name: name, kind: .warehouse,
             point: RoutePoint(latitude: 59.9343, longitude: 30.3351,
                               address: "Санкт-Петербург, Невский проспект, 100",
-                              contactName: "Иван Петров", contactPhone: "+79123456789")))
+                              contactName: "Иван Петров",
+                              contactGivenName: "Иван", contactFamilyName: "Петров",
+                              contactPhone: "+79123456789")))
     }
 
     /// `--uitest-history`: seed a history the Deliveries screen can show — five
