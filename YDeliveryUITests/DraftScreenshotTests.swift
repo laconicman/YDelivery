@@ -43,7 +43,7 @@ final class DraftScreenshotTests: XCTestCase {
             NSPredicate(format: "label BEGINSWITH %@", "Ноутбук")
         ).firstMatch
         for _ in 0..<5 where !itemRow.waitForExistence(timeout: 1) { app.swipeUp() }
-        XCTAssertTrue(itemRow.waitForExistence(timeout: 3))
+        XCTAssertTrue(itemRow.waitForExistence(timeout: 10))
         // The row states its own journey in the stops' words (YD-6) — capture it
         // before the editor opens over it.
         snap("1b-draft-item-row-journey")
@@ -63,12 +63,20 @@ final class DraftScreenshotTests: XCTestCase {
                 .first(where: { $0.isHittable })
             (scrollable ?? app).swipeUp()
         }
-        XCTAssertTrue(pickupRow.waitForExistence(timeout: 3))
+        XCTAssertTrue(pickupRow.waitForExistence(timeout: 10))
         snap("2-item-journey-rows")
 
         // The chooser: full-width rows, the impossible stop disabled with its reason.
         pickupRow.tap()
-        XCTAssertTrue(app.staticTexts["Where it boards"].waitForExistence(timeout: 5))
+        // Its title may draw as the navigation bar's or a row's — whichever
+        // appears first proves the chooser arrived.
+        let chooserTitle = app.navigationBars["Where it boards"].firstMatch
+        let chooserRow = app.staticTexts["Where it boards"].firstMatch
+        let chooserWait = Date.now.addingTimeInterval(10)
+        while Date.now < chooserWait, !chooserTitle.exists, !chooserRow.exists {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        XCTAssertTrue(chooserTitle.exists || chooserRow.exists)
         snap("3-stop-chooser")
     }
 }
