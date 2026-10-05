@@ -30,7 +30,7 @@ settings:
     DEVELOPMENT_TEAM: WEJF495R4D
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: 3
+    CURRENT_PROJECT_VERSION: 5
     # The floor and the language mode are load-bearing decisions (Design → "The floor is
     # iOS 17, in Swift 6 language mode"); MainActor default isolation is applied on the
     # app target only, matching the project this file replaces.
