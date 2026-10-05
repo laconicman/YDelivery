@@ -172,7 +172,7 @@ landed in #93; the Library tab in #94. The one upgrade made while building: the 
 became a **root+child pair** (`parcelTemplateItems.position` from day one) so a future
 bundle is a UI widening, not a migration fork — `items.count == 1` is a UI convention,
 not a schema invariant. The Library's place editor and the row doors followed in
-(#TBD) — rows open their editors on tap, and a place is re-described whole except
+(#132) — rows open their editors on tap, and a place is re-described whole except
 its point. The weighing below stays as the design's record.
 
 An entrepreneur sends the same goods to the same doors. Today the app remembers **places**
