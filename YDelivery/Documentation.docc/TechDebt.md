@@ -536,7 +536,7 @@ the wrong queue shipped in TestFlight 1.0 (1) and trapped in the field
   non-main queue, or a UI-test hook that triggers the launch. Either has to stay out of
   the shipped binary: the private selectors are grounds for App Store rejection.
 
-## YD-34 — sqlite-data swallows a re-insert under an existing key — **open**
+## YD-34 — sqlite-data swallows a re-insert under an existing key — **discharged for the Kit's writers (0.4.13)**
 
 Upstream `sqlite-data` (1.12.0) loses a row that is deleted and re-inserted under
 the same primary key in one transaction — the exact shape of `recordOrder`'s
@@ -556,20 +556,24 @@ the one write shape that always re-marks the row save-pending.
   `orderCustomFields`; the local copies persist, so it is silent. Columns added to
   a synced row type can never reach CloudKit for rows written this way — the
   serializer only runs on an upload, and no upload is ever queued.
-- **Discharge:** an upstream fix that un-deletes metadata on a conflicting insert
-  (or a report Point-Free accepts); locally, `recordOrder`/`savePlace` could write
-  children as diffed UPDATEs instead of delete+insert. A plain UPDATE
-  (`UPDATE … SET col = col`) re-marks a row save-pending **only while its metadata is
-  not tombstoned** — that was the seed's earlier resurrection pass, which repaired the
-  `INSERT OR REPLACE` shape (no delete trigger fired, `_isDeleted` still 0); after a
-  genuine delete-then-reinsert the tombstone stays and no UPDATE restores the row, so the
-  only cure for that shape is not to write it. Confirmed in `sqlite-data` 1.12.0 source
-  (`Internal/Triggers.swift`: `afterInsert` → `SyncMetadata.insert … onConflictDoUpdate
-  { }`, a no-op; `afterUpdate` bumps `userModificationTime` but never clears
-  `_isDeleted`; `afterDeleteFromUser` sets it) — and `INSERT OR REPLACE` never bumps
-  `userModificationTime` either (SQLite's REPLACE fires no delete trigger without
-  `recursive_triggers`), so a replaced row's edit never uploads. The Kit fix (upsert +
-  prune, no delete-then-reinsert) is the next Kit PR.
+- **Discharge:** discharged for the Kit's writers in 0.4.13 (Kit #41). Every synced
+  write is now an explicit upsert plus a prune — `routeStops`,
+  `orderCustomFields`, `savedPlaces`, `parcelTemplates`/`parcelTemplateItems` —
+  never a delete-then-reinsert, never `INSERT OR REPLACE`, so the metadata stays
+  alive and every edit re-queues. A cleared custom field keeps its row with an
+  empty `value` rather than tombstoning a key a refill would reuse, and a copied
+  template item writes under a derived id (`templateID ‖ copiedItemID ‖
+  occurrence`) instead of re-homing another template's row; the tombstone window
+  (a deleted key re-created before the server acknowledges the delete) is named
+  at `insertStops` for the day routes become editable after placement. Confirmed
+  in `sqlite-data` 1.12.0 source (`Internal/Triggers.swift`: `afterInsert` →
+  `SyncMetadata.insert … onConflictDoUpdate { }`, a no-op; `afterUpdate` bumps
+  `userModificationTime` but never clears `_isDeleted`; `afterDeleteFromUser`
+  sets it) — and `INSERT OR REPLACE` never bumps `userModificationTime` either
+  (SQLite's REPLACE fires no delete trigger without `recursive_triggers`), so a
+  replaced row's edit never uploads. The residual: the upstream behaviour is
+  documented in the Kit README as a write rule rather than fixed upstream, so a
+  future raw write could regress it — that stays as this item's last line.
 
 ## See Also
 

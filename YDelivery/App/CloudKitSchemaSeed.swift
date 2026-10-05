@@ -273,9 +273,10 @@ extension YDeliveryApp {
                 try db.execute(sql: """
                     INSERT OR REPLACE INTO "orderPrivateStates"
                       ("orderID", "personalNote", "pinned",
-                       "lastSeenActivityAt")
-                    VALUES (?, 'schema seed note', 1, ?)
-                    """, arguments: [orderPK, t0.timeIntervalSince1970 + 600])
+                       "lastSeenActivityAt", "archivedAt")
+                    VALUES (?, 'schema seed note', 1, ?, ?)
+                    """, arguments: [orderPK, t0.timeIntervalSince1970 + 600,
+                                   t0.timeIntervalSince1970 + 900])
                 try db.execute(sql: """
                     INSERT OR REPLACE INTO "providerAccounts"
                       ("key", "provider", "corpClientID", "displayLabel",

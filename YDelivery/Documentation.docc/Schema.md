@@ -521,7 +521,8 @@ fields, so presence is proof the write carried a value:
   `providerEvents` (8), `orderMessages` (7 — `attachmentRef`, `authorHint`),
   `orderAttachments` (7), `attachmentBlobs` (`data` lands as a CKAsset plus its
   `data_hash`).
-- **Private tier:** `providerAccounts` (6), `orderPrivateStates` (4),
+- **Private tier:** `providerAccounts` (6), `orderPrivateStates` (5 —
+  `archivedAt` included),
   `savedPlaces` (16 — `pinned` included), `customFieldDefinitions` (8),
   `parcelTemplates` (3 — `id`, `name`, `pinned`), `parcelTemplateItems`
   (11 — `templateID` and every parcel measure).
