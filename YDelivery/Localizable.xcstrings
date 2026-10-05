@@ -1,22 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "" : {
+
+    },
     " · " : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : " · "
-          }
-        }
-      }
-    },
-    " · %1$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : " · %1$@"
           }
         }
       }
@@ -31,7 +24,19 @@
         }
       }
     },
+    " · %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · %1$@"
+          }
+        }
+      }
+    },
     " · ~%1$lld min left" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -51,42 +56,62 @@
         }
       }
     },
-    "%1$@ %2$@" : {
+    "—" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ %2$@"
+            "value" : "—"
           }
         }
       }
     },
-    "%1$@ · %2$@" : {
+    "«%@» has to weigh more than zero." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ · %2$@"
+            "value" : "Вес «%@» должен быть больше нуля."
           }
         }
       }
     },
-    "%1$@ · ~%2$@" : {
+    "«%@» is required — the order doesn't leave without it." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ · ~%2$@"
+            "value" : "«%@» обязательно — без него заказ не уйдёт."
           }
         }
       }
     },
-    "%1$@, ext. %2$@" : {
+    "«%@» needs a count of at least one." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@, доб. %2$@"
+            "value" : "У «%@» количество — не меньше одного."
+          }
+        }
+      }
+    },
+    "«%@» needs a name and a declared value." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "У «%@» нужны имя и объявленная ценность."
+          }
+        }
+      }
+    },
+    "«Save as a template» on a parcel, or add one with «+»." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Сохранить как шаблон» на посылке или добавьте через «+»."
           }
         }
       }
@@ -97,6 +122,37 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@"
+          }
+        }
+      }
+    },
+    "%@ — the «to the door» option in your draft." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — опция «до двери» в вашем черновике."
+          }
+        }
+      }
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · ~%@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · ~%2$@"
           }
         }
       }
@@ -121,7 +177,18 @@
         }
       }
     },
-    "%@ · %@" : {
+    "%@, ext. %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, доб. %2$@"
+          }
+        }
+      }
+    },
+    "%1$@ · %2$@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -131,7 +198,8 @@
         }
       }
     },
-    "%@ · ~%@" : {
+    "%1$@ · ~%2$@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -141,17 +209,19 @@
         }
       }
     },
-    "%@ — the «to the door» option in your draft." : {
+    "%1$@ %2$@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ — опция «до двери» в вашем черновике."
+            "value" : "%1$@ %2$@"
           }
         }
       }
     },
-    "%@, ext. %@" : {
+    "%1$@, ext. %2$@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -205,7 +275,307 @@
         }
       }
     },
+    "^[%1$lld item](inflect: true) arrive here" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld предмета приезжают сюда"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld предметов приезжают сюда"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld предмет приезжает сюда"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld предмета приезжают сюда"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "^[%1$lld item](inflect: true) leave here" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld предмета уезжают отсюда"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld предметов уезжают отсюда"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld предмет уезжает отсюда"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld предмета уезжают отсюда"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "^[%1$lld item](inflect: true) leave here · ^[%2$lld item](inflect: true) arrive here" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@leaving@ отсюда · %#@arriving@ сюда"
+          },
+          "substitutions" : {
+            "arriving" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "few" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg предмета приезжают"
+                    }
+                  },
+                  "many" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg предметов приезжают"
+                    }
+                  },
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg предмет приезжает"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg предмета приезжают"
+                    }
+                  }
+                }
+              }
+            },
+            "leaving" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "few" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg предмета уезжают"
+                    }
+                  },
+                  "many" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg предметов уезжают"
+                    }
+                  },
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg предмет уезжает"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg предмета уезжают"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "^[%lld item](inflect: true) arrive here" : {
+      "localizations" : {
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld предмета приезжают сюда"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld предметов приезжают сюда"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld предмет приезжает сюда"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld предмета приезжают сюда"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "^[%lld item](inflect: true) leave here" : {
+      "localizations" : {
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld предмета уезжают отсюда"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld предметов уезжают отсюда"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld предмет уезжает отсюда"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld предмета уезжают отсюда"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "^[%lld item](inflect: true) leave here · ^[%lld item](inflect: true) arrive here" : {
+      "comment" : "A sentence that combines the number of items leaving and arriving at a stop.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "^[%1$lld item](inflect: true) leave here · ^[%2$lld item](inflect: true) arrive here"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%#@leaving@ отсюда · %#@arriving@ сюда"
+          },
+          "substitutions" : {
+            "arriving" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "few" : {
+                    "stringUnit" : {
+                      "state" : "machine_translated",
+                      "value" : "%arg предмета приезжают"
+                    }
+                  },
+                  "many" : {
+                    "stringUnit" : {
+                      "state" : "machine_translated",
+                      "value" : "%arg предметов приезжают"
+                    }
+                  },
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "machine_translated",
+                      "value" : "%arg предмет приезжает"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "machine_translated",
+                      "value" : "%arg предмета приезжают"
+                    }
+                  }
+                }
+              }
+            },
+            "leaving" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "few" : {
+                    "stringUnit" : {
+                      "state" : "machine_translated",
+                      "value" : "%arg предмета уезжают"
+                    }
+                  },
+                  "many" : {
+                    "stringUnit" : {
+                      "state" : "machine_translated",
+                      "value" : "%arg предметов уезжают"
+                    }
+                  },
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "machine_translated",
+                      "value" : "%arg предмет уезжает"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "machine_translated",
+                      "value" : "%arg предмета уезжают"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "+%1$lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -226,6 +596,7 @@
       }
     },
     "A box the courier can take" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -245,22 +616,22 @@
         }
       }
     },
-    "A declared value of nothing insures nothing — say what each item is worth." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Нулевая объявленная ценность ничего не страхует — укажите ценность каждой вещи."
-          }
-        }
-      }
-    },
     "A declared value of nothing insures nothing — say what «%@» is worth." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Нулевая объявленная ценность ничего не страхует — укажите ценность «%@»."
+          }
+        }
+      }
+    },
+    "A declared value of nothing insures nothing — say what each item is worth." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нулевая объявленная ценность ничего не страхует — укажите ценность каждой вещи."
           }
         }
       }
@@ -495,6 +866,16 @@
         }
       }
     },
+    "apt." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "кв."
+          }
+        }
+      }
+    },
     "Archive" : {
       "localizations" : {
         "ru" : {
@@ -515,6 +896,16 @@
         }
       }
     },
+    "as soon as possible" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "как можно скорее"
+          }
+        }
+      }
+    },
     "Asking what cancelling costs…" : {
       "localizations" : {
         "ru" : {
@@ -526,6 +917,7 @@
       }
     },
     "At least one item — the order needs a parcel to carry." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -599,12 +991,22 @@
         }
       }
     },
-    "Bldg. %1$@" : {
+    "behind Add field" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Корп. %1$@"
+            "value" : "за «Добавить поле»"
+          }
+        }
+      }
+    },
+    "bldg." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "корп."
           }
         }
       }
@@ -619,12 +1021,33 @@
         }
       }
     },
+    "Bldg. %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Корп. %1$@"
+          }
+        }
+      }
+    },
     "Building, entrance, floor, apartment, intercom — what the pin can't know." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Корпус, подъезд, этаж, квартира, домофон — то, чего метка не знает."
+          }
+        }
+      }
+    },
+    "by %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "к %@"
           }
         }
       }
@@ -719,6 +1142,16 @@
         }
       }
     },
+    "cancelled" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "отменён"
+          }
+        }
+      }
+    },
     "Cancelled" : {
       "localizations" : {
         "ru" : {
@@ -809,22 +1242,22 @@
         }
       }
     },
-    "Check Deliveries before ordering again — this one may have gone through." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Проверьте Доставки перед повторным заказом — этот мог пройти."
-          }
-        }
-      }
-    },
     "Check again" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Проверить снова"
+          }
+        }
+      }
+    },
+    "Check Deliveries before ordering again — this one may have gone through." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверьте Доставки перед повторным заказом — этот мог пройти."
           }
         }
       }
@@ -885,6 +1318,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Закрыть"
+          }
+        }
+      }
+    },
+    "cm" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "см"
           }
         }
       }
@@ -1019,22 +1462,23 @@
         }
       }
     },
-    "Delete «%1$@»" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Удалить «%1$@»"
-          }
-        }
-      }
-    },
     "Delete «%@»" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Удалить «%@»"
+          }
+        }
+      }
+    },
+    "Delete «%1$@»" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Удалить «%1$@»"
           }
         }
       }
@@ -1055,6 +1499,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Доставить сюда"
+          }
+        }
+      }
+    },
+    "delivered" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "доставлен"
           }
         }
       }
@@ -1110,6 +1564,7 @@
       }
     },
     "Delivery failed" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -1149,16 +1604,6 @@
         }
       }
     },
-    "Doesn't fit %1$@ — its bound is %2$@. Pick a larger class, or it may be refused at the door." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Не влезает в %1$@ — предел %2$@. Выберите класс побольше, иначе могут отказать у двери."
-          }
-        }
-      }
-    },
     "Doesn't fit %@" : {
       "localizations" : {
         "ru" : {
@@ -1170,6 +1615,17 @@
       }
     },
     "Doesn't fit %@ — its bound is %@. Pick a larger class, or it may be refused at the door." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не влезает в %1$@ — предел %2$@. Выберите класс побольше, иначе могут отказать у двери."
+          }
+        }
+      }
+    },
+    "Doesn't fit %1$@ — its bound is %2$@. Pick a larger class, or it may be refused at the door." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -1219,7 +1675,18 @@
         }
       }
     },
+    "draft" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "черновик"
+          }
+        }
+      }
+    },
     "Drop-off · ~14 min left" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -1279,12 +1746,22 @@
         }
       }
     },
-    "Entrance %1$@" : {
+    "end" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Подъезд %1$@"
+            "value" : "конец"
+          }
+        }
+      }
+    },
+    "entrance" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "подъезд"
           }
         }
       }
@@ -1295,6 +1772,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Подъезд %@"
+          }
+        }
+      }
+    },
+    "Entrance %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подъезд %1$@"
           }
         }
       }
@@ -1499,16 +1987,6 @@
         }
       }
     },
-    "Fits %1$@: up to %2$@." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Влезает в %1$@: до %2$@."
-          }
-        }
-      }
-    },
     "Fits %@: up to %@." : {
       "localizations" : {
         "ru" : {
@@ -1519,12 +1997,13 @@
         }
       }
     },
-    "Flat %1$@" : {
+    "Fits %1$@: up to %2$@." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Кв. %1$@"
+            "value" : "Влезает в %1$@: до %2$@."
           }
         }
       }
@@ -1539,12 +2018,23 @@
         }
       }
     },
-    "Floor %1$@" : {
+    "Flat %1$@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Этаж %1$@"
+            "value" : "Кв. %1$@"
+          }
+        }
+      }
+    },
+    "floor" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "этаж"
           }
         }
       }
@@ -1555,6 +2045,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Этаж %@"
+          }
+        }
+      }
+    },
+    "Floor %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этаж %1$@"
           }
         }
       }
@@ -1575,6 +2076,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Забыть этот шаблон?"
+          }
+        }
+      }
+    },
+    "from a 2GIS link" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "из ссылки 2ГИС"
+          }
+        }
+      }
+    },
+    "from a geo: link" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "из ссылки geo:"
+          }
+        }
+      }
+    },
+    "from a Google Maps link" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "из ссылки Google Maps"
+          }
+        }
+      }
+    },
+    "from a Yandex Maps link" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "из ссылки Яндекс Карт"
+          }
+        }
+      }
+    },
+    "from an Apple Maps link" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "из ссылки Apple Maps"
           }
         }
       }
@@ -1647,6 +2198,16 @@
         }
       }
     },
+    "from pasted coordinates" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "из вставленных координат"
+          }
+        }
+      }
+    },
     "Get a token — dostavka.yandex.ru" : {
       "localizations" : {
         "ru" : {
@@ -1677,16 +2238,6 @@
         }
       }
     },
-    "Handed over at %1$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Передано в %1$@"
-          }
-        }
-      }
-    },
     "Handed over at %@" : {
       "localizations" : {
         "ru" : {
@@ -1697,12 +2248,33 @@
         }
       }
     },
+    "Handed over at %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Передано в %1$@"
+          }
+        }
+      }
+    },
     "Handed over here" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Передано здесь"
+          }
+        }
+      }
+    },
+    "hands over %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "передаёт %@"
           }
         }
       }
@@ -1787,12 +2359,12 @@
         }
       }
     },
-    "Intercom %1$@" : {
+    "intercom" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Домофон %1$@"
+            "value" : "домофон"
           }
         }
       }
@@ -1807,12 +2379,33 @@
         }
       }
     },
+    "Intercom %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Домофон %1$@"
+          }
+        }
+      }
+    },
     "Item" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Вещь"
+          }
+        }
+      }
+    },
+    "item %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "вещь %lld"
           }
         }
       }
@@ -1853,6 +2446,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Хранится в заказе — ищется по истории, провайдеру не уходит."
+          }
+        }
+      }
+    },
+    "kg" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "кг"
           }
         }
       }
@@ -1917,22 +2520,22 @@
         }
       }
     },
-    "Loaders ride only in the cargo van — one or two there." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Грузчики едут только в грузовом фургоне — один или два."
-          }
-        }
-      }
-    },
     "Loaders — one or two" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Грузчики — один или два"
+          }
+        }
+      }
+    },
+    "Loaders ride only in the cargo van — one or two there." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Грузчики едут только в грузовом фургоне — один или два."
           }
         }
       }
@@ -1953,6 +2556,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Доступ к геопозиции выключен — вашу позицию нельзя сделать точкой."
+          }
+        }
+      }
+    },
+    "looking for a courier" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ищем курьера"
           }
         }
       }
@@ -2037,16 +2650,6 @@
         }
       }
     },
-    "Name — «Заказ», «Платёж», «Накладная»" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Название — «Заказ», «Платёж», «Накладная»"
-          }
-        }
-      }
-    },
     "Name — “Home”, “Warehouse on Nevsky”" : {
       "localizations" : {
         "ru" : {
@@ -2063,6 +2666,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Название — «Комплект учебников»"
+          }
+        }
+      }
+    },
+    "Name — «Заказ», «Платёж», «Накладная»" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Название — «Заказ», «Платёж», «Накладная»"
           }
         }
       }
@@ -2097,7 +2710,17 @@
         }
       }
     },
-    "New Delivery" : {
+    "needs your decision" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ждёт вашего решения"
+          }
+        }
+      }
+    },
+    "New delivery" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -2107,7 +2730,7 @@
         }
       }
     },
-    "New delivery" : {
+    "New Delivery" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -2218,6 +2841,7 @@
       }
     },
     "No drivable route between these points." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -2287,6 +2911,16 @@
         }
       }
     },
+    "none" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "нет"
+          }
+        }
+      }
+    },
     "None" : {
       "localizations" : {
         "ru" : {
@@ -2313,6 +2947,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Не сейчас"
+          }
+        }
+      }
+    },
+    "not set" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "не указано"
           }
         }
       }
@@ -2367,16 +3012,6 @@
         }
       }
     },
-    "Nothing matches “%1$@”." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "По запросу “%1$@” ничего нет."
-          }
-        }
-      }
-    },
     "Nothing matches “%@”." : {
       "localizations" : {
         "ru" : {
@@ -2387,7 +3022,19 @@
         }
       }
     },
+    "Nothing matches “%1$@”." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "По запросу “%1$@” ничего нет."
+          }
+        }
+      }
+    },
     "Nothing stated yet" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -2427,22 +3074,22 @@
         }
       }
     },
-    "OK" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OK"
-          }
-        }
-      }
-    },
     "Off" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Выкл."
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
           }
         }
       }
@@ -2477,6 +3124,26 @@
         }
       }
     },
+    "on its way" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "в пути"
+          }
+        }
+      }
+    },
+    "one item" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "одна вещь"
+          }
+        }
+      }
+    },
     "One option per line" : {
       "localizations" : {
         "ru" : {
@@ -2497,6 +3164,16 @@
         }
       }
     },
+    "Only the order asks — prices don't." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Спрашивает только заказ — цены нет."
+          }
+        }
+      }
+    },
     "Only the order asks who's at the door — prices don't. The courier calls this number on arrival; leave it empty if nobody will be there." : {
       "localizations" : {
         "ru" : {
@@ -2507,12 +3184,12 @@
         }
       }
     },
-    "Only the order asks — prices don't." : {
+    "Open it in the maps app and copy the address — or place the point on the map by hand." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Спрашивает только заказ — цены нет."
+            "value" : "Откройте её в приложении карт и скопируйте адрес — или поставьте точку на карте вручную."
           }
         }
       }
@@ -2533,16 +3210,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Открыть Настройки"
-          }
-        }
-      }
-    },
-    "Open it in the maps app and copy the address — or place the point on the map by hand." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Откройте её в приложении карт и скопируйте адрес — или поставьте точку на карте вручную."
           }
         }
       }
@@ -2611,16 +3278,6 @@
         }
       }
     },
-    "Order %1$@ · %2$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Заказ %1$@ · %2$@"
-          }
-        }
-      }
-    },
     "Order %@" : {
       "localizations" : {
         "ru" : {
@@ -2641,12 +3298,33 @@
         }
       }
     },
+    "Order %1$@ · %2$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Заказ %1$@ · %2$@"
+          }
+        }
+      }
+    },
     "Order for %@" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Заказ для %@"
+          }
+        }
+      }
+    },
+    "Order №%@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Заказ №%@"
           }
         }
       }
@@ -2667,16 +3345,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Заказ размещён — ищем курьера"
-          }
-        }
-      }
-    },
-    "Order №%@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Заказ №%@"
           }
         }
       }
@@ -2772,6 +3440,7 @@
       }
     },
     "Pick up · first stop" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -2791,16 +3460,6 @@
         }
       }
     },
-    "Picked up at %1$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Забрано в %1$@"
-          }
-        }
-      }
-    },
     "Picked up at %@" : {
       "localizations" : {
         "ru" : {
@@ -2811,12 +3470,43 @@
         }
       }
     },
+    "Picked up at %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Забрано в %1$@"
+          }
+        }
+      }
+    },
     "Picked up here" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Забрано здесь"
+          }
+        }
+      }
+    },
+    "picks up %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "забирает %@"
+          }
+        }
+      }
+    },
+    "pickup by %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "забор к %@"
           }
         }
       }
@@ -2862,6 +3552,7 @@
       }
     },
     "Places are saved from a stop while composing a delivery." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -2912,6 +3603,7 @@
       }
     },
     "Prices appear when the route is complete." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -2931,6 +3623,16 @@
         }
       }
     },
+    "pro courier" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "курьер Про"
+          }
+        }
+      }
+    },
     "Pro courier" : {
       "localizations" : {
         "ru" : {
@@ -2941,22 +3643,23 @@
         }
       }
     },
-    "Provider data as of %1$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Данные провайдера на %1$@"
-          }
-        }
-      }
-    },
     "Provider data as of %@" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Данные провайдера на %@"
+          }
+        }
+      }
+    },
+    "Provider data as of %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Данные провайдера на %1$@"
           }
         }
       }
@@ -2982,6 +3685,7 @@
       }
     },
     "Re-pricing failed — %1$@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -3093,22 +3797,34 @@
         }
       }
     },
-    "Required fields always show by default — a hidden required field would block ordering on a value nobody sees." : {
+    "required" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Обязательные поля всегда показаны — скрытое обязательное поле заблокирует заказ на значении, которого никто не видит."
+            "value" : "обязательно"
           }
         }
       }
     },
     "Required — the order doesn't leave without it." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Обязательно — без него заказ не уйдёт."
+          }
+        }
+      }
+    },
+    "Required fields always show by default — a hidden required field would block ordering on a value nobody sees." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обязательные поля всегда показаны — скрытое обязательное поле заблокирует заказ на значении, которого никто не видит."
           }
         }
       }
@@ -3189,6 +3905,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Маршрут"
+          }
+        }
+      }
+    },
+    "route estimate" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "оценка маршрута"
           }
         }
       }
@@ -3323,22 +4049,23 @@
         }
       }
     },
-    "Search “%1$@” as an address" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Искать «%1$@» как адрес"
-          }
-        }
-      }
-    },
     "Search “%@” as an address" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Искать «%@» как адрес"
+          }
+        }
+      }
+    },
+    "Search “%1$@” as an address" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Искать «%1$@» как адрес"
           }
         }
       }
@@ -3513,16 +4240,6 @@
         }
       }
     },
-    "Sign Out" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Выйти"
-          }
-        }
-      }
-    },
     "Sign in to start" : {
       "localizations" : {
         "ru" : {
@@ -3539,6 +4256,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Войдите с токеном Яндекс Доставки, чтобы видеть цены."
+          }
+        }
+      }
+    },
+    "Sign Out" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выйти"
           }
         }
       }
@@ -3594,6 +4321,7 @@
       }
     },
     "Star a stop while composing a delivery and it waits here." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -3609,6 +4337,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Отметьте точку при составлении доставки или добавьте кнопкой «+»."
+          }
+        }
+      }
+    },
+    "start" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "начало"
           }
         }
       }
@@ -3649,6 +4387,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Смена статуса шлёт локальные уведомления, когда приложение синхронизируется — на переднем плане или в фоне — временный мост, пока нет настоящих push."
+          }
+        }
+      }
+    },
+    "stop %1$lld" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "точка %1$lld"
+          }
+        }
+      }
+    },
+    "stop %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "точка %lld"
           }
         }
       }
@@ -3784,6 +4543,7 @@
       }
     },
     "The field could not be stored — nothing was saved." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -3824,6 +4584,7 @@
       }
     },
     "The message didn't leave — check the connection and send it again." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -3913,16 +4674,6 @@
         }
       }
     },
-    "The place was not kept. Try again, or close and carry on — the point is still on the map." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Место не сохранилось. Попробуйте снова или закройте и продолжите — точка всё ещё на карте."
-          }
-        }
-      }
-    },
     "The place was not kept. Try again, or close — nothing else changed." : {
       "comment" : "A message that appears when a place is not saved.",
       "isCommentAutoGenerated" : true,
@@ -3931,6 +4682,16 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "Место не сохранилось. Попробуйте снова или закройте — больше ничего не изменилось."
+          }
+        }
+      }
+    },
+    "The place was not kept. Try again, or close and carry on — the point is still on the map." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Место не сохранилось. Попробуйте снова или закройте и продолжите — точка всё ещё на карте."
           }
         }
       }
@@ -3956,6 +4717,7 @@
       }
     },
     "The price moved — was %1$@, now %2$@." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -4085,6 +4847,27 @@
         }
       }
     },
+    "the route's %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ маршрута"
+          }
+        }
+      }
+    },
+    "the route's %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ маршрута"
+          }
+        }
+      }
+    },
     "The saved sync position is no longer valid — history will re-sync from the beginning." : {
       "localizations" : {
         "ru" : {
@@ -4135,6 +4918,16 @@
         }
       }
     },
+    "thermal bag" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "термосумка"
+          }
+        }
+      }
+    },
     "Thermal bag" : {
       "localizations" : {
         "ru" : {
@@ -4156,6 +4949,7 @@
       }
     },
     "This isn't a dialable number yet — the courier calls it on arrival." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -4181,6 +4975,16 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "Эта версия приложения пока не умеет заказывать «%@». Выберите другой класс доставки или обновите приложение."
+          }
+        }
+      }
+    },
+    "to the door" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "до двери"
           }
         }
       }
@@ -4566,763 +5370,7 @@
           }
         }
       }
-    },
-    "^[%1$lld item](inflect: true) arrive here" : {
-      "localizations" : {
-        "ru" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$lld предмет приезжает сюда"
-                }
-              },
-              "few" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$lld предмета приезжают сюда"
-                }
-              },
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$lld предметов приезжают сюда"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$lld предмета приезжают сюда"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "^[%1$lld item](inflect: true) leave here" : {
-      "localizations" : {
-        "ru" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$lld предмет уезжает отсюда"
-                }
-              },
-              "few" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$lld предмета уезжают отсюда"
-                }
-              },
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$lld предметов уезжают отсюда"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%1$lld предмета уезжают отсюда"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "^[%1$lld item](inflect: true) leave here · ^[%2$lld item](inflect: true) arrive here" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%#@leaving@ отсюда · %#@arriving@ сюда"
-          },
-          "substitutions" : {
-            "arriving" : {
-              "argNum" : 2,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "few" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg предмета приезжают"
-                    }
-                  },
-                  "many" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg предметов приезжают"
-                    }
-                  },
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg предмет приезжает"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg предмета приезжают"
-                    }
-                  }
-                }
-              }
-            },
-            "leaving" : {
-              "argNum" : 1,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "few" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg предмета уезжают"
-                    }
-                  },
-                  "many" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg предметов уезжают"
-                    }
-                  },
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg предмет уезжает"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg предмета уезжают"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "^[%lld item](inflect: true) arrive here" : {
-      "localizations" : {
-        "ru" : {
-          "variations" : {
-            "plural" : {
-              "few" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld предмета приезжают сюда"
-                }
-              },
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld предметов приезжают сюда"
-                }
-              },
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld предмет приезжает сюда"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld предмета приезжают сюда"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "^[%lld item](inflect: true) leave here" : {
-      "localizations" : {
-        "ru" : {
-          "variations" : {
-            "plural" : {
-              "few" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld предмета уезжают отсюда"
-                }
-              },
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld предметов уезжают отсюда"
-                }
-              },
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld предмет уезжает отсюда"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld предмета уезжают отсюда"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "^[%lld item](inflect: true) leave here · ^[%lld item](inflect: true) arrive here" : {
-      "comment" : "A sentence that combines the number of items leaving and arriving at a stop.",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "^[%1$lld item](inflect: true) leave here · ^[%2$lld item](inflect: true) arrive here"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "%#@leaving@ отсюда · %#@arriving@ сюда"
-          },
-          "substitutions" : {
-            "arriving" : {
-              "argNum" : 2,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "few" : {
-                    "stringUnit" : {
-                      "state" : "machine_translated",
-                      "value" : "%arg предмета приезжают"
-                    }
-                  },
-                  "many" : {
-                    "stringUnit" : {
-                      "state" : "machine_translated",
-                      "value" : "%arg предметов приезжают"
-                    }
-                  },
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "machine_translated",
-                      "value" : "%arg предмет приезжает"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "machine_translated",
-                      "value" : "%arg предмета приезжают"
-                    }
-                  }
-                }
-              }
-            },
-            "leaving" : {
-              "argNum" : 1,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "few" : {
-                    "stringUnit" : {
-                      "state" : "machine_translated",
-                      "value" : "%arg предмета уезжают"
-                    }
-                  },
-                  "many" : {
-                    "stringUnit" : {
-                      "state" : "machine_translated",
-                      "value" : "%arg предметов уезжают"
-                    }
-                  },
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "machine_translated",
-                      "value" : "%arg предмет уезжает"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "machine_translated",
-                      "value" : "%arg предмета уезжают"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "apt." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "кв."
-          }
-        }
-      }
-    },
-    "as soon as possible" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "как можно скорее"
-          }
-        }
-      }
-    },
-    "behind Add field" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "за «Добавить поле»"
-          }
-        }
-      }
-    },
-    "bldg." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "корп."
-          }
-        }
-      }
-    },
-    "by %@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "к %@"
-          }
-        }
-      }
-    },
-    "cancelled" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "отменён"
-          }
-        }
-      }
-    },
-    "cm" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "см"
-          }
-        }
-      }
-    },
-    "delivered" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "доставлен"
-          }
-        }
-      }
-    },
-    "draft" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "черновик"
-          }
-        }
-      }
-    },
-    "end" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "конец"
-          }
-        }
-      }
-    },
-    "entrance" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "подъезд"
-          }
-        }
-      }
-    },
-    "floor" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "этаж"
-          }
-        }
-      }
-    },
-    "from a 2GIS link" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "из ссылки 2ГИС"
-          }
-        }
-      }
-    },
-    "from a Google Maps link" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "из ссылки Google Maps"
-          }
-        }
-      }
-    },
-    "from a Yandex Maps link" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "из ссылки Яндекс Карт"
-          }
-        }
-      }
-    },
-    "from a geo: link" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "из ссылки geo:"
-          }
-        }
-      }
-    },
-    "from an Apple Maps link" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "из ссылки Apple Maps"
-          }
-        }
-      }
-    },
-    "from pasted coordinates" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "из вставленных координат"
-          }
-        }
-      }
-    },
-    "hands over %@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "передаёт %@"
-          }
-        }
-      }
-    },
-    "intercom" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "домофон"
-          }
-        }
-      }
-    },
-    "item %lld" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "вещь %lld"
-          }
-        }
-      }
-    },
-    "kg" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "кг"
-          }
-        }
-      }
-    },
-    "looking for a courier" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ищем курьера"
-          }
-        }
-      }
-    },
-    "needs your decision" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ждёт вашего решения"
-          }
-        }
-      }
-    },
-    "none" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "нет"
-          }
-        }
-      }
-    },
-    "not set" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "не указано"
-          }
-        }
-      }
-    },
-    "on its way" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "в пути"
-          }
-        }
-      }
-    },
-    "one item" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "одна вещь"
-          }
-        }
-      }
-    },
-    "picks up %@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "забирает %@"
-          }
-        }
-      }
-    },
-    "pickup by %@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "забор к %@"
-          }
-        }
-      }
-    },
-    "pro courier" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "курьер Про"
-          }
-        }
-      }
-    },
-    "required" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "обязательно"
-          }
-        }
-      }
-    },
-    "route estimate" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "оценка маршрута"
-          }
-        }
-      }
-    },
-    "start" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "начало"
-          }
-        }
-      }
-    },
-    "stop %1$lld" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "точка %1$lld"
-          }
-        }
-      }
-    },
-    "stop %lld" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "точка %lld"
-          }
-        }
-      }
-    },
-    "the route's %1$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ маршрута"
-          }
-        }
-      }
-    },
-    "the route's %@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ маршрута"
-          }
-        }
-      }
-    },
-    "thermal bag" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "термосумка"
-          }
-        }
-      }
-    },
-    "to the door" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "до двери"
-          }
-        }
-      }
-    },
-    "«%@» has to weigh more than zero." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Вес «%@» должен быть больше нуля."
-          }
-        }
-      }
-    },
-    "«%@» is required — the order doesn't leave without it." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "«%@» обязательно — без него заказ не уйдёт."
-          }
-        }
-      }
-    },
-    "«%@» needs a count of at least one." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "У «%@» количество — не меньше одного."
-          }
-        }
-      }
-    },
-    "«%@» needs a name and a declared value." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "У «%@» нужны имя и объявленная ценность."
-          }
-        }
-      }
-    },
-    "«Save as a template» on a parcel, or add one with «+»." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "«Сохранить как шаблон» на посылке или добавьте через «+»."
-          }
-        }
-      }
-    },
-    "—" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "—"
-          }
-        }
-      }
     }
   },
-  "version" : "1.0"
+  "version" : "1.1"
 }

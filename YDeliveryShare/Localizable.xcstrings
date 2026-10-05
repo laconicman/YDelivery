@@ -1,22 +1,23 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Building %1$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Дом %1$@"
-          }
-        }
-      }
-    },
     "Building %@" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Корпус %@"
+          }
+        }
+      }
+    },
+    "Building %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дом %1$@"
           }
         }
       }
@@ -51,16 +52,6 @@
         }
       }
     },
-    "Entrance %1$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Подъезд %1$@"
-          }
-        }
-      }
-    },
     "Entrance %@" : {
       "localizations" : {
         "ru" : {
@@ -71,12 +62,13 @@
         }
       }
     },
-    "Flat or office %1$@" : {
+    "Entrance %1$@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Квартира или офис %1$@"
+            "value" : "Подъезд %1$@"
           }
         }
       }
@@ -91,12 +83,13 @@
         }
       }
     },
-    "Floor %1$@" : {
+    "Flat or office %1$@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Этаж %1$@"
+            "value" : "Квартира или офис %1$@"
           }
         }
       }
@@ -111,6 +104,17 @@
         }
       }
     },
+    "Floor %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этаж %1$@"
+          }
+        }
+      }
+    },
     "Found an address" : {
       "localizations" : {
         "ru" : {
@@ -121,22 +125,23 @@
         }
       }
     },
-    "Intercom %1$@" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Домофон %1$@"
-          }
-        }
-      }
-    },
     "Intercom %@" : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Домофон %@"
+          }
+        }
+      }
+    },
+    "Intercom %1$@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Домофон %1$@"
           }
         }
       }
@@ -221,16 +226,6 @@
         }
       }
     },
-    "The shared point is" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Присланная точка — это"
-          }
-        }
-      }
-    },
     "the destination" : {
       "localizations" : {
         "ru" : {
@@ -247,6 +242,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "отправление"
+          }
+        }
+      }
+    },
+    "The shared point is" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Присланная точка — это"
           }
         }
       }
