@@ -215,6 +215,7 @@ nonisolated extension TariffClass {
         case .cargo: .cargo
         case .sddLong: .sddLong
         case .superexpressD2d: .superexpressD2D
+        case .sddMultislot: .sddMultislot
         }
     }
 }

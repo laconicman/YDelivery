@@ -369,6 +369,7 @@ nonisolated extension TariffClass {
         case .cargo: "cargo"
         case .sddLong: "sdd_long"
         case .superexpressD2D: "superexpress_d2d"
+        case .sddMultislot: "sdd_multislot"
         case .other(let raw): raw
         }
     }
@@ -383,6 +384,7 @@ nonisolated extension TariffClass {
         case "cargo": .cargo
         case "sdd_long": .sddLong
         case "superexpress_d2d": .superexpressD2D
+        case "sdd_multislot": .sddMultislot
         default: .other(wireSpelling)
         }
     }

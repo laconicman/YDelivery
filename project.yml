@@ -52,7 +52,8 @@ packages:
     url: https://github.com/laconicman/YandexDeliveryExpress
     # 0.3.1: Client.init takes a transport — YD-14's request-timeout seam.
     # 0.3.2: TaxiClass carries `superexpress_d2d`, which TariffClass maps by name.
-    minorVersion: 0.3.2
+    # 0.3.3: and `sdd_multislot`, the same-day class Yandex's API pages document.
+    minorVersion: 0.3.3
   # Pulled transitively by YandexDeliveryExpress; declared because ClientController
   # imports it directly — `URLSessionTransport(configuration:)` for YD-14's timeout.
   swift-openapi-urlsession:

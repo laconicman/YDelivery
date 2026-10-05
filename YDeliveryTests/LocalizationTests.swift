@@ -131,6 +131,7 @@ struct LocalizationTests {
     func extraClassesResolve() {
         #expect(ru("Same-day") == "День в день")
         #expect(ru("Super-express") == "Быстрее")
+        #expect(ru("Within the day") == "В течение дня")
         #expect(ru("Signed in") == "Вход выполнен")
     }
 

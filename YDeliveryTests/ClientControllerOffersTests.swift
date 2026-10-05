@@ -114,6 +114,9 @@ struct ClientControllerOffersTests {
         #expect(TariffClass(.superexpressD2d) == .superexpressD2D)
         #expect(TariffClass(wireSpelling: "superexpress_d2d") == .superexpressD2D)
         #expect(TariffClass.superexpressD2D.wireValue == "superexpress_d2d")
+        #expect(TariffClass(.sddMultislot) == .sddMultislot)
+        #expect(TariffClass(wireSpelling: "sdd_multislot") == .sddMultislot)
+        #expect(TariffClass.sddMultislot.wireValue == "sdd_multislot")
     }
 
     @Test("An unknown class stays visible by its wire name rather than being dropped")

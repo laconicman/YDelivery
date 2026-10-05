@@ -592,8 +592,11 @@ truck, is unsourced too.
 - **Discharge:** a live `offers/calculate` on a real account showing what an
   `sdd_long` offer carries (`description`, intervals, price against `cargo`). Then
   set its words, glyph and limits from that evidence and cite it here.
-  `sdd_multislot`, the documented class, gets the same treatment once the package
-  spells it.
+- **The documented sibling:** `sdd_multislot` arrived with API 0.3.3 as
+  `TariffClass.sddMultislot`. Its words come from the docs: «В течение дня», needing
+  every item's size and weight. Its limits stay unset because the docs give no
+  numbers. Whether such an order can be placed at all through the unified create path
+  is the package's `same_day_data` question.
 
 ## See Also
 

@@ -3133,6 +3133,16 @@
         }
       }
     },
+    "Same-day delivery — every item needs its size and weight" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Доставка в течение дня — у каждого предмета должны быть габариты и вес"
+          }
+        }
+      }
+    },
     "Save" : {
       "localizations" : {
         "ru" : {
@@ -4379,6 +4389,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ширина"
+          }
+        }
+      }
+    },
+    "Within the day" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "В течение дня"
           }
         }
       }
