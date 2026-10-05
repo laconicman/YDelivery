@@ -30,6 +30,24 @@ final class LiveActivityController {
     /// screen, then it dismisses itself.
     nonisolated static let deliveredLinger: TimeInterval = 4 * 60
 
+    /// How long a card stays trustworthy after the app last reconciled it.
+    /// There is no push relay, so a card only moves while the app runs: the
+    /// foreground journal ticks every 30 seconds, a background wake is asked
+    /// for every 15 minutes and granted when iOS decides. Two missed wakes
+    /// means nobody is updating the card — past this the system flags it
+    /// stale (`context.isStale`) and the Lock Screen says so instead of
+    /// posing as live. The clock is the app's last *check*, not the
+    /// provider's `providerObservedAt`: that stamp moves only when the claim
+    /// changes, and a quiet half-hour en route is a healthy card.
+    nonisolated static let staleAfter: TimeInterval = 30 * 60
+
+    /// The last reconcile's ActivityKit calls. Each pass chains behind the
+    /// one before, so an update never overtakes the end that followed it,
+    /// and ``settle()`` gives a background wake something to wait on — a
+    /// fire-and-forget call is lost when the app suspends straight after.
+    /// Plumbing, not presentation: no view observes it.
+    @ObservationIgnored private var pass: Task<Void, Never>?
+
     /// Whether this controller touches the Lock Screen at all. The cards belong
     /// to *the* app's history, whichever store an instance reconciles against —
     /// a fixture store's orders must neither start cards nor sweep a real
@@ -74,6 +92,32 @@ final class LiveActivityController {
         }
     }
 
+    /// When a card written `now` stops being trustworthy.
+    nonisolated static func staleDate(now: Date = .now) -> Date {
+        now.addingTimeInterval(staleAfter)
+    }
+
+    /// Whether a live card must be re-sent: its state moved, or its stale
+    /// date is within half a window — a healthy sync re-arms the card before
+    /// it would ever flag, at most one extra update per card per 15 minutes,
+    /// while a card the app stopped checking runs out its window and says so.
+    nonisolated static func needsUpdate(
+        shown: DeliveryActivityAttributes.ContentState, shownStaleDate: Date?,
+        state: DeliveryActivityAttributes.ContentState, now: Date = .now
+    ) -> Bool {
+        shown != state
+            || (shownStaleDate ?? .distantPast) < now.addingTimeInterval(staleAfter / 2)
+    }
+
+    /// The store-facing entry: an unread store is not an empty one, and
+    /// reconciling against `[]` would sweep every restored card as an orphan
+    /// (review, PR #44). Every caller — the view's republication and
+    /// sync-success hooks, and the background refresh — goes through this gate.
+    func reconcile(with store: StoreController) {
+        guard store.hasLoaded else { return }
+        reconcile(orders: store.orders, orderNumber: store.orderNumber(for:))
+    }
+
     /// Reconcile the store's truth against what the Lock Screen is showing.
     /// Called on every `store.orders` republication — the write funnel means
     /// sync merges, placement, and cancels all arrive through the one hook.
@@ -82,6 +126,7 @@ final class LiveActivityController {
     func reconcile(orders: [Order], orderNumber: (Order.ID) -> String?) {
         guard reconciles, ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let live = Activity<DeliveryActivityAttributes>.activities
+        var changes: [(Activity<DeliveryActivityAttributes>, Change)] = []
         for order in orders {
             let activity = live.first { $0.attributes.orderID == order.id }
             switch Disposition(status: order.status, hasClaim: order.claimID != nil,
@@ -89,9 +134,10 @@ final class LiveActivityController {
             case .updating:
                 let state = contentState(for: order, orderNumber: orderNumber)
                 if let activity {
-                    guard activity.content.state != state else { continue }
-                    nonisolated(unsafe) let activity = activity
-                    Task { await activity.update(.init(state: state, staleDate: nil)) }
+                    guard Self.needsUpdate(shown: activity.content.state,
+                                           shownStaleDate: activity.content.staleDate,
+                                           state: state) else { continue }
+                    changes.append((activity, .update(state)))
                 } else {
                     start(order: order, state: state)
                 }
@@ -103,9 +149,7 @@ final class LiveActivityController {
                     case .stayUntilTapped: .default
                     case .immediate: .immediate
                     }
-                    nonisolated(unsafe) let activity = activity
-                    Task { await activity.end(.init(state: final, staleDate: nil),
-                                              dismissalPolicy: dismissal) }
+                    changes.append((activity, .end(final, dismissal)))
                 }
             case .none:
                 // An order that slipped out of provider view — claim revoked,
@@ -114,8 +158,7 @@ final class LiveActivityController {
                 // still listed), so `.none` must end it, not skip it
                 // (review, PR #44).
                 if let activity {
-                    nonisolated(unsafe) let activity = activity
-                    Task { await activity.end(dismissalPolicy: .immediate) }
+                    changes.append((activity, .end(nil, .immediate)))
                 }
             }
         }
@@ -123,8 +166,46 @@ final class LiveActivityController {
         // ends quietly rather than posing as a live delivery.
         let known = Set(orders.map(\.id))
         for orphan in live where !known.contains(orphan.attributes.orderID) {
-            nonisolated(unsafe) let orphan = orphan
-            Task { await orphan.end(dismissalPolicy: .immediate) }
+            changes.append((orphan, .end(nil, .immediate)))
+        }
+        guard !changes.isEmpty else { return }
+        // `Activity` predates Sendable; its update/end are safe from any
+        // context by ActivityKit's contract — the allowance `apply(to:)`
+        // takes once more at the call itself.
+        nonisolated(unsafe) let pending = changes
+        let prior = pass
+        pass = Task {
+            await prior?.value
+            for (activity, change) in pending {
+                await change.apply(to: activity)
+            }
+        }
+    }
+
+    /// Waits for the last reconcile's ActivityKit calls to land — the
+    /// background refresh's last step before it reports done, so the cards
+    /// move in the same wake that learned the news.
+    func settle() async {
+        await pass?.value
+    }
+
+    /// One ActivityKit call a reconcile pass owes.
+    private enum Change {
+        case update(DeliveryActivityAttributes.ContentState)
+        /// `nil` content ends on the card's last state.
+        case end(DeliveryActivityAttributes.ContentState?, ActivityUIDismissalPolicy)
+
+        func apply(to activity: Activity<DeliveryActivityAttributes>) async {
+            nonisolated(unsafe) let activity = activity
+            switch self {
+            case .update(let state):
+                await activity.update(.init(
+                    state: state, staleDate: LiveActivityController.staleDate()))
+            case .end(let state, let dismissal):
+                // A final card is stale-proof: it no longer claims to be live.
+                await activity.end(state.map { .init(state: $0, staleDate: nil) },
+                                   dismissalPolicy: dismissal)
+            }
         }
     }
 
@@ -133,7 +214,7 @@ final class LiveActivityController {
         do {
             _ = try Activity.request(
                 attributes: DeliveryActivityAttributes(orderID: order.id),
-                content: .init(state: state, staleDate: nil),
+                content: .init(state: state, staleDate: Self.staleDate()),
                 pushType: nil  // no relay — updates are local, from sync
             )
         } catch {

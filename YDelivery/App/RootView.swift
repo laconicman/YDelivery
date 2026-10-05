@@ -150,6 +150,11 @@ struct RootView: View {
         // the file write can be sequenced before the reload ask.
         .onChange(of: store.orders, initial: true) { republishSurfaces() }
         .onChange(of: store.orderFields) { republishSurfaces() }
+        // A sync that changed nothing republishes nothing, yet it is exactly
+        // what keeps a quiet card honest: each success re-arms the cards'
+        // stale date (`LiveActivityController.staleAfter`), and a sync that
+        // stops succeeding lets them say so.
+        .onChange(of: sync.lastSyncedAt) { activities.reconcile(with: store) }
         // `hasLoaded` is its own trigger: an unread store reconciles nothing,
         // and the first read must also fire the pass that applies a parked
         // deep link and sweeps orphaned cards. Places publish in a second
@@ -201,8 +206,7 @@ struct RootView: View {
     /// applies a deep link parked waiting on that read.
     private func republishSurfaces() {
         guard store.hasLoaded else { return }
-        activities.reconcile(orders: store.orders,
-                             orderNumber: store.orderNumber(for:))
+        activities.reconcile(with: store)
         if let link = pendingLink {
             pendingLink = nil
             apply(link)

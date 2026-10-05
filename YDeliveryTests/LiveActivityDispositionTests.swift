@@ -55,4 +55,32 @@ struct LiveActivityDispositionTests {
                     == .ending(.immediate))
         }
     }
+
+    @Test("A quiet card is re-armed by a healthy sync, never left to flag")
+    func quietCardIsRearmed() {
+        let window = LiveActivityController.staleAfter
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let state = DeliveryActivityAttributes.ContentState(
+            status: .active, orderNumber: "4417", destinationAddress: "Каширское шоссе, 52",
+            courierName: nil, courierVehicle: nil, providerStatus: "pickuped",
+            etaAt: nil, providerObservedAt: now.addingTimeInterval(-45 * 60),
+            destinationPhone: nil)
+        // Freshly armed: nothing moved, nothing to send — whatever the age of
+        // the provider's own stamp (review: it moves only on a claim change).
+        #expect(!LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: now.addingTimeInterval(window), state: state, now: now))
+        // Past half its window, the same state is re-sent to push the date on.
+        #expect(LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: now.addingTimeInterval(window / 2 - 1),
+            state: state, now: now))
+        // A card started before stale dates existed is armed on first sight.
+        #expect(LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: nil, state: state, now: now))
+        // A moved state always goes out.
+        var moved = state
+        moved.providerStatus = "delivery_arrived"
+        #expect(LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: now.addingTimeInterval(window), state: moved, now: now))
+        #expect(LiveActivityController.staleDate(now: now) == now.addingTimeInterval(window))
+    }
 }

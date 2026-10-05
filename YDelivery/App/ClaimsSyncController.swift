@@ -446,7 +446,14 @@ final class ClaimsSyncController {
     /// delivered on `.main` (see `register` in `YDeliveryApp`), but nothing
     /// here needs the actor — `BGTaskScheduler` and the `Task` spawn are
     /// off-actor safe, and the journal pass hops to MainActor at the `await`.
-    nonisolated func handleAppRefresh(_ task: BGAppRefreshTask) {
+    /// `publish` runs after the pass and before completion — the surfaces that
+    /// must move in this same wake (the Live Activities) are the composition
+    /// root's to name; the view-side republication hooks cannot be counted on
+    /// while the app is suspended between frames.
+    nonisolated func handleAppRefresh(
+        _ task: BGAppRefreshTask,
+        publish: @escaping @MainActor () async -> Void = {}
+    ) {
         scheduleAppRefresh()
         // BGTask predates Sendable — its completion/expiry API is thread-safe
         // by contract (the object lives to be driven from the queue the system
@@ -454,6 +461,7 @@ final class ClaimsSyncController {
         nonisolated(unsafe) let task = task
         let work = Task { @MainActor [weak self] in
             let completed = await self?.syncJournal() ?? true
+            await publish()
             task.setTaskCompleted(success: completed && !Task.isCancelled)
         }
         task.expirationHandler = { work.cancel() }

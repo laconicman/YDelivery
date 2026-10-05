@@ -31,6 +31,8 @@ struct YDeliveryApp: App {
         let notifications = NotificationController(store: store)
         let sync = ClaimsSyncController(session: session, store: store,
                                         database: database, notifications: notifications)
+        let activities = LiveActivityController(
+            reconciles: !(Self.isHistoryFixture || Self.isCloudKitSeed))
         // The identity boundary, wired at composition: a sign-out + sign-in inside
         // one poll interval is invisible to sampling — the hook fires inside the
         // transition itself (review, PR #35).
@@ -45,14 +47,22 @@ struct YDeliveryApp: App {
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: ClaimsSyncController.refreshTaskIdentifier,
             using: .main
-        ) { [weak sync] task in
+        ) { [weak sync, weak store, weak activities] task in
             guard let refresh = task as? BGAppRefreshTask else { return }
             // The scheduler retains this closure for the app's lifetime —
             // a weak capture keeps the registration from pinning the
             // controller should this init ever run more than once (review,
             // PR #43).
-            if let sync { sync.handleAppRefresh(refresh) }
-            else { task.setTaskCompleted(success: false) }
+            if let sync {
+                // The cards move in the wake that learned the news, and the
+                // task completes only once their calls landed — a delivered
+                // order must not keep an «en route» card until the next launch.
+                sync.handleAppRefresh(refresh) {
+                    guard let store, let activities else { return }
+                    activities.reconcile(with: store)
+                    await activities.settle()
+                }
+            } else { task.setTaskCompleted(success: false) }
         }
         // CloudKit sync starts at launch, entitlement or not — `startSync` probes and
         // degrades to a logged, stored failure rather than a CKContainer trap.
@@ -66,8 +76,7 @@ struct YDeliveryApp: App {
         _store = State(initialValue: store)
         _sync = State(initialValue: sync)
         _notifications = State(initialValue: notifications)
-        _activities = State(initialValue: LiveActivityController(
-            reconciles: !(Self.isHistoryFixture || Self.isCloudKitSeed)))
+        _activities = State(initialValue: activities)
         // The share-acceptance bridge — the delegates are UIKit-instantiated,
         // so the database reaches them through this property, not an init.
         // It goes through the store, not the database: accepting also re-reads

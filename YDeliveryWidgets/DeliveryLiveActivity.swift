@@ -16,7 +16,7 @@ import YDeliveryKit
 struct DeliveryLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DeliveryActivityAttributes.self) { context in
-            LockScreenView(state: context.state)
+            LockScreenView(state: context.state, isStale: context.isStale)
                 .widgetURL(WidgetLink.order(context.attributes.orderID))
         } dynamicIsland: { context in
             DynamicIsland {
@@ -103,9 +103,12 @@ struct DeliveryLiveActivity: Widget {
 /// top, the wire's own phrase as the headline, the courier line, then the two
 /// ETA readings — the clock («9:41») the sender plans against and the duration
 /// («~14 мин») the wait feels like. The staleness stamp rides at the bottom:
-/// «as of 9:27» is what keeps a dead activity from posing as live.
+/// «as of 9:27» is what keeps a dead activity from posing as live — and once
+/// the card passes its stale date (`LiveActivityController.staleAfter` since
+/// the app last checked) the stamp says so outright: «not updating · as of 9:27».
 private struct LockScreenView: View {
     let state: DeliveryActivityAttributes.ContentState
+    let isStale: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.Spacing.tight) {
@@ -141,14 +144,30 @@ private struct LockScreenView: View {
                     }
                 }
             }
-            if let observed = state.providerObservedAt {
-                (Text("as of ")
-                    + Text(observed, style: .time))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            stamp
         }
         .padding(Layout.Spacing.edge)
+    }
+
+    /// The as-of line, or its stale form — the one place the card admits the
+    /// app has not been able to refresh it.
+    @ViewBuilder
+    private var stamp: some View {
+        if isStale {
+            Group {
+                if let observed = state.providerObservedAt {
+                    Text("Not updating · as of \(Text(observed, style: .time))")
+                } else {
+                    Text("Not updating")
+                }
+            }
+            .font(.caption2.weight(.medium))
+        } else if let observed = state.providerObservedAt {
+            (Text("as of ")
+                + Text(observed, style: .time))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var headline: String {
@@ -177,7 +196,12 @@ private extension DeliveryActivityAttributes.ContentState {
 }
 
 #Preview("Lock screen") {
-    LockScreenView(state: .previewEnRoute)
+    LockScreenView(state: .previewEnRoute, isStale: false)
+        .padding(.vertical)
+}
+
+#Preview("Lock screen, stale") {
+    LockScreenView(state: .previewEnRoute, isStale: true)
         .padding(.vertical)
 }
 #endif
