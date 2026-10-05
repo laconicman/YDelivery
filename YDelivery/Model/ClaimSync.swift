@@ -195,6 +195,26 @@ nonisolated extension OrderStatus {
 }
 
 nonisolated extension Order {
+    /// The provider words that end a claim while the chip still reads «Needs a
+    /// decision» — the refused-before-dispatch litter of YD-23 (`estimating_failed`,
+    /// `performer_not_found`, `failed`) and the parcels that came home (`returned`,
+    /// `returned_finish`). `ready_for_approval` and `pay_waiting` are decisions
+    /// still open — the shelf stays shut for them. Design → "History is kept, not
+    /// deleted": archive is for finished deliveries, and these are finished.
+    static func isTerminalAttention(_ providerStatus: String?) -> Bool {
+        guard let providerStatus else { return false }
+        return Self.terminalAttentionWords.contains(providerStatus)
+    }
+
+    /// The raw wire words `isTerminalAttention` answers yes to — the terminal
+    /// half of the `claimStatus → .attention` mapping above.
+    private static let terminalAttentionWords: Set<String> = [
+        "estimating_failed", "performer_not_found", "failed",
+        "returned", "returned_finish",
+    ]
+}
+
+nonisolated extension Order {
     /// A provider claim as a history row. `adoptingID` keeps a stored order's local
     /// identity when the claim updates it — the row's content moves, its id never
     /// does. The wire's `return` point is kept on purpose: this app *sends* its

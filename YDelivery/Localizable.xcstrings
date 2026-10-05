@@ -495,6 +495,26 @@
         }
       }
     },
+    "Archive" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В архив"
+          }
+        }
+      }
+    },
+    "Archived" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Архив"
+          }
+        }
+      }
+    },
     "Asking what cancelling costs…" : {
       "localizations" : {
         "ru" : {
@@ -1445,6 +1465,16 @@
         }
       }
     },
+    "Finished deliveries you shelve wait here." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Убранные в архив завершённые доставки ждут здесь."
+          }
+        }
+      }
+    },
     "Fits %1$@: up to %2$@." : {
       "localizations" : {
         "ru" : {
@@ -2289,6 +2319,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Примечание для курьера"
+          }
+        }
+      }
+    },
+    "Nothing archived yet" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В архиве пока пусто"
           }
         }
       }
@@ -4013,6 +4053,16 @@
         }
       }
     },
+    "This delivery is still moving — archive it when it has finished." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эта доставка ещё в пути — уберите её в архив, когда она завершится."
+          }
+        }
+      }
+    },
     "This isn't a dialable number yet — the courier calls it on arrival." : {
       "localizations" : {
         "ru" : {
@@ -4089,6 +4139,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Тип"
+          }
+        }
+      }
+    },
+    "Unarchive" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вернуть из архива"
           }
         }
       }

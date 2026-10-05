@@ -388,6 +388,70 @@ struct DeliveriesRowsTests {
         #expect(statuses(.cancelled) == [.cancelled])
     }
 
+    @Test("Shelved rows hide under every pick but «Archived» — that pick is their one section")
+    func archivedRowsAnswerOnePick() {
+        var shelvedDone = order(status: .done, created: 2, addresses: ["A, 1", "B, 2"])
+        shelvedDone.archivedAt = .init(timeIntervalSince1970: 9)
+        var shelvedCancelled = order(status: .cancelled, created: 4, addresses: ["C, 1"])
+        shelvedCancelled.archivedAt = .init(timeIntervalSince1970: 8)
+        let sections = DeliveriesView.Model.sections(of: [
+            order(status: .active, created: 1, addresses: ["A, 1", "B, 2"]),
+            shelvedDone,
+            order(status: .done, created: 3, addresses: ["A, 1", "B, 2"]),
+            shelvedCancelled,
+        ], fields: { _ in [] })
+        let visible = { filter in
+            DeliveriesView.Model.visible(sections, query: "", sort: .newestFirst, filter: filter)
+        }
+        for filter: DeliveriesView.HistoryFilter in [.all, .needsDecision, .delivered, .cancelled] {
+            #expect(visible(filter).flatMap(\.rows).allSatisfy { !$0.isArchived },
+                    "\(filter) hides the shelved rows")
+        }
+        let shelf = visible(.archived)
+        #expect(shelf.map(\.id) == [.archived], "one section — the shelf")
+        #expect(shelf.flatMap(\.rows).map(\.status) == [.cancelled, .done],
+                "exactly the shelved rows, in the picked order")
+    }
+
+    @Test("The shelf door opens only for history — a live row offers no Archive")
+    func liveRowsCannotArchive() {
+        let row = { status in
+            DeliveriesView.Content.Row(
+                order: order(status: status, created: 1, addresses: ["A, 1", "B, 2"]),
+                fieldValues: [])
+        }
+        // Attention without a provider word is live in the UI — the shelf
+        // opens only when the word ends the claim (terminalAttentionCanArchive).
+        for status: OrderStatus in [.draft, .searching, .active, .attention] {
+            #expect(!row(status).canArchive, "\(status) is still moving")
+        }
+        for status: OrderStatus in [.done, .cancelled] {
+            #expect(row(status).canArchive, "\(status) is history — the door opens")
+        }
+        var shelved = order(status: .done, created: 1, addresses: ["A, 1"])
+        shelved.archivedAt = .init(timeIntervalSince1970: 2)
+        #expect(DeliveriesView.Content.Row(order: shelved, fieldValues: []).isArchived,
+                "the flag rides the row")
+    }
+
+    @Test("A terminal attention word opens the shelf — the refused-before-dispatch litter is finished")
+    func terminalAttentionCanArchive() {
+        let row = { word in
+            DeliveriesView.Content.Row(
+                order: order(status: .attention, created: 1, addresses: ["A, 1", "B, 2"],
+                             providerStatus: word),
+                fieldValues: [])
+        }
+        for word in ["estimating_failed", "performer_not_found", "failed",
+                     "returned", "returned_finish"] {
+            #expect(row(word).canArchive, "\(word) ended the claim — shelve it")
+        }
+        for word in ["ready_for_approval", "pay_waiting"] {
+            #expect(!row(word).canArchive, "\(word) is a decision still open")
+        }
+        #expect(!row(nil).canArchive, "no provider word is no verdict")
+    }
+
     @Test("Filter and search compose — a hit must pass both gates")
     func filterAndSearchCompose() {
         let sections = sections(of: [
