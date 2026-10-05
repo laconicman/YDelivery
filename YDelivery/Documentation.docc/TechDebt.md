@@ -575,6 +575,35 @@ the one write shape that always re-marks the row save-pending.
   documented in the Kit README as a write rule rather than fixed upstream, so a
   future raw write could regress it — that stays as this item's last line.
 
+## YD-35 — Unit tests pass only in English — **open**
+
+Eight unit tests compare user-facing sentences against English literals. On a device or
+simulator set to Russian they fail although the app behaves correctly (seen on a
+Russian-language device, 2026-10-05):
+
+- `DeliveriesRowsTests/searchHaystack`, `attentionRowNamesItsWait`
+- `NewDeliveryOrderingTests/everyInvalidItemGetsItsDoor`, `staleFieldCacheBlocks`,
+  `requiredFieldBlocks`, `doorMeansTheOption`, `estimationTimesOut`
+- `LocalizationTests/englishFallback`
+
+CI pins no language. Its runner simulator defaults to en-US, so these pass there and
+the dependence never shows up in CI.
+
+- **Cost:** a local run on a Russian-language device, this app's main audience, shows
+  red for nothing. Real regressions hide among the false ones, and each run gets
+  re-diagnosed.
+- **Discharge, one of:**
+  - **A prerequisite:** pin the test language, through the scheme's test action
+    (`project.yml`) or `xcodebuild -testLanguage en -testRegion US`, so every run
+    sees English. Cheapest, but it hides how the code behaves in Russian.
+  - **Locale-aware:** compare against `String(localized:)` of the same key, a
+    convention several tests already follow (`blockersStateTheBounds`,
+    `undialablePhoneBlocks`).
+  - **Locale-agnostic:** assert on what the sentence is built from (the item's ordinal,
+    the blocker's destination, the status kind) rather than on its prose.
+  - Whichever is chosen, `englishFallback` needs a bundle it can force to English.
+    The question it asks only exists in that language.
+
 ## See Also
 
 - <doc:Design>

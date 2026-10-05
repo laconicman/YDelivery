@@ -175,7 +175,7 @@ struct DeliveriesRowsTests {
         #expect(model.trail == [first, second], "a failed re-read leaves the trail on screen")
         #expect(model.trailError == nil, "…and does not dress it as an error")
         #expect(DeliveriesView.Model().trail == nil)
-        _ = DeliveriesView.Model().refreshTrail()
+        DeliveriesView.Model().refreshTrail()
     }
 
     @Test("A republish while another row is opening re-reads the open row, never the pending one")
