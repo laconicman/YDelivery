@@ -39,6 +39,10 @@ gave acceptance an `unresolved` state with a read-only way back. 157 tests in 15
 *The phase's done-when held:* a real order with no address typed twice, every bounded
 field stating its bound.
 
+**Archive a finished order (2026-10-05):** `archivedAt` on `orderPrivateStates`
+(Kit 0.4.14), the seed carries it, participants unaffected — shelved deliveries
+hide behind the «Archived» filter (<doc:Design> → "History is kept, not deleted").
+
 ## Now — design Phase 3: while closed (boards `5a`–`5d`, `4b`)
 
 - **Journal sync — landed (hybrid):** `journal` and `search` shipped in
@@ -225,8 +229,6 @@ Library tab. Search reaches both lists. Two evenings.
   the points answers when the courier reaches each door; display only, the field
   already rides the wire. (The tariff cards' windows themselves moved to Now.)
 - Handoff codes, proof of delivery, edit/return, `delivery-methods` windows.
-- Archive a finished order — `OrderPrivateState.archivedAt`, the seed carries it,
-  participants unaffected.
 - A Mac target if the product earns one.
 - **Extract the map components into a public SPM** once the destination design has shipped —
   point picker, pin taxonomy, link-paste geocoding. The demo repo becomes the second

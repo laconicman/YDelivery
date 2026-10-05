@@ -407,6 +407,62 @@ struct StoreControllerTests {
         #expect(entries.last?.isLive == true)
     }
 
+    @Test("The snapshot skips shelved orders — archive is out of sight on every surface")
+    func snapshotSkipsArchived() {
+        var shelved = order(created: .init(timeIntervalSince1970: 2000), addresses: ["Склад"])
+        shelved.archivedAt = .init(timeIntervalSince1970: 3000)
+        let entries = StoreController.snapshotEntries(
+            of: [shelved, order(created: .init(timeIntervalSince1970: 1000), addresses: ["Офис"])],
+            orderNumber: { _ in nil })
+        #expect(!entries.contains { $0.id == shelved.id })
+        #expect(entries.count == 1)
+    }
+
+    @Test("Archiving shelves the order; unarchiving brings it back — refresh republishes the flag")
+    func setArchivedRoundTrips() async throws {
+        let store = controller
+        let done = order(created: .init(timeIntervalSince1970: 100), addresses: ["А, 1", "Б, 2"])
+        try await store.record(done)
+        await store.refresh()
+        #expect(store.orders.first?.isArchived == false)
+
+        await store.setArchived(true, orderID: done.id)
+        #expect(store.orders.first?.isArchived == true)
+        #expect(store.lastActionError == nil)
+
+        await store.setArchived(false, orderID: done.id)
+        #expect(store.orders.first?.isArchived == false)
+    }
+
+    @Test("A still-moving order refuses the shelf — the refusal lands on the action channel")
+    func archiveRefusalLandsOnActionError() async throws {
+        let store = controller
+        var live = order(created: .init(timeIntervalSince1970: 100), addresses: ["А, 1", "Б, 2"])
+        live.status = .active
+        live.claimID = "claim-live"
+        try await store.record(live)
+
+        await store.setArchived(true, orderID: live.id)
+
+        #expect(store.orders.first?.isArchived == false)
+        #expect(store.lastActionError != nil, "the swipe is gone — the refusal must be readable")
+    }
+
+    @Test("A terminal attention archives — the Kit permits the claim whose word ended it")
+    func terminalAttentionArchives() async throws {
+        let store = controller
+        var refused = order(created: .init(timeIntervalSince1970: 100), addresses: ["А, 1", "Б, 2"])
+        refused.status = .attention
+        refused.providerStatus = "performer_not_found"
+        refused.claimID = "claim-refused"
+        try await store.record(refused)
+
+        await store.setArchived(true, orderID: refused.id)
+
+        #expect(store.orders.first?.isArchived == true)
+        #expect(store.lastActionError == nil)
+    }
+
     @Test("An unread store is not an empty one — first-run surfaces wait for the read")
     func emptinessIsNotKnownBeforeTheRead() async throws {
         let controller = controller

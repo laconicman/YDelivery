@@ -13,7 +13,7 @@ extension DeliveriesView {
     struct Content: View {
         /// The two shelves. Live orders first — the ones that can still change.
         struct Section: Identifiable {
-            enum Shelf { case live, past }
+            enum Shelf { case live, past, archived }
             let id: Shelf
             let rows: [Row]
         }
@@ -52,6 +52,14 @@ extension DeliveriesView {
             /// The whole route — the expanded row's `RouteLine`, contacts and door
             /// chips included (board `3e`).
             let route: [RoutePoint]
+            /// Shelved on the owner's say-so — every filter but «Archived»
+            /// hides the row (Design → "History is kept, not deleted").
+            var isArchived: Bool = false
+            /// The shelf door opens only for a finished row — `!status.isLive`,
+            /// plus an attention row whose provider word ended the claim
+            /// (`Order.isTerminalAttention`), the same line the Kit draws
+            /// before it would refuse.
+            var canArchive: Bool = false
             /// What typing in the search field can hit — addresses, contacts, the
             /// status in the sender's words, and «Ваши поля» values, precomputed on
             /// the root's side (board `4b`).
@@ -87,6 +95,10 @@ extension DeliveriesView {
         /// Why the rows may be stale — a sync failure renders beside history, never
         /// instead of it: what the device remembers is still worth reading.
         var syncError: String? = nil
+        /// Why the last archive gesture refused, when it did — a tried-and-failed
+        /// action renders as a notice row, never as silence (the swipe dismissed
+        /// itself before the store answered).
+        var actionError: String? = nil
         /// The pull-to-refresh ask — the root forwards it to the sync engine.
         var refresh: () async -> Void = {}
         let compose: () -> Void
@@ -95,6 +107,10 @@ extension DeliveriesView {
         var repeatOrder: (Row.ID, _ reversed: Bool) -> Void = { _, _ in }
         /// Open or close a row's provider trail — the status line's tap.
         var toggleTrail: (Row.ID) -> Void = { _ in }
+        /// Shelve a finished row — no confirmation, the shelf is reversible.
+        var archive: (Row.ID) -> Void = { _ in }
+        /// Bring a shelved row back — the same door from the other side.
+        var unarchive: (Row.ID) -> Void = { _ in }
 
         @State private var isSearchPresented = false
 
@@ -118,10 +134,36 @@ extension DeliveriesView {
             .tint(.gray)
         }
 
+        /// The shelf door, shared by the leading swipe and the context menu —
+        /// Unarchive for a shelved row, Archive for a finished one, nothing for
+        /// a row still moving (the Kit would refuse it anyway; the door simply
+        /// isn't offered). Reversible, so no confirmation is asked.
+        @ViewBuilder
+        private func shelfAction(for row: Row) -> some View {
+            if row.isArchived {
+                Button {
+                    unarchive(row.id)
+                } label: {
+                    Label("Unarchive", systemSymbol: .trayAndArrowUp)
+                }
+            } else if row.canArchive {
+                Button {
+                    archive(row.id)
+                } label: {
+                    Label("Archive", systemSymbol: .archivebox)
+                }
+            }
+        }
+
         var body: some View {
             Group {
                 if !rows.isEmpty {
                     List {
+                        if let actionError {
+                            Notice(.error, actionError)
+                                .font(.footnote)
+                                .listRowSeparator(.hidden)
+                        }
                         ForEach(sections) { section in
                             SwiftUI.Section {
                                 ForEach(section.rows) { row in
@@ -140,6 +182,12 @@ extension DeliveriesView {
                                                       edges: .bottom)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         orderActions(for: row.id)
+                                    }
+                                    .swipeActions(edge: .leading) {
+                                        shelfAction(for: row)
+                                    }
+                                    .contextMenu {
+                                        shelfAction(for: row)
                                     }
                                     if expanded {
                                         // The trail is a row of its own, not
@@ -181,6 +229,15 @@ extension DeliveriesView {
                         Label("Deliveries can't be read", systemSymbol: .exclamationmarkTriangle)
                     } description: {
                         Text(historyUnavailable)
+                    }
+                } else if hasAnyRows, filter.wrappedValue == .archived,
+                          searchText.wrappedValue.isEmpty {
+                    // The shelf, empty — its own words, not «Nothing to show»
+                    // (a typed query still gets the generic no-match face).
+                    ContentUnavailableView {
+                        Label("Nothing archived yet", systemSymbol: .archivebox)
+                    } description: {
+                        Text("Finished deliveries you shelve wait here.")
                     }
                 } else if hasAnyRows {
                     // Rows exist and none survive the picks — a filtered-empty
@@ -273,6 +330,7 @@ extension DeliveriesView.Content.Section.Shelf {
         switch self {
         case .live: "In progress"
         case .past: "History"
+        case .archived: "Archived"
         }
     }
 }
@@ -443,7 +501,7 @@ private extension DeliveriesView.Content.Row {
     static func fixture(
         status: OrderStatus, created: Date, origin: String?, destination: String,
         middles: Int = 0, price: Decimal? = nil, observed: Date? = nil,
-        detail: String? = nil, route: [RoutePoint] = []
+        detail: String? = nil, route: [RoutePoint] = [], archived: Bool = false
     ) -> Self {
         .init(id: UUID(), status: status, statusObservedAt: observed,
               created: created,
@@ -454,7 +512,8 @@ private extension DeliveriesView.Content.Row {
               priceText: price.map {
                   $0.formatted(.currency(code: "RUB").precision(.fractionLength(0...2)))
               },
-              route: route)
+              route: route,
+              isArchived: archived, canArchive: !status.isLive)
     }
 }
 
@@ -504,6 +563,43 @@ private let previewSections: [DeliveriesView.Content.Section] = [
     NavigationStack {
         DeliveriesView.Content(isSignedIn: true, sections: cancelled, hasAnyRows: true,
                                filter: .constant(.cancelled), compose: {})
+    }
+}
+
+#Preview("An archived row") {
+    // The shelved row's doors — Unarchive on the leading edge and the menu.
+    NavigationStack {
+        DeliveriesView.Content(
+            isSignedIn: true,
+            sections: [.init(id: .archived, rows: [
+                .fixture(status: .done, created: .init(timeIntervalSince1970: 1_789_000_000),
+                         origin: "Тверская, 1", destination: "Арбат, 10",
+                         price: 3_400, archived: true),
+            ])],
+            hasAnyRows: true, filter: .constant(.archived), compose: {})
+    }
+}
+
+#Preview("The Archived shelf") {
+    NavigationStack {
+        DeliveriesView.Content(
+            isSignedIn: true,
+            sections: [.init(id: .archived, rows: [
+                .fixture(status: .done, created: .init(timeIntervalSince1970: 1_789_000_000),
+                         origin: "Тверская, 1", destination: "Арбат, 10",
+                         price: 3_400, archived: true),
+                .fixture(status: .cancelled, created: .init(timeIntervalSince1970: 1_767_283_980),
+                         origin: "Новослободская, 3", destination: "Тверская-Ямская, 12",
+                         price: 1_240, archived: true),
+            ])],
+            hasAnyRows: true, filter: .constant(.archived), compose: {})
+    }
+}
+
+#Preview("Nothing archived yet") {
+    NavigationStack {
+        DeliveriesView.Content(isSignedIn: true, sections: [], hasAnyRows: true,
+                               filter: .constant(.archived), compose: {})
     }
 }
 

@@ -521,7 +521,8 @@ fields, so presence is proof the write carried a value:
   `providerEvents` (8), `orderMessages` (7 — `attachmentRef`, `authorHint`),
   `orderAttachments` (7), `attachmentBlobs` (`data` lands as a CKAsset plus its
   `data_hash`).
-- **Private tier:** `providerAccounts` (6), `orderPrivateStates` (4),
+- **Private tier:** `providerAccounts` (6), `orderPrivateStates` (5 —
+  `archivedAt` included),
   `savedPlaces` (16 — `pinned` included), `customFieldDefinitions` (8),
   `parcelTemplates` (3 — `id`, `name`, `pinned`), `parcelTemplateItems`
   (11 — `templateID` and every parcel measure).
@@ -544,9 +545,10 @@ dies between flushes can never read as a live delivery or start a Live
 Activity, and the clean flag takes the residue back. Because the directory is
 fresh, every write is a first INSERT — no prior tombstone exists under the
 deterministic keys, so the YD-34 swallow never fires and no resurrection
-UPDATEs remain. The production exposure in `recordOrder` stays open as
-<doc:TechDebt> **YD-34**: rows written by delete+insert or
-`INSERT OR REPLACE` are remotely deleted and never re-saved.
+UPDATEs remain. The production exposure this guarded against is discharged for
+the Kit's writers (0.4.13): synced tables are written by upsert + prune, never
+delete-then-reinsert or `INSERT OR REPLACE` (<doc:TechDebt> **YD-34** — the
+item stays open only as a regression watch for future raw writes).
 
 Nothing here promotes anything: the schema lives in **development**, and
 "Deploy Schema Changes" in CloudKit Console remains a deliberate, separate act.
@@ -579,9 +581,10 @@ granted), so their identity rides the share, not a provider account. The private
 the owner's and stays unshared; a courier's own private notes would be their own
 database's private tier — the courier edition is a participant, not a second owner.
 
-Known schema work that respects these rules and is next: `OrderPrivateState.archivedAt`
-(archive — owner's view, private tier, <doc:Design>); the signing columns once the
-participant key table is designed (<doc:Collaboration>).
+Known schema work that respects these rules and is next: the signing columns once the
+participant key table is designed (<doc:Collaboration>). `OrderPrivateState.archivedAt`
+has already landed — 0.4.14, the archive's home on the private tier, the seed carrying
+it (<doc:Design>).
 
 ## See Also
 

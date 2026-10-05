@@ -115,6 +115,16 @@ struct LocalizationTests {
         #expect(ru("Delivery options") == "Варианты доставки")
         #expect(ru("Prices refreshed — the quote expired")
                 == "Цены обновлены — расчёт устарел")
+
+        // The archive door's keys — the shelf's words and the still-moving refusal.
+        #expect(ru("Archive") == "В архив")
+        #expect(ru("Unarchive") == "Вернуть из архива")
+        #expect(ru("Archived") == "Архив")
+        #expect(ru("Nothing archived yet") == "В архиве пока пусто")
+        #expect(ru("Finished deliveries you shelve wait here.")
+                == "Убранные в архив завершённые доставки ждут здесь.")
+        #expect(ru("This delivery is still moving — archive it when it has finished.")
+                == "Эта доставка ещё в пути — уберите её в архив, когда она завершится.")
     }
 
     @Test("The provider's extra classes have sender words")

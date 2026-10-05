@@ -16,7 +16,9 @@ import YDeliveryKit
 /// `5a`). `.attention` stays *live*: a parked decision can recover, and an
 /// ended `.default` card lingers visibly while the recovery starts a second
 /// one — the same card must carry «needs your decision» and whatever answers
-/// it (review, PR #44).
+/// it (review, PR #44). An *archived* order ends its card whatever the status —
+/// the shelf is out of sight, and a shelved terminal-attention claim must not
+/// keep a Lock Screen card it no longer earns.
 /// Orders with no claim yet, and activities whose order vanished (an account
 /// switch wiped them), are swept the same way.
 @Observable @MainActor
@@ -45,20 +47,28 @@ final class LiveActivityController {
     nonisolated enum Disposition: Equatable {
         /// Live — the card starts if absent, updates when the state moved.
         case updating
-        /// Final — write the last card and end it. `linger` is the board's
-        /// delivered-only courtesy: four minutes, then it dismisses itself.
-        /// Cancelled ends `.default` — it stays until tapped.
-        case ending(linger: Bool)
+        /// How a final card leaves. `linger` is the board's delivered-only
+        /// courtesy — four minutes, then it dismisses itself; `stayUntilTapped`
+        /// keeps cancelled's last card until the sender swipes it; `immediate`
+        /// is the shelf's: a shelved order vanishes, nothing left to dismiss.
+        enum Ending: Equatable {
+            case linger, stayUntilTapped, immediate
+        }
+        /// Final — write the last card and end it on the given policy.
+        case ending(Ending)
         /// No card at all — a draft has no provider existence, a claim-less
         /// order none yet.
         case none
 
-        init(status: OrderStatus, hasClaim: Bool) {
+        init(status: OrderStatus, hasClaim: Bool, isArchived: Bool = false) {
+            // Shelved first — the archive is out of sight on every surface, so
+            // a running card ends now, whatever the status underneath.
+            guard !isArchived else { self = .ending(.immediate); return }
             guard hasClaim else { self = .none; return }
             switch status {
             case .searching, .active, .attention: self = .updating
-            case .done: self = .ending(linger: true)
-            case .cancelled: self = .ending(linger: false)
+            case .done: self = .ending(.linger)
+            case .cancelled: self = .ending(.stayUntilTapped)
             case .draft: self = .none
             }
         }
@@ -74,7 +84,8 @@ final class LiveActivityController {
         let live = Activity<DeliveryActivityAttributes>.activities
         for order in orders {
             let activity = live.first { $0.attributes.orderID == order.id }
-            switch Disposition(status: order.status, hasClaim: order.claimID != nil) {
+            switch Disposition(status: order.status, hasClaim: order.claimID != nil,
+                               isArchived: order.isArchived) {
             case .updating:
                 let state = contentState(for: order, orderNumber: orderNumber)
                 if let activity {
@@ -84,12 +95,14 @@ final class LiveActivityController {
                 } else {
                     start(order: order, state: state)
                 }
-            case .ending(let linger):
+            case .ending(let ending):
                 if let activity {
                     let final = contentState(for: order, orderNumber: orderNumber)
-                    let dismissal: ActivityUIDismissalPolicy = linger
-                        ? .after(.now.addingTimeInterval(Self.deliveredLinger))
-                        : .default
+                    let dismissal: ActivityUIDismissalPolicy = switch ending {
+                    case .linger: .after(.now.addingTimeInterval(Self.deliveredLinger))
+                    case .stayUntilTapped: .default
+                    case .immediate: .immediate
+                    }
                     nonisolated(unsafe) let activity = activity
                     Task { await activity.end(.init(state: final, staleDate: nil),
                                               dismissalPolicy: dismissal) }

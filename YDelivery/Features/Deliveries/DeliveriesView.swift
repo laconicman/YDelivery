@@ -47,6 +47,7 @@ struct DeliveriesView: View {
                 trailError: model.trailError,
                 historyUnavailable: store.historyUnavailable,
                 syncError: sync.lastError?.localizedDescription,
+                actionError: store.lastActionError,
                 refresh: { await sync.syncNow() },
                 compose: compose,
                 repeatOrder: { id, reversed in
@@ -58,7 +59,9 @@ struct DeliveriesView: View {
                         of: id,
                         using: { try await store.providerEvents(for: id) },
                         reduceMotion: reduceMotion)
-                }
+                },
+                archive: { id in Task { await store.setArchived(true, orderID: id) } },
+                unarchive: { id in Task { await store.setArchived(false, orderID: id) } }
             )
                 .navigationTitle("Deliveries")
                 .navigationDestination(for: UUID.self) { id in
@@ -268,29 +271,43 @@ extension DeliveriesView {
             sort: HistorySort, filter: HistoryFilter
         ) -> [Content.Section] {
             let query = query.trimmingCharacters(in: .whitespaces)
-            return sections.compactMap { section in
-                let rows = section.rows
+            let ordered: (Content.Row, Content.Row) -> Bool = { lhs, rhs in
+                switch sort {
+                case .newestFirst: lhs.created > rhs.created
+                case .oldestFirst: lhs.created < rhs.created
+                case .priceHighFirst:
+                    switch (lhs.price, rhs.price) {
+                    case let (left?, right?):
+                        left == right
+                            ? lhs.created > rhs.created
+                            : left > right
+                    case (nil, _?): false
+                    case (_?, nil): true
+                    case (nil, nil): lhs.created > rhs.created
+                    }
+                }
+            }
+            // The shelf answers to one pick only — «Archived» shows exactly the
+            // shelved rows, in one section; every other pick hides them.
+            if filter == .archived {
+                let rows = sections.flatMap(\.rows)
                     .filter { row in
-                        filter.admits(row.status)
+                        row.isArchived
                             && (query.isEmpty
                                 || row.searchableText.localizedCaseInsensitiveContains(query))
                     }
-                    .sorted { lhs, rhs in
-                        switch sort {
-                        case .newestFirst: lhs.created > rhs.created
-                        case .oldestFirst: lhs.created < rhs.created
-                        case .priceHighFirst:
-                            switch (lhs.price, rhs.price) {
-                            case let (left?, right?):
-                                left == right
-                                    ? lhs.created > rhs.created
-                                    : left > right
-                            case (nil, _?): false
-                            case (_?, nil): true
-                            case (nil, nil): lhs.created > rhs.created
-                            }
-                        }
+                    .sorted(by: ordered)
+                return rows.isEmpty ? [] : [Content.Section(id: .archived, rows: rows)]
+            }
+            return sections.compactMap { section in
+                let rows = section.rows
+                    .filter { row in
+                        !row.isArchived
+                            && filter.admits(row.status)
+                            && (query.isEmpty
+                                || row.searchableText.localizedCaseInsensitiveContains(query))
                     }
+                    .sorted(by: ordered)
                 return rows.isEmpty ? nil : Content.Section(id: section.id, rows: rows)
             }
         }
@@ -321,6 +338,7 @@ extension DeliveriesView {
         case needsDecision
         case delivered
         case cancelled
+        case archived
 
         var words: String {
             switch self {
@@ -328,16 +346,20 @@ extension DeliveriesView {
             case .needsDecision: String(localized: "Needs a decision")
             case .delivered: String(localized: "Delivered")
             case .cancelled: String(localized: "Cancelled")
+            case .archived: String(localized: "Archived")
             }
         }
 
-        /// Does a row's status pass — `.all` admits everything.
+        /// Does a row's status pass — `.all` admits everything. `.archived` never
+        /// reaches here: `visible` builds its section from `isArchived`, a flag a
+        /// status cannot see.
         func admits(_ status: OrderStatus) -> Bool {
             switch self {
             case .all: true
             case .needsDecision: status == .attention
             case .delivered: status == .done
             case .cancelled: status == .cancelled
+            case .archived: true
             }
         }
     }
@@ -386,6 +408,13 @@ extension DeliveriesView.Content.Row {
             statusDetail: order.statusDetail,
             priceText: order.priceText,
             route: order.route,
+            isArchived: order.isArchived,
+            // The shelf door opens only for history — a live order refuses, and
+            // the Kit agrees (WriteError.orderStillMoving). An attention row
+            // whose provider word ended the claim counts as history too.
+            canArchive: !order.status.isLive
+                || (order.status == .attention
+                    && Order.isTerminalAttention(order.providerStatus)),
             // Search hits the route's addresses, the people at the doors, the
             // status in the sender's words, and «Ваши поля» values — «Заказ 4417»
             // finds its order (board `4b`).

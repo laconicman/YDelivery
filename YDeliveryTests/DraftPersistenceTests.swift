@@ -216,14 +216,24 @@ struct DraftPersistenceTests {
         #expect(gone)
     }
 
+    @Test("A save parked through the tail lands — the seam's wait is not vacuous")
+    func saveLandsOnTheTail() async throws {
+        let store = makeStore()
+        store.persistDraft(fullModel().persistedDraft)
+        await store.awaitDraftTail()
+        #expect(await store.parkedDraft() != nil)
+    }
+
     @Test("A consume queued behind an in-flight save lands last")
     func consumeAfterSave() async throws {
         let store = makeStore()
+        // Both queue back-to-back on the tail before anything is awaited —
+        // the seam then waits the whole chain (each link awaits the previous).
+        // `nil` proves the order held: had the delete run first, the save
+        // would have resurrected the row.
         store.persistDraft(fullModel().persistedDraft)
         store.consumeParkedDraft()
-        // The tail is microseconds; the delay only has to outlive it. If the
-        // delete had lost the ordering, the save would have resurrected a row.
-        try await Task.sleep(for: .milliseconds(300))
+        await store.awaitDraftTail()
         #expect(await store.parkedDraft() == nil)
     }
 

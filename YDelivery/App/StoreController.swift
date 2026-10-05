@@ -57,6 +57,12 @@ final class StoreController {
     /// absence would otherwise read as "you have saved nothing").
     private(set) var templatesError: (any Error)?
 
+    /// Why the last shelf gesture refused, when it did — a swipe action dismisses
+    /// on selection and has nobody to throw to, so the failure lands here for the
+    /// list's notice seat (the archive door is reversible: the row stays, the
+    /// sender reads why). Cleared by the next write that lands.
+    private(set) var lastActionError: String?
+
     /// Whether the store has been read through at least once, successfully. Until it
     /// has, an empty ``orders`` means *not looked yet*, not *nothing there* — and a
     /// first-run surface that reads emptiness as "this sender is new" would greet a
@@ -279,7 +285,9 @@ final class StoreController {
     /// the next refresh where every input read succeeded.
     private func reindexSpotlightIfHealthy() {
         guard republication == .systemSurfaces, ordersError == nil, fieldsError == nil else { return }
-        reindexSpotlight(orders: orders, fields: orderFields)
+        // A shelved order leaves the index with the list — archive is out of
+        // sight everywhere, not only here.
+        reindexSpotlight(orders: orders.filter { !$0.isArchived }, fields: orderFields)
     }
 
     /// Queues the index write behind any in-flight one and returns — the caller's
@@ -342,9 +350,12 @@ final class StoreController {
         of orders: [Order],
         orderNumber: (Order.ID) -> String?
     ) -> [DeliverySnapshot.Entry] {
+        // Shelved first — the widget repeats the list's face, and archive is
+        // out of sight on every surface the owner looks at.
+        let visible = orders.filter { !$0.isArchived }
         let entry = { DeliverySnapshot.Entry(order: $0, orderNumber: orderNumber($0.id)) }
-        return orders.prefix(snapshotOrderLimit).map(entry)
-            + orders.dropFirst(snapshotOrderLimit).map(entry).filter(\.isLive)
+        return visible.prefix(snapshotOrderLimit).map(entry)
+            + visible.dropFirst(snapshotOrderLimit).map(entry).filter(\.isLive)
     }
 
     /// An order's field values — the detail view and the repeat path read this
@@ -595,6 +606,27 @@ final class StoreController {
         renderWidgetSnapshotIfHealthy()
     }
 
+    /// The owner's shelf — a finished delivery out of the everyday list, one
+    /// filter away, never written to the provider (Design → "History is kept,
+    /// not deleted"). Nobody renders a thrown error — the swipe is gone by the
+    /// time the store answers — so a refusal lands on ``lastActionError`` for
+    /// the list's notice row; the Kit's `orderStillMoving` gets the sender's
+    /// sentence here, the Kit keeping its own wording.
+    func setArchived(_ archived: Bool, orderID: Order.ID) async {
+        guard let database else { return }
+        do {
+            try await Self.setArchived(archived, orderID: orderID, in: database)
+            lastActionError = nil
+            await refresh()
+        } catch let error as AppDatabase.WriteError where error == .orderStillMoving {
+            lastActionError = String(
+                localized: "This delivery is still moving — archive it when it has finished.")
+        } catch {
+            lastActionError = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
+    }
+
     /// The fallback merge when the confirming read fails: the written order kept,
     /// minus any stale copy of itself — recording an *update* (a just-cancelled
     /// order) must not leave its previous status riding along as a second row
@@ -651,6 +683,14 @@ final class StoreController {
                     "Draft delete failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// A test seam (`@testable`-visible): waits for every draft write queued so
+    /// far to land — each link awaits the previous, so the latest handle is the
+    /// whole chain. A poll for the result could pass before a detached save
+    /// even ran; this is the real ordering edge.
+    func awaitDraftTail() async {
+        await draftWrites?.value
     }
 
     // MARK: Order sharing — the private CKShare door (doc:Collaboration)
@@ -800,6 +840,13 @@ final class StoreController {
     @concurrent
     private static func readOrders(_ database: AppDatabase) async throws -> [Order] {
         try database.readOrders()
+    }
+
+    @concurrent
+    private static func setArchived(
+        _ archived: Bool, orderID: Order.ID, in database: AppDatabase
+    ) async throws {
+        try database.setArchived(archived, orderID: orderID)
     }
 
     @concurrent
