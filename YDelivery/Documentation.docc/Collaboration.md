@@ -243,6 +243,17 @@ Kit #36 / app #92) is reshaped rather than shipped and migrated:
   case): signing is attempted per write; a write that could not be signed is stored
   unsigned and re-signed on the next successful write of that row — the reader sees
   *unsigned* in between, which is the truth.
+- **Read-side lessons from the review of #92** (2026-10-04 round, four findings, answered
+  in place and carried here rather than coded — the draft is parked). Attribution is a
+  property of the *share*: a private order has one writer, so the controller's lookup
+  returns no names for it (`orderIsShared` is the seam) and no screen can show what
+  another hides — the draft gated the detail and not the trail. A lazily fetched name
+  publishes under the same lineage guard as the row it decorates — the trail's
+  `generation`/`expandedID` check (`main` since #109) and the detail model's
+  `generation` — where the draft's `loadAuthorship` assigned after its await unguarded.
+  The detail destination is id-keyed and resolves the live row from `store.orders`
+  (since #32), so a verdict follows the row; the lookup beside it must be keyed too
+  (`.task(id:)` on the row's stamp), not fired once on appear.
 
 Sequencing: design review of this section (owner) → Kit schema PR (`participantKeys`,
 the two columns, read-time verdict API) → app adoption behind the same `Notice` roles →
