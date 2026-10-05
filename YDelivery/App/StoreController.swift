@@ -685,6 +685,14 @@ final class StoreController {
         }
     }
 
+    /// A test seam (`@testable`-visible): waits for every draft write queued so
+    /// far to land — each link awaits the previous, so the latest handle is the
+    /// whole chain. A poll for the result could pass before a detached save
+    /// even ran; this is the real ordering edge.
+    func awaitDraftTail() async {
+        await draftWrites?.value
+    }
+
     // MARK: Order sharing — the private CKShare door (doc:Collaboration)
 
     /// Whether the collaboration affordance can work at all — hidden when the
