@@ -30,6 +30,19 @@ the noise filters.
   declaration or when a stored property takes a model type (misfired on PR #17).
 - Flag a feature that needs API surface absent from `YandexDeliveryExpressAPI` being built
   against hand-rolled URLs — the package grows first (CLAUDE.md rule 7).
+- Flag a bare `.buttonStyle(…)` under `YDelivery/Features/` outside
+  `Button+Roles.swift`, and a tinted-word `Button` that shares a `List` row with content
+  or with another button — controls take a role's recipe by name (DesignSystem →
+  "Control roles"; a tinted word is a whole row, a header control, or a capsule).
+- Flag `.listRowBackground(…)` that replaces the grouped background with a clear or
+  transparent color — a highlight tint layers over the card (DesignSystem → "Lists and
+  rows").
+- Flag `Notice(.<role>, "literal")` in app code — the key crosses the package boundary
+  and resolves against the wrong catalog; pass `Text("literal")` so the app's module
+  resolves it.
+- Flag a `ReviewSheet` presented while `orderBlockers` is non-empty, or any blocker list
+  on the sheet — the sheet is consent and the run; the bar and the card carry the bounds
+  (DesignSystem → "The gateway").
 
 ## Anti-patterns to Flag
 
