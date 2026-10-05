@@ -198,6 +198,11 @@ extension NewDeliveryView {
 
         @ViewBuilder
         private var footerSection: some View {
+            // Borderless for the plain buttons: an automatic-styled button makes
+            // its whole `List` row the target, and these rows are words a sender
+            // reads before deciding — a tap on the refusal or on the moved price
+            // must not be the «Try again» (the draft card's add-row, same ruling).
+            // The prominent buttons keep their own style.
             Section {
                 switch ordering {
                 case .idle, .queued:
@@ -326,6 +331,7 @@ extension NewDeliveryView {
                     Text("Money moves and a courier is dispatched — cancelling later can cost the call-out fee.")
                 }
             }
+            .buttonStyle(.borderless)
         }
 
         private var phaseWords: LocalizedStringKey {
