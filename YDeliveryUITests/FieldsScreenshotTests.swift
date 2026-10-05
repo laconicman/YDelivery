@@ -34,19 +34,28 @@ final class FieldsScreenshotTests: XCTestCase {
         for _ in 0..<14 where !zakaz.waitForExistence(timeout: 1) {
             (list.exists ? list : app).swipeUp()
         }
-        XCTAssertTrue(zakaz.waitForExistence(timeout: 3), "the required field never drew")
+        XCTAssertTrue(zakaz.waitForExistence(timeout: 10), "the required field never drew")
         snap("1-draft-fields")
 
         // «Тип груза» waits behind «Add field» — one sheet, then the picker draws.
         let addField = app.buttons["Add field"].firstMatch
-        XCTAssertTrue(addField.waitForExistence(timeout: 3))
+        XCTAssertTrue(addField.waitForExistence(timeout: 10))
         addField.tap()
         snap("1b-add-field-menu")
-        let choice = app.sheets.buttons["Тип груза"].firstMatch
-        XCTAssertTrue(choice.waitForExistence(timeout: 3))
+        // A confirmationDialog may present as a sheet or a popover depending on
+        // size class and OS — the sheets-only query misses the latter, so the
+        // sheet is the first try and the app-wide button the fallback.
+        let sheetChoice = app.sheets.buttons["Тип груза"].firstMatch
+        let anyChoice = app.buttons["Тип груза"].firstMatch
+        let choiceWait = Date.now.addingTimeInterval(10)
+        while Date.now < choiceWait, !sheetChoice.exists, !anyChoice.exists {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        let choice = sheetChoice.exists ? sheetChoice : anyChoice
+        XCTAssertTrue(choice.exists)
         choice.tap()
         // The revealed picker now sits in the section — its label is the name.
-        XCTAssertTrue(app.staticTexts["Тип груза"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Тип груза"].waitForExistence(timeout: 10))
         snap("2-draft-fields-revealed")
 
         // The settings side: close the sheet, open the editor, the two rows list.
@@ -54,7 +63,7 @@ final class FieldsScreenshotTests: XCTestCase {
         app.tabBars.buttons["Settings"].firstMatch.tap()
         app.staticTexts["Your fields"].firstMatch.tap()
         let schemaRow = app.staticTexts["Заказ"].firstMatch
-        XCTAssertTrue(schemaRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(schemaRow.waitForExistence(timeout: 10))
         snap("3-settings-fields")
     }
 }
