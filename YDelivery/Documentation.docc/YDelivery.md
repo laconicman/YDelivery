@@ -39,4 +39,5 @@ actual behaviour, its package's own catalog outranks every assumption — for Ya
 
 - <doc:DesignSystem>
 - <doc:DesignSystemSemantics>
+- <doc:DesignSystemControls>
 - <doc:LinkGrammars>

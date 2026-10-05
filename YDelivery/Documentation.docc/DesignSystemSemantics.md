@@ -372,6 +372,8 @@ Every proposal below the survey was taken as proposed:
    "Review the order" while blocked (enabled — the sheet is where blockers
    explain themselves), the priced promise when ready, a non-interactive
    indicator while pricing.
+   *Superseded 2026-10-05* (<doc:DesignSystemControls>): the bar wears the `bound` look,
+   its tap scrolls to the first owed bound, and the sheet has no blocked state.
 4. **Diagnostics placement** — inline `ShareLink` where the error is the content;
    a "details in Settings → Diagnostics" footnote elsewhere.
 5. **`read-failure` glyph** — kept: a failed read must not read as an empty one.
@@ -423,5 +425,6 @@ Every proposal below the survey was taken as proposed:
 ## See Also
 
 - <doc:DesignSystem>
+- <doc:DesignSystemControls>
 - <doc:Design>
 - <doc:TechDebt>

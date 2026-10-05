@@ -77,7 +77,7 @@ appears without its glyph or its words** — the chip's rule generalized.
 | Role | Means | Chrome |
 |---|---|---|
 | `info` | guidance, provenance, invitations, empty states | footnote `.secondary`; glyph only where scanning needs it — carries no hue |
-| `bound` | a precondition, visible *before* it is broken — never an error | `Notice(.bound)` — attention-family `exclamationmark.circle` + words beside the field, in the section footer, or on the review-sheet row |
+| `bound` | a precondition, visible *before* it is broken — never an error | `Notice(.bound)` — attention-family `exclamationmark.circle` + words beside the field, in the section footer, on the item's or the stop's row, or on the gate's next-step line |
 | `warning` | proceedable-but-risky; an outcome that came back uncertain | `Notice(.warning)` — triangle + `feedbackWarningText` words |
 | `error` | an action tried and failed — a write, a command, a refusal | `Notice(.error)` — triangle or the cause's own glyph + `feedbackErrorText` words; the action sits beside it |
 | `success` | the outcome the sender wanted | `checkmark.circle.fill` + status words — or the status the outcome enters (`ReviewSheet.placed` wears `statusSearching`; a landed cancellation wears `statusCancelled`, never a green ✓) |
@@ -100,13 +100,17 @@ on in place.
 ### Placement grammar — whose bound it is decides where the sentence sits
 
 1. **A bound states itself where the decision is made** — the field that carries it, the
-   footer of the section whose membership it constrains, the review sheet when the bound
-   spans sections. A blocker first discoverable at review is a design bug.
-2. Per-field bounds sit beside the field; per-section bounds sit in the section footer
-   ("Prices appear when the route is complete." is the model); order-level bounds list on
-   the review sheet.
-3. **The review sheet is the union, not the source.** Every blocker it lists also exists,
-   quietly, at its owning surface — and each row is a door back to it.
+   footer of the section whose membership it constrains, the gate's next-step line when
+   the bound spans sections. A blocker first discoverable at the review sheet is a
+   design bug — the sheet lists none (controls session, 2026-10-05).
+2. Per-field bounds sit beside the field — and per-*item* on the item's row, per-*stop*
+   on the stop's row (a stop that carries nothing says so); per-section bounds sit in
+   the section footer ("Prices appear when the route is complete." is the model);
+   order-level bounds are the gate's — the bar's line names the first and counts the
+   rest.
+3. **The gate is the union, not the source.** Every bound the bar counts also exists at
+   its owning surface, and the bar's tap is the door to the first. (The review sheet
+   held this role until 2026-10-05; it now opens only when nothing is owed.)
 4. **Footers state bounds and consequences; trivia lives at the field it explains.**
 5. **An unavailable option stays visible and names its reason.**
 6. **An answered bound is quiet** — silence is the answered state; the marker persists,
@@ -126,15 +130,90 @@ pure storage failures (the log holds requests and responses, nothing about a dis
 Chrome localizes to the app's language; user and provider vocabulary stays verbatim,
 quoted where interpolated.
 
-### Order bar and CTAs
+### The gateway — the bar and the sheet (controls session, 2026-10-05)
 
-The bar's title names the destination its tap opens: while pricing it is a non-interactive
-indicator (a bar that cannot accept a tap must not look like a button), while blocked it
-reads "Review the order" and stays enabled — the sheet is where the blockers explain
-themselves — and when ready it names the priced promise. A CTA must never look reachable
-while a tap dead-ends, nor dead while a door exists. The look is one recipe with one name
-— `Button.primaryAction()` bundles bordered-prominent, large, headline, full width (a
-`ButtonStyle` could not keep the system's capsule); sites add only edge padding.
+The compose screen's one standing action is a *gate*, and the bar names its
+destination, never a promise it cannot keep: «К оформлению» ("Check out"; the sheet it
+opens is «Оформление заказа», "Checkout"). Three states:
+
+- **Hidden** while no prices were asked for — no route, nothing to go to.
+- **Blocked** while a bound is owed: the `bound` role's look — the capsule in the
+  neutral tint (`.bordered`, large), no accent fill, `exclamationmark.circle` in the
+  bound tint leading, the destination's words in `.primary`, and beneath them inside the
+  same capsule the next step with the count of the rest — «Укажите ценность вещи · ещё 2».
+  It is *not* disabled: a tap scrolls the card to the first owed bound and shakes it.
+  Every blocker therefore carries a short imperative *step* beside its full sentence —
+  the sentence stays on the row, the step feeds the bar and the rotor hint.
+- **Ready**: «К оформлению · 1 890 ₽» — destination first, the price as the fact. The
+  tap opens the sheet.
+
+The review sheet owns **consent and the run**, nothing else: route, parcel, options,
+class and price restated once; the one verb that orders — «Заказать за 1 890 ₽» ("Order
+for 1 890 ₽") — then placing · pricing · confirming · placed · failed (with #106's
+re-price disclosure) · unresolved. It has no blocked state: a sheet that opens on a
+blocked order is a bug, because every bound is stated on the card and the bar points at
+the first. *Supersedes* semantics ruling #3 (the enabled «Review the order» whose sheet
+listed the bounds) — the card is where blockers explain themselves now.
+
+**A control that cannot act states its reason on the same surface.** `DescribeContent`'s
+disabled Save with `saveUnavailableReason` beneath it was the precedent; the bar
+generalizes it. A control that swallows a tap with no reason beside it is the device
+drive's dead CTA; one that looks ready while the order is not is its mirror image.
+
+The look of the primary verb is one recipe with one name — `Button.primaryAction()`
+bundles bordered-prominent, large, headline, full width (a `ButtonStyle` could not keep
+the system's capsule); sites add only edge padding.
+
+## Control roles (controls session, 2026-10-05)
+
+Feedback roles describe sentences; control roles describe *shapes that act*. Each role
+owns one recipe with one name (`YDelivery/Features/Button+Roles.swift`); a site picks the
+role, never the style — **a bare `.buttonStyle(…)` in a feature file is the smell**
+(REVIEW.md). The test is the pin table's: a control and an indicator of one silhouette
+must still read apart with color removed. Survey, inventory and reasoning:
+<doc:DesignSystemControls>.
+
+| Role | Means | Recipe · name | Seat |
+|---|---|---|---|
+| primary action | the screen's one standing verb | bordered-prominent, large, headline, full width · `primaryAction()` | the bottom inset («New Delivery», the gate), the sheet's verb |
+| secondary action | the quieter choice beside a primary | `.bordered`, large, full width · `secondaryAction()` | only in an action stack under a primary («Close», «Leave it for now») |
+| card actions | two or three verbs on a card outside a `List` | `.borderedProminent` + `.bordered`, regular size, side by side, `actionSpacing` apart | the paste and location cards, the map callout |
+| action row | the whole row is the verb | tinted words (+ glyph), the List's default style, **alone in its row** | Settings' Sign In / Sign Out, «Share with the recipient», «Save as a template» |
+| add row | an action row whose verb is *add* | `plus` glyph + verb, alone in its row — one per section | «Add stop», «Add an item», «Add field» |
+| header action | arranges, filters, or opens a library *for* the section — never a member of it | footnote `Button`/`Menu`, trailing in the section header · `headerAction()` | Sort · ⓘ on «Delivery options»; Swap · Reorder on «Route»; «From library» on «What's inside» |
+| row door | the row opens its subject | `.plain` whole row (or a `NavigationLink`), trailing `chevron.forward` `.tertiary`, content never tinted · `rowDoor()` | «Options», item rows, Library rows, field rows |
+| prompt door | a row door not yet answered | its prompt in `.tertiary`, a `plus` glyph where the verb is *add*, untinted (field rule 4) | «Where to deliver?», «Who receives — a name and a phone» |
+| chip-as-control | a capsule that acts — expands, filters, picks | `StatusChip(status:disclosure:)`: `chevron.down` *inside* the capsule, up when open, a mini spinner while the read is out | the Deliveries row's chip |
+| chip-as-indicator | a capsule that reports | glyph + words, never a `Button`, never a chevron | `StatusChip` on the detail header, in widgets |
+| selectable card | one of several, chosen | `.plain` card with the accent selection stroke | `TariffCard` |
+| destructive verb | see the feedback roles table | `Button(role: .destructive)` | Cancel, Delete, Sign out |
+
+Two rules: **a tinted word is a whole row, a header control, or a capsule — never a
+fragment of a content row** (a fragment becomes a prompt or leaves for the header); and
+**a row door carries its chevron whatever it opens** — the mark means "this row opens",
+not "this row pushes", so a sheet-opening row and a pushing row read the same.
+
+*Held in reserve:* one row per action (Settings-style, nothing shares a row) — the most
+Apple-default and the tallest; the add row already is it for one action, so adopting it
+wholesale is a move of two buttons, not a redesign (<doc:DesignSystemControls>).
+
+## Lists and rows (controls session, 2026-10-05)
+
+- **One list style per screen** — inset-grouped, every section a card. A row's selection
+  or highlight tint layers *over* the card background (the grouped color with the tint
+  on top in one `listRowBackground`), never replaces it: a transparent row background
+  drops the whole section out of its card (the route card, 2026-10-05), and its
+  separators then run between edges no neighbour shares.
+- **Separators follow the system.** They inset to the text after a leading badge or
+  glyph — Settings does the same — and a section's chrome (header controls) is not a
+  row, so nothing hides or fakes a separator to attach it.
+- **Rows wrap, never truncate** — reflow rule 5 applied to list rows: two lines for an
+  address (three at accessibility sizes), the origin yielding before the destination.
+- **Two disclosures in one row read apart by seat**: the push accessory `›` sits beside
+  the lines it opens (the route lines, not the cell's centre — the system accessory is
+  replaced by the row's own mark), the in-place disclosure `⌄` sits *inside* the control
+  it expands (the chip); two chevrons never share a trailing edge. Rule 7's trailing
+  edge keeps the stamp and one accessory.
 
 ## Pin & badge taxonomy (board `2c`)
 
@@ -232,5 +311,6 @@ is visible in the same file. Adopt Pow only if its transition set is wanted broa
 
 - <doc:Design>
 - <doc:DesignSystemSemantics>
+- <doc:DesignSystemControls>
 - <doc:LinkGrammars>
 - <doc:Vision>

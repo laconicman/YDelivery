@@ -318,6 +318,9 @@ invests contacts and item values into a route that can never be ordered.
 - **Discharge:** surface per-point serviceability at pricing time if the API
   exposes it (check `offers/calculate`'s per-point fields); at minimum translate
   the refusal — map the point index back to the draft's own stop name.
+- **UI half, ruled 2026-10-05** (<doc:DesignSystemControls>): a stop that carries nothing
+  states its bound on its row and blocks the order before the wire can refuse it. The
+  provider-side half — per-point serviceability at pricing time — stays open.
 
 ## YD-20 — A shrinking offer count explains itself nowhere — **open**
 
@@ -663,12 +666,15 @@ calques where Russian has its own word (author, 2026-10-05).
 - **Discharge:** the author reads the `ru` column of each catalog and edits in place —
   `xcstringstool`/Xcode, never by hand (the catalogs are structured files); YD-35's
   locale-aware tests are the guard that a rewording breaks nothing.
+- **Instances found 2026-10-05:** «Reorder» → «Повторить» (that is Repeat's word —
+  «Переставить»), «Order for %@» → «Заказ для %@» (a calque — «Заказать за %@»); both go
+  with the controls retrofit. The rest of the column is still unread.
 
-## YD-39 — Button appearance is chosen per site, not per role — **open**
+## YD-39 — Button appearance is chosen per site, not per role — **ruled 2026-10-05; sweep in flight**
 
 A control's look is decided where it is written, not by what it does. The inventory
 today: `Button.primaryAction()` for the screen's one standing action (DesignSystem →
-"Order bar and CTAs") — the only role with a name; borderless tinted words for row
+"The gateway", then "Order bar and CTAs") — the only role with a name; borderless tinted words for row
 actions (the route card's `actions`, the add-doors, the callout's pair, `PointRow`'s
 contact line); `.plain` where the whole row is the door (item rows, blockers, the
 Options summary); `.bordered` beside a prominent sibling on the paste and location
@@ -693,6 +699,11 @@ of the add-row misfire — PR #131).
   one pass over the sites above, a preview per role, and a REVIEW.md cue that a bare
   `.buttonStyle(…)` at a call site is the smell. `primaryAction()` is the step already
   taken.
+- **Ruled by:** the controls session (<doc:DesignSystemControls>) — the roles table in
+  <doc:DesignSystem> → "Control roles", one recipe per role in `Button+Roles.swift`, and
+  the chevron inside the chip as the control/indicator line. Discharged when the two
+  retrofit PRs land (the compose card; the Deliveries row) and no bare `.buttonStyle(…)`
+  remains under `YDelivery/Features/` outside `Button+Roles.swift`.
 
 ## See Also
 
