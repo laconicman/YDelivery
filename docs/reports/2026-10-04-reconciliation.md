@@ -99,3 +99,39 @@ Installed as `swiftui-pro` (byte-identical to upstream v1.1). A good review chec
 deprecated APIs, Reduce Motion, `withAnimation … completion:` over delays — but generic:
 it has nothing on List row-height mechanics and would not have found the trail bug. Worth
 running as a lint pass over views; not a diagnostician.
+
+## 9. Addendum — the parked database and schema work (2026-10-05)
+
+Done after the report above, on the owner's "proceed with the parked database and schema
+issues" — nothing extraordinary came up:
+
+- **Kit 0.4.13 — the synced-write discipline** ([Kit #41](https://github.com/laconicman/YDeliveryKit/pull/41)).
+  Confirmed in `sqlite-data` 1.12.0 source: a synced key deleted and re-inserted in one
+  transaction keeps its metadata tombstone (the remote record is deleted, the local row
+  never re-uploads), and `INSERT OR REPLACE` never re-queues a save. `recordOrder` did the
+  first to every order's stops and custom fields — **every other device of the account
+  lost the stops on the next refresh**, silent locally, live on every TestFlight build
+  since sync began working (0.4.11). Synced rows now upsert in place and the removed set
+  prunes with true deletes; a cleared custom field keeps its row with an empty value so a
+  refill never lands on a tombstone within the delete's round-trip window; a copied
+  template item gets a derived row id of its own, distinct per occurrence. Four
+  write-discipline tests failed on `main` and pass. YD-34 discharged for the Kit's writers;
+  the upstream behaviour stays a documented write rule (Kit README).
+- **Kit 0.4.14 — `archivedAt` on the private tier** ([Kit #42](https://github.com/laconicman/YDeliveryKit/pull/42)):
+  `setArchived(_:orderID:)` refuses a still-moving order, stamps once, unarchives freely;
+  `readOrders` joins the private row; legacy JSON decodes.
+- **App #121 — the archive** (Design → "History is kept, not deleted"): swipe + context
+  menu on finished rows — `done`, `cancelled`, and attention rows whose provider word ends
+  the claim (`estimating_failed`, `performer_not_found`, `failed`, `returned`,
+  `returned_finish`); the Archived filter; widget, Spotlight and Live Activity skip or end
+  for shelved orders; the seed carries the column (sixteen record types, `archivedAt`
+  included); RU words.
+- **App #122** — the two screenshot UI harnesses that flaked on the hosted runner wait
+  longer after a tap and match the dialog however it presents.
+- **Direction recorded** (#120): Vision, Schema (what not to cement), Collaboration (every
+  writer signs — `participantKeys`, trust pinned per participant with chained key rows),
+  Roadmap. Kit #36 / app #92 (owner-only signing) stay parked as the quarry for that
+  design — **a design review by the owner is the next step there, before any code.**
+
+Still open from §7: the diagnostics event records + launch header; `surge_ratio` caption;
+cancel-on-abandon for refused `readyToAccept` claims.
