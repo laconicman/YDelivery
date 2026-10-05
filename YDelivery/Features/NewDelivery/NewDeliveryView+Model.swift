@@ -1060,6 +1060,10 @@ extension NewDeliveryView {
             /// bounds about one subject stay two rows.
             let id: String
             let message: String
+            /// The short imperative the order bar's second line reads — the
+            /// sentence that names the first thing the order still needs
+            /// (DesignSystem → "The gateway"). `message` stays for the rows.
+            let step: String
             let destination: Destination
         }
 
@@ -1070,6 +1074,58 @@ extension NewDeliveryView {
             return name.isEmpty ? String(localized: "item \(index + 1)") : name
         }
 
+        /// The one predicate set `orderBlockers` and the row bounds share — one
+        /// source, so the card's rows and the order's gate can never disagree on
+        /// what counts as missing.
+        private func itemMissesName(_ item: ParcelItem) -> Bool {
+            item.name.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        private func itemMissesSpec(_ item: ParcelItem) -> Bool {
+            itemMissesName(item) || item.cost == nil
+        }
+        private func itemMissesValue(_ item: ParcelItem) -> Bool {
+            (item.cost ?? 0) <= 0
+        }
+        private func itemMissesWeight(_ item: ParcelItem) -> Bool {
+            (item.weightKg ?? 1) <= 0
+        }
+        private func itemMissesCount(_ item: ParcelItem) -> Bool {
+            item.quantity < 1
+        }
+        /// A stop nothing boards or leaves at — only a bound when there is a
+        /// parcel at all (an empty-items draft already has its own blocker, and
+        /// a two-point route's ends are always covered by the default journey).
+        private func stopCarriesNothing(at index: Int) -> Bool {
+            !items.isEmpty && parcelActions(at: index) == nil
+        }
+
+        /// The item row's own bound, first unmet of name / declared value /
+        /// weight / count — the same misses `orderBlockers` gates on, stated in
+        /// the row's words rather than the sheet's.
+        func itemBound(_ item: ParcelItem) -> String? {
+            if itemMissesName(item) {
+                return String(localized: "Needs a name.")
+            }
+            if item.cost == nil || itemMissesValue(item) {
+                return String(localized: "Needs a declared value — the parcel is insured for it.")
+            }
+            if itemMissesWeight(item) {
+                return String(localized: "Weight has to be more than zero.")
+            }
+            if itemMissesCount(item) {
+                return String(localized: "Needs a count of at least one.")
+            }
+            return nil
+        }
+
+        /// The stop row's parcel bound — "nothing happens here" said on the row
+        /// itself, where `parcelActions` would otherwise sit empty.
+        func parcelBound(at index: Int) -> String? {
+            stopCarriesNothing(at: index)
+                ? String(localized: "Nothing boards or leaves here — assign a parcel.")
+                : nil
+        }
+
         /// Everything that must be true before the confirm button exists — every bound
         /// stated as a sentence the review sheet renders *and* the door that resolves
         /// it (the wire would otherwise say it as a 400).
@@ -1078,14 +1134,15 @@ extension NewDeliveryView {
             // One door per incomplete stop, kind-qualified like the item doors:
             // a single generic row would leave the second bound invisible after
             // the first is fixed.
-            for point in points where point.place == nil {
+            for (index, point) in points.enumerated() where point.place == nil {
                 blockers.append(.init(
                     id: "route/\(point.id)",
                     message: String(localized: "Every stop needs its place on the map."),
+                    step: String(localized: "Place stop \(index + 1) on the map"),
                     destination: .point(point.id)
                 ))
             }
-            for point in points {
+            for (index, point) in points.enumerated() {
                 // The wire's contact is `name` *and* `phone`, both required — a
                 // dialable number with nobody attached still 400s at claim time
                 // (DeepWiki consult on the spec, 2026-09-18).
@@ -1094,6 +1151,7 @@ extension NewDeliveryView {
                     blockers.append(.init(
                         id: "contact/\(point.id)",
                         message: String(localized: "The courier calls ahead — every stop needs a person: a name and a phone."),
+                        step: String(localized: "Name the person at stop \(index + 1)"),
                         destination: .contact(point.id)
                     ))
                 } else if PhoneFormat.dialable(contact?.phone ?? "") == nil {
@@ -1104,61 +1162,86 @@ extension NewDeliveryView {
                     blockers.append(.init(
                         id: "phone/\(point.id)",
                         message: String(localized: "A phone the courier can't dial is no phone yet — finish the number."),
+                        step: String(localized: "Finish the phone at stop \(index + 1)"),
                         destination: .contact(point.id)
                     ))
                 }
+            }
+            // A stop nothing boards or leaves at is a bound the route itself
+            // carries — its door is the first item's editor, which owns the
+            // stop chooser. Two-point routes never produce it (every item rides
+            // the ends); empty items already have the "items" blocker.
+            for index in points.indices where stopCarriesNothing(at: index) {
+                blockers.append(.init(
+                    id: "stopParcels/\(points[index].id)",
+                    message: String(localized:
+                        "Nothing boards or leaves at stop \(index + 1) — assign a parcel to it."),
+                    step: String(localized: "Assign a parcel to stop \(index + 1)"),
+                    destination: .item(items[0].id)
+                ))
             }
             if items.isEmpty {
                 blockers.append(.init(
                     id: "items",
                     message: String(localized: "Say what's inside — the parcel is insured by its declared value."),
+                    step: String(localized: "Add an item"),
                     destination: .newItem
                 ))
             } else {
                 // One door per invalid item, named when it isn't the only one — a
                 // single generic row would leave the second bound invisible after
                 // the first is fixed.
-                let specMisses = items.enumerated().filter {
-                    $0.element.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.element.cost == nil
-                }
+                let specMisses = items.enumerated().filter { itemMissesSpec($0.element) }
                 for (offset, item) in specMisses {
                     blockers.append(.init(
                         id: "itemSpec/\(item.id)",
                         message: specMisses.count > 1
                             ? String(localized: "«\(itemLabel(item, at: offset))» needs a name and a declared value.")
                             : String(localized: "Every item needs a name and a declared value."),
+                        step: specMisses.count > 1
+                            ? String(localized: "Name and value for «\(itemLabel(item, at: offset))»")
+                            : String(localized: "Name and value for the item"),
                         destination: .item(item.id)))
                 }
                 if specMisses.isEmpty {
                     // A declared value is what the parcel is insured for, so zero is
                     // not a value — and the bound is stated here rather than
                     // discovered as a 400 (review, PR #22).
-                    let valueMisses = items.enumerated().filter { ($0.element.cost ?? 0) <= 0 }
+                    let valueMisses = items.enumerated().filter { itemMissesValue($0.element) }
                     for (offset, item) in valueMisses {
                         blockers.append(.init(
                             id: "itemValue/\(item.id)",
                             message: valueMisses.count > 1
                                 ? String(localized: "A declared value of nothing insures nothing — say what «\(itemLabel(item, at: offset))» is worth.")
                                 : String(localized: "A declared value of nothing insures nothing — say what each item is worth."),
+                            step: valueMisses.count > 1
+                                ? String(localized: "Set the value of «\(itemLabel(item, at: offset))»")
+                                : String(localized: "Set the item's value"),
                             destination: .item(item.id)))
                     }
                 }
-                let weightMisses = items.enumerated().filter { ($0.element.weightKg ?? 1) <= 0 }
+                let weightMisses = items.enumerated().filter { itemMissesWeight($0.element) }
                 for (offset, item) in weightMisses {
                     blockers.append(.init(
                         id: "itemWeight/\(item.id)",
                         message: weightMisses.count > 1
                             ? String(localized: "«\(itemLabel(item, at: offset))» has to weigh more than zero.")
                             : String(localized: "A stated weight has to be more than zero."),
+                        step: weightMisses.count > 1
+                            ? String(localized: "Set the weight of «\(itemLabel(item, at: offset))»")
+                            : String(localized: "Set the item's weight"),
                         destination: .item(item.id)))
                 }
-                let countMisses = items.enumerated().filter { $0.element.quantity < 1 }
+                let countMisses = items.enumerated().filter { itemMissesCount($0.element) }
                 for (offset, item) in countMisses {
                     blockers.append(.init(
                         id: "itemCount/\(item.id)",
                         message: countMisses.count > 1
                             ? String(localized: "«\(itemLabel(item, at: offset))» needs a count of at least one.")
                             : String(localized: "Every item needs a count of at least one."),
+                        step: countMisses.count > 1
+                            ? String(localized: "Set the count of «\(itemLabel(item, at: offset))»")
+                            : String(localized: "Set the item's count"),
                         destination: .item(item.id)))
                 }
             }
@@ -1169,6 +1252,7 @@ extension NewDeliveryView {
                     id: "fieldSchema",
                     message: String(localized:
                         "Your fields couldn't load — the order waits until the schema is readable."),
+                    step: String(localized: "Retry loading your fields"),
                     destination: .fieldsSchema
                 ))
             } else if fieldsCacheIsStale {
@@ -1179,6 +1263,7 @@ extension NewDeliveryView {
                     id: "fieldSchemaStale",
                     message: String(localized:
                         "Your fields changed but could not be re-read — try again before ordering."),
+                    step: String(localized: "Re-read your fields"),
                     destination: .fieldsSchema
                 ))
             }
@@ -1189,6 +1274,7 @@ extension NewDeliveryView {
                         message: String(
                             localized: "«\(field.name)» is required — the order doesn't leave without it."
                         ),
+                        step: String(localized: "Fill in «\(field.name)»"),
                         destination: .field(field.id)
                     ))
                 }
@@ -1197,6 +1283,7 @@ extension NewDeliveryView {
                 blockers.append(.init(
                     id: "offer",
                     message: String(localized: "Pick a delivery class once prices arrive."),
+                    step: String(localized: "Pick a delivery class"),
                     destination: .offer
                 ))
             } else if let offer = selectedOffer, !offer.tariff.isOrderable {
@@ -1206,6 +1293,7 @@ extension NewDeliveryView {
                 blockers.append(.init(
                     id: "offerUnorderable",
                     message: UnsendableTariff(tariff: offer.tariff).localizedDescription,
+                    step: String(localized: "Pick another delivery class"),
                     destination: .offer
                 ))
             }
