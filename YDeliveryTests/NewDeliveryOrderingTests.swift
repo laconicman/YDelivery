@@ -243,7 +243,7 @@ struct NewDeliveryOrderingTests {
     }
 
     @Test("Create → watch → accept lands placed, with the order history remembers")
-    func happyPathPlaces() async {
+    func happyPathPlaces() async throws {
         let model = readyDraft()
         await priced(model)
         model.confirmOrder()
@@ -267,12 +267,12 @@ struct NewDeliveryOrderingTests {
         )
 
         #expect(model.ordering == .placed)
-        let order = try? #require(model.placedOrder)
-        #expect(order?.status == .searching)
-        #expect(order?.claimID == "claim-1")
-        #expect(order?.price == "1190")
-        #expect(order?.tariff == "express")
-        #expect(order?.route.first?.contactGivenName == "Иван")
+        let order = try #require(model.placedOrder)
+        #expect(order.status == .searching)
+        #expect(order.claimID == "claim-1")
+        #expect(order.price == "1190")
+        #expect(order.tariff == "express")
+        #expect(order.route.first?.contactGivenName == "Иван")
     }
 
     /// The answers a claim carries are fixed when the provider takes it — a
@@ -996,13 +996,13 @@ struct NewDeliveryOrderingTests {
     }
 
     @Test("The order carries the schedule the quote was built from")
-    func orderMatchesTheQuotedSchedule() async {
+    func orderMatchesTheQuotedSchedule() async throws {
         let model = readyDraft()
         model.options.due = Date.now.addingTimeInterval(-3600) // parked past its pickup
         await priced(model)
 
-        let request = try? #require(model.orderRequest)
-        #expect(request?.options.due == nil,
+        let request = try #require(model.orderRequest)
+        #expect(request.options.due == nil,
                 "pricing quoted an immediate run; sending the expired time could not produce it")
 
         // And what the sender reads before confirming says the same thing. The review
