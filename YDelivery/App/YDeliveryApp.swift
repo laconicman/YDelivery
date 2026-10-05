@@ -77,6 +77,7 @@ struct YDeliveryApp: App {
         #if DEBUG
         Task {
             await Self.seedFieldsIfFlagged(store)
+            await Self.seedTemplatesIfFlagged(store)
             await Self.seedHistoryIfFlagged(store, database: database)
             await Self.seedCloudKitSchemaIfFlagged()
             await Self.cleanCloudKitSeedIfFlagged()
@@ -162,6 +163,19 @@ struct YDeliveryApp: App {
         try? await store.saveField(CustomFieldDefinition(
             name: "Тип груза", kind: .choice, choices: ["Документы", "Коробка"],
             isOptional: true, isShownByDefault: false, position: 1))
+    }
+
+    /// `--uitest-templates`: seed one parcel template through the real save path —
+    /// the write «Save as a template» performs — so the draft's «Add from library»
+    /// door exists for the UI test that drives it. Idempotent, like the fields seed.
+    private static func seedTemplatesIfFlagged(_ store: StoreController) async {
+        guard ProcessInfo.processInfo.arguments.contains("--uitest-templates") else { return }
+        await store.refresh()
+        guard store.parcelTemplates.isEmpty else { return }
+        var item = ParcelItem()
+        item.name = "Папка с документами"
+        item.cost = 1000
+        try? await store.saveTemplate(item, name: "Папка с документами")
     }
 
     /// `--uitest-history`: seed a history the Deliveries screen can show — five

@@ -510,6 +510,10 @@ extension NewDeliveryView {
                     // Both add-doors in one row — the library's entrance used to
                     // squat as a chips row of its own. Each label degrades to its
                     // short form on its own (ViewThatFits per button).
+                    // Borderless, like the route card's action row: with the
+                    // automatic style the `List` row is the hit target and one
+                    // tap fires every button in it — «Add from library» opened
+                    // the item editor and its dialog never drew (owner, 2026-10-05).
                     HStack {
                         Button(action: addItem) {
                             ViewThatFits(in: .horizontal) {
@@ -537,6 +541,7 @@ extension NewDeliveryView {
                             }
                         }
                     }
+                    .buttonStyle(.borderless)
                 } header: {
                     // «What's inside», not «Parcel»: several items ride one order,
                     // and the singular read as a bound that does not exist (author,
