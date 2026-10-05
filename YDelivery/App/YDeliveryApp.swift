@@ -167,15 +167,18 @@ struct YDeliveryApp: App {
 
     /// `--uitest-templates`: seed one parcel template through the real save path —
     /// the write «Save as a template» performs — so the draft's «Add from library»
-    /// door exists for the UI test that drives it. Idempotent, like the fields seed.
+    /// door exists for the UI test that drives it. Idempotent by the fixture's name,
+    /// not by the store being empty: a simulator that already holds other templates
+    /// still gets this one, and repeated launches don't accumulate it (review, PR #131).
     private static func seedTemplatesIfFlagged(_ store: StoreController) async {
         guard ProcessInfo.processInfo.arguments.contains("--uitest-templates") else { return }
         await store.refresh()
-        guard store.parcelTemplates.isEmpty else { return }
+        let name = "Папка с документами"
+        guard !store.parcelTemplates.contains(where: { $0.name == name }) else { return }
         var item = ParcelItem()
-        item.name = "Папка с документами"
+        item.name = name
         item.cost = 1000
-        try? await store.saveTemplate(item, name: "Папка с документами")
+        try? await store.saveTemplate(item, name: name)
     }
 
     /// `--uitest-history`: seed a history the Deliveries screen can show — five
