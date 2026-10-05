@@ -647,6 +647,20 @@ card can show in the strip, but the review sheet blocks it
   `offer_payload` applies, availability by country), then the package's TD-25, then
   a design round for the same-day flow.
 
+## YD-38 — The Russian wording is unreviewed — **open**
+
+The Russian in the three catalogs (app, widgets, share) — the first pass (#111), the
+sweep that closed every missing key (#119) and the strings the tariff, toolbar and
+archive work added since (#117, #118, #121) — was written in unattended sessions and has
+not been read by a native speaker. It may be imprecise and carry loan translations and
+calques where Russian has its own word (author, 2026-10-05).
+
+- **Cost:** the app's main audience reads it; a calque reads as machine output and
+  undercuts the care the rest of the screen shows.
+- **Discharge:** the author reads the `ru` column of each catalog and edits in place —
+  `xcstringstool`/Xcode, never by hand (the catalogs are structured files); YD-35's
+  locale-aware tests are the guard that a rewording breaks nothing.
+
 ## See Also
 
 - <doc:Design>
