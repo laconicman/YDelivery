@@ -40,5 +40,15 @@
 	     declares the same key to render them. -->
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<!-- The launch screen: the icon's artwork on its background, no text (HIG →
+	     Launching: text on a launch screen is never localized). UILaunchScreen
+	     takes one solid color, so LaunchBackground is the icon gradient's midpoint. -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchIcon</string>
+	</dict>
 </dict>
 </plist>
