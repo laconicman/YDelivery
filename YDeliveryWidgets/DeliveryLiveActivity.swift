@@ -34,22 +34,33 @@ struct DeliveryLiveActivity: Widget {
                         .font(.caption)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack {
-                        OrderIdentity(number: context.state.orderNumber, size: .compact)
-                        Text(verbatim: "·")
-                        Text(context.state.destinationAddress)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        callButton(phone: context.state.destinationPhone)
+                    VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                        HStack {
+                            OrderIdentity(number: context.state.orderNumber, size: .compact)
+                            Text(verbatim: "·")
+                            Text(context.state.destinationAddress)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            callButton(phone: context.state.destinationPhone)
+                        }
+                        .font(.caption2)
+                        // Board `5a` gives the island no as-of line; a stale
+                        // card earns one — the Lock Screen's own words
+                        // (review, PR #134).
+                        if context.isStale {
+                            ActivityStamp(observedAt: context.state.providerObservedAt,
+                                          isStale: true)
+                        }
                     }
-                    .font(.caption2)
                 }
             } compactLeading: {
                 statusGlyph(context.state.status)
             } compactTrailing: {
+                // Stale, the frozen «~14 мин» would read as a wait from now;
+                // the clock form stays true however old the reading is.
                 ETALabel(at: context.state.etaAt,
                          observedAt: context.state.providerObservedAt,
-                         presentation: .duration)
+                         presentation: context.isStale ? .clock : .duration)
                     .font(.caption2.weight(.semibold))
             } minimal: {
                 statusGlyph(context.state.status)
@@ -144,30 +155,9 @@ private struct LockScreenView: View {
                     }
                 }
             }
-            stamp
+            ActivityStamp(observedAt: state.providerObservedAt, isStale: isStale)
         }
         .padding(Layout.Spacing.edge)
-    }
-
-    /// The as-of line, or its stale form — the one place the card admits the
-    /// app has not been able to refresh it.
-    @ViewBuilder
-    private var stamp: some View {
-        if isStale {
-            Group {
-                if let observed = state.providerObservedAt {
-                    Text("Not updating · as of \(Text(observed, style: .time))")
-                } else {
-                    Text("Not updating")
-                }
-            }
-            .font(.caption2.weight(.medium))
-        } else if let observed = state.providerObservedAt {
-            (Text("as of ")
-                + Text(observed, style: .time))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
     }
 
     private var headline: String {
@@ -176,6 +166,32 @@ private struct LockScreenView: View {
             return String(localized: phrase)
         }
         return String(localized: state.status.words)
+    }
+}
+
+/// The as-of line, or its stale form — the one place a card admits the app
+/// has not been able to refresh it. The Lock Screen always carries it; the
+/// expanded island only once the card is stale.
+private struct ActivityStamp: View {
+    let observedAt: Date?
+    let isStale: Bool
+
+    var body: some View {
+        if isStale {
+            Group {
+                if let observedAt {
+                    Text("Not updating · as of \(Text(observedAt, style: .time))")
+                } else {
+                    Text("Not updating")
+                }
+            }
+            .font(.caption2.weight(.medium))
+        } else if let observedAt {
+            (Text("as of ")
+                + Text(observedAt, style: .time))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -203,5 +219,14 @@ private extension DeliveryActivityAttributes.ContentState {
 #Preview("Lock screen, stale") {
     LockScreenView(state: .previewEnRoute, isStale: true)
         .padding(.vertical)
+}
+
+#Preview("Stamp — live, stale, stale with no stamp") {
+    VStack(alignment: .leading, spacing: Layout.Spacing.tight) {
+        ActivityStamp(observedAt: .now, isStale: false)
+        ActivityStamp(observedAt: .now, isStale: true)
+        ActivityStamp(observedAt: nil, isStale: true)
+    }
+    .padding()
 }
 #endif
