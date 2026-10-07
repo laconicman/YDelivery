@@ -231,9 +231,9 @@ with injected identities, the device pass proves CloudKit's stamping. The parked
 
 | Phase | Steps | Done when |
 |---|---|---|
-| **T0 · Epoch 2** | the doctrine (docs) → a new container, a new file, one import (a Kit minor, then an app PR) | A tester's device opens with its history intact, the development schema shows the new catalogue, production deployed once. |
+| **T0 · Epoch 2** | the doctrine (docs) → a new container, a new file, one import (a Kit minor, then an app PR); every Stage 1 table, `orderRatings` included, is created, seeded and deployed here | A tester's device opens with its history intact, the development schema shows the new catalogue, production deployed once. |
 | **T1 · Trusted history** | signing primitives and per-device key custody → `participantKeys`, `memberships` and the identity authority → signed facts and derived integrity (three Kit patches) → the app adopts the trust layer, with the two-device pass before any TestFlight build | A participant's rewritten order event shows as "written by a participant" on the owner's phone, with the name the share discloses, and a tampered stored event shows "signature does not match". Verified on two devices, two accounts. |
-| **T2 · Ratings** | the `orderRatings` table (Kit) → the rating UX (the star control's role ruled with the owner) | The receiver rates the courier from the chat; the sender sees the star on the order; posting again replaces the shown rating and keeps the history. |
+| **T2 · Ratings** | the `orderRatings` writer and reads (Kit; the table itself is deployed at T0) → the rating UX (the star control's role ruled with the owner) | The receiver rates the courier from the chat; the sender sees the star on the order; posting again replaces the shown rating and keeps the history. |
 | **T3 · Legs and couriers** | `legs` (Kit then app), gated on a second provider package or the courier edition | An independent courier accepts a leg and their events verify as the leg's writer. |
 | **T4 · The host** | the identity layer and the registry on the server (<doc:Vision> → "The backend question", stage 4); not planned beyond the decision record | A migrated device's history verifies on the server with its original authors. |
 

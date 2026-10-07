@@ -199,16 +199,28 @@ Dedup is **identity, not a constraint** — and it has to be: `SyncEngine` rejec
 non-PK unique index on a synchronized table at init (`SchemaError.uniquenessConstraint`
 — verified live in the spike, <doc:Spike>). So `ProviderEvent.id` is *derived*, not
 random: `UUIDv5(orderID ‖ providerEventID)` for journal events — replaying a page
-re-produces the same key, and two devices recording the same event produce one
-`CKRecord` that merges rather than colliding. Synthesized sightings (`search`/
+re-produces the same key on the device that wrote it. (Until 2026-10-08 this sentence
+went on: "and two devices recording the same event produce one `CKRecord` that merges
+rather than colliding" — under signing that merge is the corruption the doctrine's
+rule 1 names, so at the epoch the key carries the writer and the *trail* merges the two
+rows at read, below.) Synthesized sightings (`search`/
 claim-card rows carry no provider id) derive their key from
 `(orderID, providerStatus, source)` and are written `INSERT OR IGNORE` — the first
 observation's `at` stands and a re-sight changes nothing; one row per observed state.
 (*Corrected 2026-10-06:* this sentence used to say a re-sight "upserts `at`", a
 behaviour `recordProviderEvent` never had — and immutability is exactly what signing
-needs, so the code was right and the sentence was wrong.) This is the activity timeline
-the 3e card reads, and what "members see each other's activity" means for provider
-truth.
+needs, so the code was right and the sentence was wrong.) *Amended 2026-10-08, review of
+#135:* at the epoch both derivations gain two inputs. A sighting keys on
+`orderID ‖ providerStatus ‖ source ‖ routeDigest ‖ keyID` — `recordOrder` rewrites the
+stops from any card whose stamp is not older, status unchanged or not, and a second
+sighting dropped under the old key would leave the refreshed stops answering to a stale
+signed digest; so one row per observed state *and route*. A journal row keys on
+`orderID ‖ providerEventID ‖ keyID` — every owner device ingests the journal itself, and
+two devices minting one id for one operation would have their signatures merged column
+by column into a row that verifies for neither (<doc:Collaboration> → rule 1). The
+trail dedupes by fact at read ("Epoch 2" → identity, below). This is the activity
+timeline the 3e card reads, and what "members see each other's activity" means for
+provider truth.
 
 ### `OrderMessage` — the chat, and the only participant-writable stream
 
@@ -405,12 +417,15 @@ participant; the audit trail is what makes that grant accountable.
 `CKSyncEngine` merges at record-field granularity, last-writer-wins — verified upstream
 on 2026-10-06: each column carries its own `userModificationTime`, so two devices editing
 different columns of one row both win, and the merged row was written by nobody in full
-(<doc:Collaboration> → "Five facts that reshaped the design"). The schema is shaped so
+(<doc:Collaboration> → "The facts that reshaped the design"). The schema is shaped so
 that policy suffices: append-only tables (`ProviderEvent`, `OrderMessage`,
 `OrderAttachment`) can't conflict; the mirror has one writer; the root's mutable surface
 is one denormalized `lastActivityAt`. The same grain is why a signature lives only on
 append-only rows and the mirror's integrity is derived, never signed ("Derived
-integrity", below). The only true last-writer-wins exposure is
+integrity", below). A colliding *insert* is merged the same way — `serverRecordChanged`
+runs the per-field upsert and overwrites the loser's local row — so "can't conflict"
+holds only while no two writers can mint one id: a signed table's derived ids carry the
+writer, and the fact is deduped at read ("Epoch 2" → identity; amended 2026-10-08). The only true last-writer-wins exposure is
 participants editing each other's message/attachment rows — the append-only convention
 says they shouldn't, and `lastModifiedBy` preserves the audit trail if they do.
 
@@ -482,19 +497,27 @@ never a column:
 
 - **`mirrorIntegrity(orderID:)`** compares `orderProviderStates.providerStatus` with the
   `providerStatus` of the latest *verified* status-bearing event (by `at`; journal beats
-  sighting on a tie) and yields `.consistent` / `.disagrees(expected:)` /
-  `.noSignedHistory`. A mirror row rewritten out of band disagrees with the signed
-  history; a legitimate newer event makes it consistent again.
+  sighting on a tie; equally stamped sightings are an unordered set, and the mirror is
+  consistent if it matches any of them) and yields `.consistent` /
+  `.disagrees(expected:)` / `.noSignedHistory`. A mirror row rewritten out of band
+  disagrees with the signed history; a legitimate newer event makes it consistent again.
 - **`routeIntegrity(orderID:)`** hashes the stored stops' sender-authored columns —
   every `RouteStop` column but the id and the `visit*` provider truth, in `position`
   order — and compares with the `routeDigest` carried by the latest verified
   digest-bearing event: `placed`, written by the ordering flow over the route as sent,
-  and every `sighting`, over the route as the provider reported it. A stop address
-  rewritten out of band mismatches; a fresh sighting carrying the new route restores
-  consistency. The digest's encoding is the canonical payload's (<doc:Collaboration>).
+  and every `sighting`, over the route as the provider reported it, under the same tie
+  rule — the route is consistent if it matches any equally stamped digest. A stop
+  address rewritten out of band mismatches; a fresh sighting carrying the new route
+  restores consistency, and because a sighting's identity carries its digest, a route
+  the provider corrected under an unchanged status *is* a fresh sighting (amended
+  2026-10-08, review of #135). The digest's encoding is the canonical payload's
+  (<doc:Collaboration>).
 
-Both are one event scan per order on demand, never on the list read, and neither touches
-the projection tables' write paths. The order detail renders a disagreement as one line
+Both read the trail deduped by fact — agreeing rows collapsed to one entry per
+`(orderID, providerEventID)` and per `(orderID, providerStatus, source, routeDigest)`,
+disagreeing ones kept apart with their verdicts — since each writer's row is its own
+record ("Epoch 2" → identity, below). Both are one event scan per order on demand, never on the list
+read, and neither touches the projection tables' write paths. The order detail renders a disagreement as one line
 under the provider block — "the recorded status differs from the signed history", "the
 route differs from what was signed" — in the feedback role, never as a refusal.
 
@@ -759,6 +782,29 @@ DDL fact. Synced tables use plain `TEXT PRIMARY KEY NOT NULL` with no conflict c
 and `ON DELETE CASCADE` on their one FK (`sqlite-data` rejects `RESTRICT`/`NO ACTION`
 on single-FK tables). Every reference to a person is a `partyRef`.
 
+**Identity on signed tables** (amended 2026-10-08, review of #135). A signed row's id
+belongs to one writer: a caller-held id is held by the device that minted it, and a
+*derived* id carries the writer's key id among its inputs — `orderID ‖ providerEventID ‖
+keyID` for a journal row, `orderID ‖ providerStatus ‖ source ‖ routeDigest ‖ keyID` for
+a sighting, `orderID ‖ partyRef ‖ keyID` for a share-mirrored membership, `orderID ‖
+position ‖ keyID` for a leg. Two devices that record the same fact therefore write two
+rows, never one CloudKit record: the engine merges a colliding insert column by column
+and overwrites the loser's local row with the result, which would put one device's
+signature beside the other's key id and read *invalid* for a fact both wrote honestly
+(<doc:Collaboration> → "The facts that reshaped the design", 6). The *fact* is deduped
+at read, like list ordering: rows whose signed columns agree collapse to one entry per
+`(orderID, providerEventID)`, per `(orderID, providerStatus, source, routeDigest)`, per
+`(orderID, position)` leg — the verified one when any is, else the earliest stamp, then
+the smallest id, so every device derives the same answer — while rows that share a key
+but disagree stay apart, each with its own verdict: nothing is hidden, and a verified row
+beside an invalid twin is the forgery made visible. Membership rows are never collapsed;
+a party's rows are its role history, read latest-first. The cost is one
+row per owner device for each journal operation, and a trail read that collapses them;
+the alternative — one record per operation with signatures as a side table — would have
+moved the signature out of the statement that binds the values, which rule 3 forbids.
+Projections keep today's device-independent ids (`routeStops`, `orderCustomFields`, the
+discovered order's `(providerAccountRef, claimID)`): they are *meant* to merge.
+
 ### Stage 1 — keys, memberships, ratings, the signed columns (epoch 2 spelling)
 
 ```sql
@@ -771,21 +817,23 @@ CREATE TABLE IF NOT EXISTS "participantKeys" (
   "bindingKind" TEXT NOT NULL,                         -- cloudkit · server
   "bindingProof" TEXT,                                 -- NULL for cloudkit (the proof is the server stamp)
   "bindingKeyID" TEXT,                                 -- which server key attested, server mode only
+  "boundAt" REAL,                                      -- the attestation's own time, server mode only
   "addedAt" REAL NOT NULL,
-  "signature" TEXT                                     -- self-signed; signingKeyID is keyID
+  "signature" TEXT                                     -- self-signed over every column above; signingKeyID is keyID
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS "memberships" (
-  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(membership ‖ orderID ‖ partyRef)
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- mirrored row: UUIDv5(membership ‖ orderID ‖ partyRef ‖ keyID); an assignment: caller-held
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "partyRef" TEXT NOT NULL,
-  "role" TEXT NOT NULL,                                -- participant · receiver · dispatcher · courier
+  "role" TEXT NOT NULL,                                -- participant · receiver · dispatcher · courier · removed
   "addedAt" REAL NOT NULL,
   "authorRef" TEXT, "signingKeyID" TEXT, "signature" TEXT   -- owner-written
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS "orderEvents" (             -- today's providerEvents, renamed
-  "id" TEXT PRIMARY KEY NOT NULL,
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- journal: UUIDv5(providerEvent ‖ orderID ‖ providerEventID ‖ keyID)
+                                                       -- sighting: UUIDv5(providerEvent ‖ orderID ‖ providerStatus ‖ source ‖ routeDigest ‖ keyID)
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "legRef" TEXT,                                       -- value → legs.id; NULL = the order's only leg
   "providerEventID" INTEGER, "at" REAL NOT NULL,
@@ -829,16 +877,39 @@ NULL columns never become CloudKit fields.
 
 **`memberships` — the share's mirror and the server's source.** The owner's device
 writes an `INSERT OR IGNORE` signed `participant` row for every accepted share
-participant without one, after each sync pass; a role change is a *new* row with a later
-`addedAt` (append-only: the effective role is the latest, like ratings). Roles live here
-and in `legs`, never on `participantKeys`, never in a writer's claim. Before the owner's
-device has reconciled a row, a party the authority lists as a participant counts as a
-member; a membership row's role wins over the share's binary participant status. So a
-participant the owner's device has not yet mirrored — a courier invited while the owner
-is offline — still reads as a member through the share, and the verdict never degrades
-to a generic warning for want of a row; only a role beyond *participant* waits for the
-owner's device, as a leg assignment does anyway. On the host the table imports as is
-(<doc:Collaboration> → "Ready for an independent host"). <doc:TechDebt> YD-45.
+participant without one, after each sync pass, under the derived id above — two owner
+devices reconciling the same share each write their own row, both valid, same role. A
+role *assignment* by the owner — receiver, dispatcher, courier — is a new row under a
+caller-held id (amended 2026-10-08, review of #135: a derived `orderID ‖ partyRef` id
+would have made every later assignment collide with the first row and vanish under
+`INSERT OR IGNORE`); a retry re-inserts the same caller-held id. Only rows that read
+*verified* as the owner's count: a membership row anyone else appends is *notEntitled*
+and changes nobody's verdict. The effective role of a party is the latest such row by
+`addedAt` — on an exact tie `removed` dominates, then the smallest id, so every device
+derives the same answer and a hash-settled tie between two live roles is named as the
+residual it is, settled for good by the owner's next assignment; earlier rows stay as
+the role's history. When the share no
+longer lists a party, the reconcile appends a `removed` row (same review: an append-only
+table with no way to say "no longer" would have kept a removed participant's `member`
+entitlement forever), and entitlement is judged *as of the row* — the party's effective
+role at the row's own stamp — so what a member wrote while a member stays verified and
+anything dated after the removal reads *notEntitled* (<doc:Collaboration> → "Verdicts
+and entitlement"). The reconcile sees the removal because the `CKShare` is a record in
+the shared zone: a fetched change to it refreshes the root's cached share (`cacheShare`
+in the engine's fetched-changes path), so running after each sync pass — in the app,
+beside the journal pass's existing owner-side drains, which already re-prove the
+identity generation per iteration — is enough; a removed participant is absent from
+the decoded share's `participants` or carries `acceptanceStatus == .removed`. Whether a
+participant *leaving* arrives the same way as the owner removing one is on the
+open-verifications list. Roles live here and in `legs`, never on `participantKeys`,
+never in a writer's claim. Before the owner's device has reconciled a row, a party the
+authority lists as a participant counts as a member; a membership row's role wins over
+the share's binary participant status. So a participant the owner's device has not yet
+mirrored — a courier invited while the owner is offline — still reads as a member
+through the share, and the verdict never degrades to a generic warning for want of a
+row; only a role beyond *participant* waits for the owner's device, as a leg assignment
+does anyway. On the host the table imports as is (<doc:Collaboration> → "Ready for an
+independent host"). <doc:TechDebt> YD-45.
 
 **`orderRatings` — a fact, not a message kind.** A rating is a human statement in the
 order's stream — attributable, appendable, revisable by posting again — but its storage
@@ -849,13 +920,17 @@ derivation — the effective rating per (author, subject) is the row with the la
 earlier rows stay as history (<doc:Vision> → "Players, trust and reputation" for who
 rates whom and where ratings aggregate). The id is caller-held so a retry is the same row.
 Entitlement for a rating needs no join to anything mutable: every member may post one,
-and the row carries its author, subject and leg itself.
+and the row carries its author, subject and leg itself. The table is created, seeded and
+deployed at the epoch with the rest of Stage 1 — one development schema, one production
+deploy — and its writer, its reads and the UX land in the ratings phase (<doc:Roadmap> →
+T2), so no second schema deploy stands between the two (clarified 2026-10-08, review of
+#135).
 
 ### Stage 2 — legs (when a second provider or the courier edition starts)
 
 ```sql
 CREATE TABLE IF NOT EXISTS "legs" (
-  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(leg ‖ orderID ‖ position)
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(leg ‖ orderID ‖ position ‖ keyID); deduped at read by (orderID, position)
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "position" INTEGER NOT NULL,                         -- travel order of legs
   "kind" TEXT NOT NULL,                                -- platform · courier
@@ -882,8 +957,9 @@ can constrain each.
   integrity is derived ("Derived integrity", above).
 - The private and device tiers: unsigned. The owner is the only writer and nothing there
   is shared.
-- The sighting dedupe (`INSERT OR IGNORE` on `orderID ‖ status ‖ source`): kept, because
-  immutability is what signing needs.
+- The sighting dedupe: kept as `INSERT OR IGNORE`, with the route digest and the
+  writer's key joining its key (identity, above), because immutability is what signing
+  needs and a changed route is a new fact, not a refresh of the old one.
 - The widget snapshot contract, the wire log as a file, the share grant model, read-only
   by default.
 

@@ -248,9 +248,9 @@ rejected alternatives are <doc:Design> → "Parties, not CloudKit names" and "P-
 Secure Enclave"; the players, the ratings and the registry are <doc:Vision> → "Players,
 trust and reputation".
 
-#### Five facts that reshaped the design
+#### The facts that reshaped the design
 
-Verified on 2026-10-06, each with the pin that settles it.
+Verified on 2026-10-06 (the sixth on 2026-10-08), each with the pin that settles it.
 
 1. **`sqlite-data` merges conflicts per field, last writer wins per column.** Each column
    carries its own `userModificationTime`; two devices editing different columns of one
@@ -293,6 +293,16 @@ Verified on 2026-10-06, each with the pin that settles it.
    never leaves the hardware, and its `dataRepresentation` is an opaque blob only that
    device can use (Apple's CryptoKit documentation, fetched 2026-10-06). Ed25519 has no
    hardware home on Apple platforms. That decides the curve.
+6. **A colliding insert is merged per field too.** Two devices that insert the same
+   primary key offline do not get "server wins" or "client wins": the save fails with
+   `serverRecordChanged`, the engine runs `upsertFromServerRecord` — the same per-column
+   `userModificationTime` merge as a fetched change — overwrites the loser's local row
+   with the result, and re-queues the save (`SyncEngine.swift` L1685–L1689,
+   L1958–L1982; `CloudKit+StructuredQueries.swift` L154–L168; the same conversation,
+   continued 2026-10-08). A derived id that two writers can both mint — the journal
+   event id the Kit derives today — therefore cannot carry a signature: the merged row
+   can hold one device's signature and the other's key. Found by Devin's review of #135;
+   it gives rule 1 its identity clause.
 
 Two more passes sit under this section. The Kit side of the parked branch was reviewed
 prospectively against the indexed Kit in
@@ -308,9 +318,24 @@ design is written against the local 0.4.15 source, where stops upsert and prune.
 
 1. **Signed tables are append-only and never updated after insert:** `orderEvents`
    (today's `providerEvents`), `orderMessages`, `orderAttachments`, `orderRatings`,
-   `participantKeys`, `memberships`, and later `legs`. Retries re-insert the same
-   caller-held id with `INSERT OR IGNORE`; a conflicting insert is a no-op, never a
-   replace.
+   `participantKeys`, `memberships`, and later `legs`. Retries re-insert the same id
+   with `INSERT OR IGNORE`; a conflicting insert is a no-op, never a replace. **A signed
+   row's identity belongs to one writer** (amended 2026-10-08, review of #135): a
+   caller-held id is held by the device that minted it, and a *derived* id — a journal
+   event, a sighting, a share-mirrored membership, a leg — carries the writer's key id
+   among its inputs, so two devices that record the same fact write two rows rather
+   than one CloudKit record. The engine merges a colliding insert column by column —
+   `serverRecordChanged` runs the same per-field `upsertFromServerRecord` as a fetched
+   change, and the loser's local row is overwritten with the result — which would leave
+   one device's signature beside the other's key id and read *invalid* for a fact both
+   wrote honestly. Dedupe of the *fact* is a read-time derivation, like list ordering:
+   the trail collapses `orderEvents` by `(orderID, providerEventID)`, and sightings by
+   `(orderID, providerStatus, source, routeDigest)` — but only rows whose signed columns
+   agree: one entry per fact, the verified one when any is, else the earliest `at`, then
+   the smallest id, so every device derives the same answer. Rows that share a key but
+   *disagree* are not collapsed: each renders with its own verdict (rule 6 — nothing is
+   hidden), and a verified row beside an invalid or not-entitled twin is the forgery
+   made visible, not a duplicate.
 2. **Unsigned projections:** the `orders` root, `orderProviderStates`, `orderOptions`,
    `orderItems`, `routeStops`, `orderCustomFields`. They keep today's writers and today's
    merge behaviour. Their integrity is a *derived verdict*: the mirror's `providerStatus`
@@ -428,11 +453,18 @@ them (decision 3, 2026-10-06); the explanations are the record.
   fills the gap for readers after the first sync.
 - **Publication.** A `participantKeys` row per (order, device key), id derived from
   `orderID ‖ keyID`, inserted with `INSERT OR IGNORE` inside the first signed write of
-  that device into that order. Self-signed over its own columns so a rewrite of
-  `publicKey` is detectable. The row names its binding: `bindingKind = "cloudkit"` (the
-  proof is the server stamp in sync metadata) or, later, `"server"` with `bindingProof`
-  holding the server's signature over `(partyRef, keyID, publicKey, boundAt)` and
-  `bindingKeyID` naming the server key that signed it.
+  that device into that order. Self-signed over *every* column it carries — the public
+  key and the binding fields alike (amended 2026-10-08, review of #135: a
+  self-signature that skipped `bindingProof` and `bindingKeyID` would let a participant
+  rewrite the evidence a row claims without touching its signature) — so a rewrite of
+  `publicKey`, of the proof or of the key that attested it is detectable. The row names
+  its binding: `bindingKind = "cloudkit"` (the proof is the server stamp in sync
+  metadata; the proof columns are NULL and signed as NULL) or, later, `"server"` with
+  `bindingProof` holding the server's signature over `(partyRef, keyID, publicKey,
+  boundAt)`, `bindingKeyID` naming the server key that signed it, and `boundAt` the
+  attestation's own time. A `server`-bound row whose proof is missing, or verifies under
+  no pinned server key, is *invalid*, not *unverifiable*: the row claims evidence it does
+  not carry.
 - **Trust.** The identity authority answers one question per key row: *which party does
   your binding name?* CloudKit: the creator stamp resolves to a party (a real record
   name, or `__defaultOwner__` on a device whose own party is known); server: the
@@ -514,18 +546,41 @@ public protocol IdentityAuthority: Sendable {
 
 Role resolution: the owner is the party the authority names as the order's owner (the
 share's owner in CloudKit mode; whoever the device is on a private order); a member is a
-party with a `memberships` row, or, before the owner's device has reconciled one, a
-party the authority lists as a participant; a courier is a member whose `partyRef` equals
-a `legs.courierPartyRef`. `participantKeys` carries no role: roles come from
-`memberships` and `legs`, never from a writer's claim.
+party whose *effective* membership row names a role other than `removed`, or, before
+the owner's device has reconciled one, a party the authority lists as a participant; a
+courier is a member whose `partyRef` equals a `legs.courierPartyRef`. Only membership
+rows that themselves read *verified* as the owner's count for roles — a row anyone else
+appends, a `removed` for the owner included, is *notEntitled*, rendered as such, and
+changes nobody's verdict. The effective row is the latest by `addedAt`; on an exact tie
+`removed` dominates, then the smallest id — deterministic, and named for what it is: a
+tie between two live roles from two owner devices is settled by hash, like the
+custom-field carrier conflict in <doc:Schema>, and the owner's next assignment settles
+it for good. **Entitlement is judged as of the row**
+(amended 2026-10-08, review of #135): the role that counts for a row is the party's
+effective role at the row's own stamp — the latest membership row whose `addedAt` is not
+after the row's `at`, `sentAt` or `createdAt` — so a message posted while a member stays
+*verified* after the owner removes that member, and anything dated after the owner's
+`removed` row reads *notEntitled*. A removed participant cannot upload in any case — the
+engine's `permissionFailure` path takes server truth or deletes the local row — so the
+rule governs what was written before the removal and whatever a stale share cache might
+still let through. A row's stamp is its writer's claim, as every offline-first write is:
+a writer whose role was reduced could date a row into its former role. The server's
+modification date in the sync metadata bounds the claim — when it is later than the role
+change, the row renders verified, entitled as of its stamp, and flagged "arrived after
+the role changed", never hidden; on the host, where upload is the arbiter, the server
+refuses it instead. `participantKeys` carries no role: roles come from `memberships` and
+`legs`, never from a writer's claim.
 
 **Derived verdicts for projections.** `mirrorIntegrity(orderID:)` compares
 `orderProviderStates.providerStatus` with the `providerStatus` of the latest *verified*
-status-bearing event (by `at`; journal beats sighting on a tie) and yields
-`.consistent` / `.disagrees(expected:)` / `.noSignedHistory`. `routeIntegrity(orderID:)`
-hashes the stored stops' sender-authored columns (below) and compares with the
-`routeDigest` on the latest verified digest-bearing event. Neither touches the
-projection tables' write paths (<doc:Schema> → "Derived integrity").
+status-bearing event (by `at`; journal beats sighting on a tie; equally stamped
+sightings are an unordered set, and the mirror is consistent if it matches any of them)
+and yields `.consistent` / `.disagrees(expected:)` / `.noSignedHistory`.
+`routeIntegrity(orderID:)` hashes the stored stops' sender-authored columns (below) and
+compares with the `routeDigest` on the latest verified digest-bearing event, under the
+same tie rule: the route is consistent if it matches any equally stamped digest. Both
+read the trail deduped by fact (rule 1). Neither touches the projection tables' write
+paths (<doc:Schema> → "Derived integrity").
 
 #### The canonical payload
 
@@ -548,7 +603,7 @@ signingKeyID = "p256.v2." ‖ hex(SHA-256(x963PublicKey)[0..<8])      // v2 = th
 
 | Table | Signed columns, in this order (frozen for v2) |
 |---|---|
-| `participantKeys` | id, orderID, partyRef, keyID, publicKey, bindingKind, addedAt |
+| `participantKeys` | id, orderID, partyRef, keyID, publicKey, bindingKind, bindingProof, bindingKeyID, boundAt, addedAt |
 | `memberships` | id, orderID, partyRef, role, addedAt, authorRef |
 | `orderEvents` | id, orderID, legRef, providerEventID, at, kind, providerStatus, detail, source, routeDigest, authorRef |
 | `orderMessages` | id, orderID, sentAt, kind, text, attachmentRef, authorRef (not `authorHint`: a display cache) |
@@ -570,7 +625,15 @@ are provider truth and excluded; stop ids are identity, not content, and exclude
 carried by two event kinds: `placed` (written by the ordering flow with `source = "app"`
 when the claim is accepted; `detail` is JSON with claimID, tariff, price, currency as
 agreed) and every `sighting` (the route as the provider reported it, so a point the API
-"invents" is simply the newer verified fact, per the package's *WorkingWithYandex*).
+"invents" is simply the newer verified fact, per the package's *WorkingWithYandex*). A
+sighting's identity carries its digest — `orderID ‖ providerStatus ‖ source ‖
+routeDigest ‖ the writer's key id` (amended 2026-10-08, review of #135): the Kit's
+`recordOrder` rewrites the stops from any card that is not older, status unchanged or
+not, so under the earlier identity `orderID ‖ status ‖ source` a corrected address would
+have refreshed the stops while the second sighting was dropped, and the route would
+have disagreed with a stale digest for a change nobody made. Now a changed route is a
+new signed sighting, an identical re-sight stays a no-op, and the stops always have a
+signed digest to answer to.
 
 #### What this does not do
 
