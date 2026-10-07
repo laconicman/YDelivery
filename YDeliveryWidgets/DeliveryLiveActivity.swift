@@ -24,6 +24,9 @@ struct DeliveryLiveActivity: Widget {
                     statusGlyph(context.state.status)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
+                    // Stale, the stamp below qualifies this figure — «~14 мин»
+                    // as of 9:27, the Lock Screen's own pairing. Only compact,
+                    // with no room for a stamp, trades it for the clock.
                     ETALabel(at: context.state.etaAt,
                              observedAt: context.state.providerObservedAt,
                              presentation: .duration)
