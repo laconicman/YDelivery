@@ -31,6 +31,22 @@ extension Button {
             .controlSize(.large)
     }
 
+    /// A card's lead verb — the bordered-prominent capsule at regular size,
+    /// first of the two or three verbs side by side on a card outside a `List`
+    /// (the location and found-place cards, the map callout), `actionSpacing`
+    /// apart. (DesignSystem → "Control roles" → card actions.)
+    func leadCardAction() -> some View {
+        self
+            .buttonStyle(.borderedProminent)
+    }
+
+    /// A card's other verbs — bordered, beside the lead one.
+    /// (DesignSystem → "Control roles" → card actions.)
+    func cardAction() -> some View {
+        self
+            .buttonStyle(.bordered)
+    }
+
     /// The small action that lives in a section header — footnote words with
     /// their glyph, borderless, never a row: «Sort», «Reorder», «From library».
     /// (DesignSystem → "Control roles".)
@@ -58,6 +74,25 @@ extension Button {
     /// whole card is the button and plain keeps the card's own chrome.
     /// (DesignSystem → "Control roles" → selectable card.)
     func selectableCard() -> some View {
+        self
+            .buttonStyle(.plain)
+    }
+
+    /// A picker-shaped door inside a content row — the point row's contact
+    /// line: its prompt in `.tertiary` until answered, untinted either way; the
+    /// label carries the look, never the accent.
+    /// (DesignSystem → "Control roles" → prompt door.)
+    func promptDoor() -> some View {
+        self
+            .buttonStyle(.plain)
+    }
+
+    /// A bound line that is also the door to the editor which answers it — a
+    /// stop that carries nothing opens the first item's editor. Untinted: the
+    /// `bound` notice is the label and carries its own look. Not a prompt door,
+    /// though the recipe is the same (DesignSystemControls → "Prompts versus
+    /// bound lines").
+    func boundDoor() -> some View {
         self
             .buttonStyle(.plain)
     }
@@ -104,6 +139,27 @@ struct RowDoor<Label: View>: View {
                 }
                 .headerAction()
             }
+        }
+        Section("Card actions") {
+            HStack {
+                Button("Place the point") {}
+                    .leadCardAction()
+                Button("Not now") {}
+                    .cardAction()
+            }
+        }
+        Section("Prompt door") {
+            Button {} label: {
+                Label("Who receives — name and phone", systemSymbol: .plus)
+                    .foregroundStyle(.tertiary)
+            }
+            .promptDoor()
+        }
+        Section("Bound door") {
+            Button {} label: {
+                Notice(.bound, Text("Nothing boards or leaves here — assign a parcel."))
+            }
+            .boundDoor()
         }
         Section("Selectable card") {
             Button {} label: {

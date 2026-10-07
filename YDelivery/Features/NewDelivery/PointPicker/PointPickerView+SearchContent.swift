@@ -299,9 +299,9 @@ extension PointPickerView {
                     // (DesignSystem → "Control roles").
                     HStack {
                         Button("Continue", action: continueLocationPrompt)
-                            .buttonStyle(.borderedProminent)
+                            .leadCardAction()
                         Button("Not now", action: dismissLocationPrompt)
-                            .buttonStyle(.bordered)
+                            .cardAction()
                     }
                 }
                 .padding(.vertical, Layout.Spacing.tight)
@@ -390,9 +390,9 @@ extension PointPickerView.SearchContent {
                         // (DesignSystem → "Control roles").
                         HStack {
                             Button("Place the point", action: place)
-                                .buttonStyle(.borderedProminent)
+                                .leadCardAction()
                             Button("Not now", action: dismiss)
-                                .buttonStyle(.bordered)
+                                .cardAction()
                         }
                     }
                     .padding(.vertical, Layout.Spacing.tight)
@@ -410,10 +410,10 @@ extension PointPickerView.SearchContent {
                         HStack {
                             if let fillRoute {
                                 Button("Fill both ends", action: fillRoute)
-                                    .buttonStyle(.borderedProminent)
+                                    .leadCardAction()
                             }
                             Button("Not now", action: dismiss)
-                                .buttonStyle(.bordered)
+                                .cardAction()
                         }
                     }
                     .padding(.vertical, Layout.Spacing.tight)

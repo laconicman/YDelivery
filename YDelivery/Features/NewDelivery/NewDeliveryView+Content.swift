@@ -834,10 +834,10 @@ extension NewDeliveryView.Content {
                         selection = nil
                         pick(pin.id)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .leadCardAction()
                     if canSavePlace {
                         Button("Save as place") { savePlace(pin.id) }
-                            .buttonStyle(.bordered)
+                            .cardAction()
                     }
                 }
                 .font(.subheadline)
@@ -1191,7 +1191,7 @@ extension NewDeliveryView.Content {
                             }
                         }
                     }
-                    .buttonStyle(.plain)
+                    .promptDoor()
 
                     if let parcelActions = row.parcelActions {
                         Label(parcelActions, systemSymbol: .shippingbox)
@@ -1204,7 +1204,7 @@ extension NewDeliveryView.Content {
                             Notice(.bound, Text(parcelBound))
                                 .font(.footnote)
                         }
-                        .buttonStyle(.plain)
+                        .boundDoor()
                     }
                 }
             }
