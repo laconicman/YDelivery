@@ -36,7 +36,7 @@ extension PointPickerView {
                 } footer: {
                     if addressLacksBuilding {
                         // Proceedable-but-risky — a warning, not a bound.
-                        Notice(.warning, "No building number — the courier may have trouble finding the door.")
+                        Notice(.warning, Text("No building number — the courier may have trouble finding the door."))
                     }
                 }
 
@@ -54,14 +54,13 @@ extension PointPickerView {
                     HStack(spacing: Layout.Spacing.unit) {
                         Button(action: save) {
                             Text("Save the point")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .primaryAction()
 
                         // Unavailable renders disabled with its reason, never absent
                         // (DesignSystem → field rule 2).
+                        // The card action beside the standing one — bordered,
+                        // never prominent (DesignSystem → "Control roles").
                         Button(action: bookmark) {
                             Image(systemSymbol: .bookmark)
                                 .font(.headline)
@@ -133,7 +132,7 @@ extension PointPickerView {
                 // The hint states the bound without blocking: a point may be kept
                 // half-typed, and ordering's blockers say the rest.
                 if !contact.phone.isEmpty, PhoneFormat.dialable(contact.phone) == nil {
-                    Notice(.bound, "This isn't a dialable number yet — the courier calls it on arrival.")
+                    Notice(.bound, Text("This isn't a dialable number yet — the courier calls it on arrival."))
                 } else {
                     footer
                 }

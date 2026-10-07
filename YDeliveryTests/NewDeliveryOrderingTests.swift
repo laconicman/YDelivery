@@ -67,6 +67,8 @@ struct NewDeliveryOrderingTests {
         let empty = NewDeliveryView.Model(estimateRoute: { _ in throw Unexpected() })
         #expect(empty.orderBlockers.count == 6,
                 "two stops miss their place and their person; parcel and class too")
+        #expect(empty.orderBlockers.allSatisfy { !$0.step.isEmpty },
+                "every bound carries the bar's short imperative")
 
         let model = readyDraft()
         #expect(model.orderBlockers.map(\.message) == [String(localized: "Pick a delivery class once prices arrive.")])
@@ -76,6 +78,74 @@ struct NewDeliveryOrderingTests {
         await priced(model)
         #expect(model.orderBlockers.isEmpty)
         #expect(model.orderRequest != nil)
+    }
+
+    /// A three-stop route's middle stop can carry nothing — a bound the route
+    /// itself holds, stated on the row and named on the gate. Its door is the
+    /// first item's editor, which owns the stop chooser.
+    @Test("A stop nothing boards or leaves at is blocked — and the row says so")
+    func emptyMiddleStopBlocks() async {
+        let model = readyDraft()
+        let last = model.addStop()
+        model.setPlace(PickedPlace(latitude: 55.70, longitude: 37.65, address: "Склад"), for: last)
+        model.setContact(Contact(givenName: "Олег", phone: "+7 900 111-22-33"), for: last)
+        await priced(model)
+        let middle = model.points[1]
+
+        let stopBlockers = model.orderBlockers.filter { $0.id.hasPrefix("stopParcels/") }
+        #expect(stopBlockers.map(\.id) == ["stopParcels/\(middle.id)"])
+        #expect(stopBlockers.first?.destination == .item(model.items[0].id),
+                "the bound's door is the first item's editor — it owns the chooser")
+        #expect(stopBlockers.first?.step.isEmpty == false)
+        #expect(model.parcelBound(at: 1) != nil)
+
+        // The item's handover moves to the middle stop — its bound lifts, and
+        // the bound lands on the last stop, which now carries nothing: the
+        // bound follows the route, it is not a fixed seat.
+        var item = model.items[0]
+        item.dropoffPointID = middle.id
+        model.setItem(item)
+        #expect(model.orderBlockers.map(\.id) == ["stopParcels/\(model.points[2].id)"])
+        #expect(model.parcelBound(at: 1) == nil)
+        #expect(model.parcelBound(at: 2) != nil)
+    }
+
+    /// Two ends are always covered — the default journey rides A→B — so the
+    /// stop bound can only exist once the route has middles.
+    @Test("A two-stop route never names an empty stop")
+    func twoStopsNeverBlockParcels() {
+        let model = readyDraft()
+        #expect(model.orderBlockers.allSatisfy { !$0.id.hasPrefix("stopParcels/") })
+        #expect(model.parcelBound(at: 0) == nil)
+        #expect(model.parcelBound(at: 1) == nil)
+    }
+
+    /// The row's own bound is the first unmet of the same misses the gate
+    /// counts — a valueless item names the declared value; a complete one
+    /// states nothing.
+    @Test("The item row names its first unmet — and a complete item none")
+    func itemBoundStatesFirstMiss() {
+        let model = readyDraft()
+        var valueless = ParcelItem()
+        valueless.name = "Зарядка"
+        #expect(model.itemBound(valueless)
+                == String(localized: "Needs a declared value — the parcel is insured for it."))
+
+        var nameless = ParcelItem()
+        nameless.cost = 100
+        #expect(model.itemBound(nameless) == String(localized: "Needs a name."))
+
+        var weightless = ParcelItem()
+        weightless.name = "Пакет"
+        weightless.cost = 100
+        weightless.weightKg = 0
+        #expect(model.itemBound(weightless)
+                == String(localized: "Weight has to be more than zero."))
+
+        var complete = ParcelItem()
+        complete.name = "Пакет"
+        complete.cost = 100
+        #expect(model.itemBound(complete) == nil)
     }
 
     /// Same-day goes through `same_day_data`, which this app doesn't send yet

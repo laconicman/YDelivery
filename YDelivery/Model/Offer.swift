@@ -237,7 +237,7 @@ extension Offer {
                   deliveryInterval: now + 40 * 60 ... now + 70 * 60,
                   variant: "express", validUntil: now + 10 * 60, surgeRatio: 1.0,
                   payload: "uitest-express"),
-            Offer(tariff: .other("superexpress_d2d"), price: 1890, currency: "RUB",
+            Offer(tariff: .superexpressD2D, price: 1890, currency: "RUB",
                   pickupInterval: now + 5 * 60 ... now + 15 * 60,
                   deliveryInterval: now + 25 * 60 ... now + 45 * 60,
                   variant: "2_hours_delivery", validUntil: now + 10 * 60, surgeRatio: 1.2,

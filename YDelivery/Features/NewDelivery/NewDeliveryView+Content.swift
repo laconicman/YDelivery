@@ -24,6 +24,10 @@ extension NewDeliveryView {
             /// What the parcel does at this door — the counted sentence Round 5
             /// (#45–46) gives both the row and the map callout.
             var parcelActions: String? = nil
+            /// The stop's own bound — "nothing boards or leaves here" — stated
+            /// where the parcel line would sit; mutually exclusive with
+            /// `parcelActions` by construction on the model's side.
+            var parcelBound: String? = nil
             let isDeletable: Bool
             let isMovable: Bool
         }
@@ -75,6 +79,9 @@ extension NewDeliveryView {
             /// The item's own route in the stops' words — «A → B» — whenever the
             /// route has middles (YD-6).
             var journey: String? = nil
+            /// The first unmet requirement, in the row's words — the same
+            /// misses the order gate counts, said where they're answered.
+            var bound: String? = nil
         }
 
         /// A parcel template, reduced to its chip — the library's *use* path
@@ -102,9 +109,10 @@ extension NewDeliveryView {
         let optionsSummary: String
         let whenSummary: String
         let commentSummary: String?
-        /// The CTA's words, or `nil` when the bar has no place on screen — derived on the
-        /// root's side of the seam with everything else (R5; review, PR #22).
-        var orderBarTitle: String? = nil
+        /// The gateway's state — hidden while no prices were asked, blocked naming
+        /// the first next step, ready naming the price — reduced on the root's
+        /// side of the seam with everything else (R5; review, PR #22).
+        var orderBar: OrderBar.State? = nil
         let canSwap: Bool
         let canReorder: Bool
         let pick: (UUID) -> Void
@@ -143,6 +151,14 @@ extension NewDeliveryView {
         /// reads as a change. Plain value + closure, like every other input.
         var scrollTarget: ScrollAnchor? = nil
         var onScrolled: () -> Void = {}
+        /// The blocked bar's landing — the scroll's destination *and* the row
+        /// that shakes (DesignSystem → "The gateway"). `serial` climbs on every
+        /// tap, so a second nudge at the same row still fires.
+        var nudge: Nudge? = nil
+        struct Nudge: Equatable {
+            let anchor: ScrollAnchor
+            let serial: Int
+        }
         /// Where a bound's door lands on the draft card — a row id, or the strip
         /// itself for the class bound (review, PR #104). Rows answer to their
         /// subject's raw id; `.tariffStrip` answers to its constant. The view's
@@ -151,11 +167,17 @@ extension NewDeliveryView {
             case field(UUID)
             case item(UUID)
             case stop(UUID)
+            /// The add-item row — the empty-parcel bound's door.
+            case addItem
+            /// The fields section's error row — the schema bound's door.
+            case fieldsSchema
             case tariffStrip
 
             var id: AnyHashable {
                 switch self {
                 case .field(let id), .item(let id), .stop(let id): id
+                case .addItem: "addItem"
+                case .fieldsSchema: "fieldsSchema"
                 case .tariffStrip: "tariffStrip"
                 }
             }
@@ -202,7 +224,7 @@ extension NewDeliveryView {
                 routeCard
             }
             .safeAreaInset(edge: .bottom) {
-                OrderBar(title: orderBarTitle, openReview: openReview)
+                OrderBar(state: orderBar, action: openReview)
             }
         }
 
@@ -213,24 +235,26 @@ extension NewDeliveryView {
             if case .ready(let estimate) = estimate { estimate.legs } else { [] }
         }
 
-        /// One summary line per group, expanding to typed rows — the draft reads in
-        /// three seconds; density lives one tap down (DesignSystem → field rule 1).
-        private func summaryRow(symbol: SFSymbol, title: LocalizedStringKey, value: String) -> some View {
-            HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
-                Image(systemSymbol: symbol)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                    Text(title)
-                    Text(value)
-                        .font(.footnote)
-                        .foregroundStyle(Color.secondary)
-                }
-                Spacer()
-                Image(systemSymbol: .chevronForward)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+        /// The blocked bar's landing: the scroll's destination shakes once —
+        /// `Nudge`'s serial climbs on every tap, so a second nudge at the same
+        /// row still reads as a change. Reduce Motion gets no offset — the
+        /// bound's glyph + words carry the meaning (Motion row 7's rule).
+        struct NudgeShake: ViewModifier {
+            let nudge: Content.Nudge?
+            let anchor: Content.ScrollAnchor
+
+            @Environment(\.accessibilityReduceMotion) private var reduceMotion
+            @State private var shakes = 0
+
+            func body(content: Self.Content) -> some View {
+                content
+                    .modifier(FieldShake(phase: CGFloat(shakes)))
+                    .onChange(of: nudge) { _, nudge in
+                        if nudge?.anchor.id == anchor.id, !reduceMotion {
+                            withAnimation(.easeOut(duration: 0.3)) { shakes += 1 }
+                        }
+                    }
             }
-            .contentShape(Rectangle())
         }
 
         /// One schema field as an editor: a text field or a choice picker — the
@@ -294,7 +318,7 @@ extension NewDeliveryView {
                     // line itself must not move.
                     .modifier(FieldShake(phase: CGFloat(shakes)))
                     if unmet {
-                        Notice(.bound, "Required — the order doesn't leave without it.")
+                        Notice(.bound, Text("Required — the order doesn't leave without it."))
                             .font(.footnote)
                     }
                 }
@@ -316,6 +340,76 @@ extension NewDeliveryView {
                             .font(.footnote)
                             .foregroundStyle(.tertiary)
                     }
+                }
+            }
+        }
+
+        /// One route row, dressed: the card background, the callout highlight
+        /// layered over it, and the scroll-and-shake landing its bound's door
+        /// lands on — every row answers to its subject's id. Hoisted because the
+        /// ForEach inline form tips the type-checker past its budget.
+        private func pointRow(_ row: Row) -> some View {
+            PointRow(
+                row: row,
+                pick: { pick(row.id) },
+                editContact: { editContact(row.id) },
+                setRole: { setRole(row.id, $0) },
+                // The pin↔row agreement in reverse: the row opens the
+                // same card the pin does, so list and VoiceOver users
+                // reach everything the callout holds (board `4a`).
+                showCallout: pins.contains(where: { $0.id == row.id })
+                    ? { calloutPin = row.id } : nil,
+                savePlace: canSavePlace && pins.contains(where: { $0.id == row.id })
+                    ? { savePlace(row.id) } : nil,
+                // The parcel bound's door is the first item's
+                // editor — it owns the stop chooser (the
+                // `stopParcels/` blocker's destination, same rule).
+                editParcels: itemRows.first.map { item in { editItem(item.id) } }
+            )
+            // The open callout's row stays highlighted over the card —
+            // «строка в списке подсвечена, пока открыта выноска»
+            // (board `4a`) — the tint layers on, never replaces it.
+            .listRowBackground(
+                ZStack {
+                    Color(.secondarySystemGroupedBackground)
+                    Color.accentColor.opacity(
+                        calloutPin == row.id ? RouteLine.selectionTint : 0
+                    )
+                }
+            )
+            .deleteDisabled(!row.isDeletable)
+            .moveDisabled(!row.isMovable)
+            .id(row.id)
+            .nudgeShake(nudge, anchor: .stop(row.id))
+        }
+
+        /// The card's stops read under a title — without one the last row
+        /// floated, attached to nothing (device drive, 2026-10). Its verbs are
+        /// header actions, not a row of bare tinted words (DesignSystem →
+        /// "Control roles"). Swap stays visible but disabled while an end is
+        /// empty — unavailable affordances state themselves rather than vanish
+        /// (DesignSystem → field rules).
+        private var routeHeader: some View {
+            HStack {
+                Text("Route")
+                Spacer()
+                if rows.count == 2 {
+                    Button(action: swapEnds) {
+                        Label("Swap", systemSymbol: .arrowUpArrowDown)
+                    }
+                    .headerAction()
+                    .disabled(!canSwap)
+                }
+                if canReorder {
+                    Button {
+                        withAnimation { editMode = editMode == .active ? .inactive : .active }
+                    } label: {
+                        Label(
+                            editMode == .active ? "Done reordering" : "Reorder",
+                            systemSymbol: .arrowUpAndDownTextHorizontal
+                        )
+                    }
+                    .headerAction()
                 }
             }
         }
@@ -347,54 +441,25 @@ extension NewDeliveryView {
             List {
                 Section {
                     ForEach(rows) { row in
-                        PointRow(
-                            row: row,
-                            pick: { pick(row.id) },
-                            editContact: { editContact(row.id) },
-                            setRole: { setRole(row.id, $0) },
-                            // The pin↔row agreement in reverse: the row opens the
-                            // same card the pin does, so list and VoiceOver users
-                            // reach everything the callout holds (board `4a`).
-                            showCallout: pins.contains(where: { $0.id == row.id })
-                                ? { calloutPin = row.id } : nil,
-                            savePlace: canSavePlace && pins.contains(where: { $0.id == row.id })
-                                ? { savePlace(row.id) } : nil
-                        )
-                        // The open callout's row stays highlighted — «строка в
-                        // списке подсвечена, пока открыта выноска» (board `4a`).
-                        .listRowBackground(
-                            Color.accentColor.opacity(
-                                calloutPin == row.id ? RouteLine.selectionTint : 0
-                            )
-                        )
-                        .deleteDisabled(!row.isDeletable)
-                        .moveDisabled(!row.isMovable)
-                        // A bound's door scrolls to its row — every row answers
-                        // to its subject's id.
-                        .id(row.id)
+                        pointRow(row)
                     }
                     .onDelete(perform: removeRows)
                     .onMove(perform: moveRows)
 
-                    actions
-                        .frame(maxWidth: .infinity)
-                        // The action strip is part of the route card, not a row —
-                        // a card-colored row below it read as «the last row of a
-                        // missing List» (device drive, 2026-10). Clear background
-                        // and no separator anchor it to the section instead.
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                    // The add row: the List's own row — tinted words, one verb,
+                    // the door to a new stop (DesignSystem → "Lists and rows").
+                    Button(action: addStop) {
+                        Label("Add stop", systemSymbol: .plus)
+                    }
                 } header: {
-                    // The card's stops read under a title — without one the last
-                    // row floated, attached to nothing (device drive, 2026-10).
-                    Text("Route")
+                    routeHeader
                 } footer: {
                     if offers == .idle {
                         // Prices follow the route alone — an empty parcel rides the
                         // wire as a placeholder item, so the only precondition left
                         // is a complete route (live evidence, 2026-09-22). A bound,
                         // stated where the decision is.
-                        Notice(.bound, "Prices appear when the route is complete.")
+                        Notice(.bound, Text("Prices appear when the route is complete."))
                     }
                 }
 
@@ -443,13 +508,14 @@ extension NewDeliveryView {
                             Button(action: openExplainer) {
                                 Image(systemSymbol: .infoCircle)
                             }
-                            .font(.body)
+                            .headerAction()
                             .accessibilityLabel(Text("About the delivery classes"))
                         }
                     }
                     // The class bound's door lands here — the strip is the row
                     // that answers it.
                     .id("tariffStrip")
+                    .nudgeShake(nudge, anchor: .tariffStrip)
                 }
 
                 Section {
@@ -465,7 +531,7 @@ extension NewDeliveryView {
                         }
                     }
                     ForEach(itemRows) { item in
-                        Button {
+                        RowDoor {
                             editItem(item.id)
                         } label: {
                             HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
@@ -481,6 +547,10 @@ extension NewDeliveryView {
                                             .font(.footnote)
                                             .foregroundStyle(Color.secondary)
                                     }
+                                    if let bound = item.bound {
+                                        Notice(.bound, Text(bound))
+                                            .font(.footnote)
+                                    }
                                     if let misfit = item.misfit {
                                         Label(misfit, systemSymbol: .exclamationmarkTriangle)
                                             .font(.footnote)
@@ -488,11 +558,9 @@ extension NewDeliveryView {
                                     }
                                 }
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
                         .id(item.id)
+                        .nudgeShake(nudge, anchor: .item(item.id))
                         .contextMenu {
                             // The second door to «Save as template» — the first
                             // lives in the item editor itself (the library doc).
@@ -507,28 +575,26 @@ extension NewDeliveryView {
                     }
                     .onDelete(perform: removeItems)
 
-                    // Both add-doors in one row — the library's entrance used to
-                    // squat as a chips row of its own. Each label degrades to its
-                    // short form on its own (ViewThatFits per button).
-                    // Borderless, like the route card's action row: with the
-                    // automatic style the `List` row is the hit target and one
-                    // tap fires every button in it — «Add from library» opened
-                    // the item editor and its dialog never drew (owner, 2026-10-05).
+                    // The add row: the List's own row — tinted words, one verb —
+                    // and the empty-parcel bound's door, so it answers the
+                    // scroll-and-shake like every other bound's row.
+                    Button(action: addItem) {
+                        Label("Add an item", systemSymbol: .plus)
+                    }
+                    .id(ScrollAnchor.addItem.id)
+                    .nudgeShake(nudge, anchor: .addItem)
+                } header: {
+                    // «What's inside», not «Parcel»: several items ride one order,
+                    // and the singular read as a bound that does not exist (author,
+                    // 2026-09-14). The library's door is the header control.
                     HStack {
-                        Button(action: addItem) {
-                            ViewThatFits(in: .horizontal) {
-                                Label("Add an item", systemSymbol: .plus)
-                                Label("Add", systemSymbol: .plus)
-                            }
-                        }
+                        Text("What's inside")
+                        Spacer()
                         if !templateChips.isEmpty {
-                            Spacer()
                             Button { pickingTemplate = true } label: {
-                                ViewThatFits(in: .horizontal) {
-                                    Label("Add from library", systemSymbol: .shippingbox)
-                                    Label("Library", systemSymbol: .shippingbox)
-                                }
+                                Label("From library", systemSymbol: .shippingbox)
                             }
+                            .headerAction()
                             // A dialog like «Add field», not a Menu — the dialog is
                             // the one synthesized taps (UI tests, VoiceOver) can open.
                             .confirmationDialog(
@@ -541,12 +607,6 @@ extension NewDeliveryView {
                             }
                         }
                     }
-                    .buttonStyle(.borderless)
-                } header: {
-                    // «What's inside», not «Parcel»: several items ride one order,
-                    // and the singular read as a bound that does not exist (author,
-                    // 2026-09-14).
-                    Text("What's inside")
                 } footer: {
                     // The wire requires ≥1 item (live-verified) — the bound states
                     // itself in the section footer, not first on the review sheet
@@ -554,7 +614,7 @@ extension NewDeliveryView {
                     // sentence moved to the item editor's Value section, which is
                     // the field it explains.
                     if itemRows.isEmpty {
-                        Notice(.bound, "At least one item — the order needs a parcel to carry.")
+                        Notice(.bound, Text("At least one item — the order needs a parcel to carry."))
                     }
                 }
 
@@ -565,7 +625,9 @@ extension NewDeliveryView {
                 if fieldsError != nil || !fieldRows.isEmpty || !hiddenFieldRows.isEmpty {
                     Section {
                         if let fieldsError {
-                            // Same read-failure convention as the templates row.
+                            // Same read-failure convention as the templates row —
+                            // and the schema bound's door: the blocked bar lands
+                            // here, where the retry is.
                             VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
                                 Label(fieldsError, systemSymbol: .exclamationmarkTriangle)
                                     .font(.footnote)
@@ -573,10 +635,13 @@ extension NewDeliveryView {
                                 Button("Retry", action: retryFields)
                                     .font(.footnote)
                             }
+                            .id(ScrollAnchor.fieldsSchema.id)
+                            .nudgeShake(nudge, anchor: .fieldsSchema)
                         }
                         ForEach(fieldRows) { row in
                             SchemaFieldRow(row: row, setFieldValue: setFieldValue)
                                 .id(row.id)
+                                .nudgeShake(nudge, anchor: .field(row.id))
                         }
                         if !hiddenFieldRows.isEmpty {
                             // A confirmationDialog, not a Menu: the choice is one
@@ -611,21 +676,19 @@ extension NewDeliveryView {
                     // said and the author confirmed (Devin, r3999795256; author,
                     // 2026-09-14 — "just comment out those rows"). Their sections
                     // remain reachable inside Options.
-                    Button { editOptions(.options) } label: {
-                        summaryRow(symbol: .gearshape, title: "Options", value: optionsSummary)
+                    RowDoor { editOptions(.options) } label: {
+                        HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
+                            Image(systemSymbol: .gearshape)
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                                Text("Options")
+                                Text(optionsSummary)
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.secondary)
+                            }
+                        }
                     }
-                    // Button { editOptions(.when) } label: {
-                    //     summaryRow(symbol: .clock, title: "When", value: whenSummary)
-                    // }
-                    // Button { editOptions(.note) } label: {
-                    //     summaryRow(
-                    //         symbol: .pencilLine,
-                    //         title: "Note for the courier",
-                    //         value: commentSummary ?? String(localized: "not set")
-                    //     )
-                    // }
                 }
-                .buttonStyle(.plain)
             }
             .environment(\.editMode, $editMode)
             .onChange(of: rows.count) {
@@ -645,38 +708,17 @@ extension NewDeliveryView {
             }
         }
 
-        /// Row actions sit apart so a thumb cannot confuse them.
-        private static let actionSpacing: CGFloat = 24
+    }
+}
 
-        /// The card's own affordances (board `2b`): two points swap; three or more
-        /// reorder. Swap stays visible but disabled while an end is empty — unavailable
-        /// affordances state themselves rather than vanish (DesignSystem → field rules).
-        private var actions: some View {
-            HStack(spacing: Self.actionSpacing) {
-                if rows.count == 2 {
-                    Button(action: swapEnds) {
-                        Label("Swap", systemSymbol: .arrowUpArrowDown)
-                    }
-                    .disabled(!canSwap)
-                }
-                Button(action: addStop) {
-                    Label("Add stop", systemSymbol: .plus)
-                }
-                if canReorder {
-                    Button {
-                        withAnimation { editMode = editMode == .active ? .inactive : .active }
-                    } label: {
-                        Label(
-                            editMode == .active ? "Done reordering" : "Reorder",
-                            systemSymbol: .arrowUpAndDownTextHorizontal
-                        )
-                    }
-                }
-            }
-            .buttonStyle(.borderless)
-            .font(.subheadline)
-            .labelStyle(.titleAndIcon)
-        }
+private extension View {
+    /// The scroll-and-shake landing for a blocked bar's tap — every row that a
+    /// bound's `ScrollAnchor` names wears it (`NewDeliveryView.Content` scope).
+    func nudgeShake(
+        _ nudge: NewDeliveryView.Content.Nudge?,
+        anchor: NewDeliveryView.Content.ScrollAnchor
+    ) -> some View {
+        modifier(NewDeliveryView.Content.NudgeShake(nudge: nudge, anchor: anchor))
     }
 }
 
@@ -786,15 +828,18 @@ extension NewDeliveryView.Content {
                     arriving: pin.parcelsArriving
                 )
                 HStack(spacing: Self.actionSpacing) {
+                    // Card actions — the callout's own verbs
+                    // (DesignSystem → "Control roles").
                     Button("Edit point") {
                         selection = nil
                         pick(pin.id)
                     }
+                    .leadCardAction()
                     if canSavePlace {
                         Button("Save as place") { savePlace(pin.id) }
+                            .cardAction()
                     }
                 }
-                .buttonStyle(.borderless)
                 .font(.subheadline)
             }
         }
@@ -854,28 +899,57 @@ extension NewDeliveryView.Content {
 // MARK: - Order bar
 
 extension NewDeliveryView.Content {
-    /// The one CTA (board `1b`): named and priced once a class is chosen, visibly
-    /// waiting otherwise — never confused with the estimate bar above, which informs and
-    /// never acts (decision #13). Ordering itself happens behind the review sheet.
-    /// The one CTA. Plain values only: it renders a title, and knows nothing about
-    /// offer states — the root view reduces those, since deriving them here coupled
-    /// the bar to the model's `Offers` (R1; review, PR #22). Never disabled: a blocked
-    /// order's title is «Review the order», an enabled door to what is owed (the
-    /// drive's dead-CTA finding); the review sheet's confirm button is the gate.
+    /// The one standing action and the order's gate (DesignSystem → "The
+    /// gateway"): blocked, it names the first thing still owed and taps carry
+    /// to that row — never confused with the estimate bar above, which informs
+    /// and never acts (decision #13). The review sheet opens only from ready.
+    /// Plain values only: the state arrives reduced — the root owns the
+    /// blockers and the offers (R1; review, PR #22).
     struct OrderBar: View {
-        /// Absent while the bar has no place on screen at all — no route, no prices asked.
-        let title: String?
-        let openReview: () -> Void
+        /// Hidden is `nil` — no prices asked. Blocked names the next step and
+        /// counts the rest; ready names the price.
+        enum State: Equatable {
+            case blocked(step: String, remaining: Int)
+            case ready(priceText: String)
+        }
+
+        let state: State?
+        let action: () -> Void
 
         var body: some View {
-            if let title {
-                Button(action: openReview) {
-                    Text(title)
+            switch state {
+            case .ready(let priceText):
+                Button(action: action) {
+                    Text("Check out · \(priceText)")
                 }
                 .primaryAction()
                 .padding(.horizontal, Layout.Spacing.edge)
                 .padding(.vertical, Layout.Spacing.unit)
+            case .blocked(let step, let remaining):
+                Button(action: action) {
+                    VStack(spacing: Layout.Spacing.hairline) {
+                        Notice(.bound, Text("Check out"))
+                            .font(.headline)
+                        Text(stepLine(step: step, remaining: remaining))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .blockedAction()
+                .accessibilityHint(Text("Shows the first thing the order still needs."))
+                .padding(.horizontal, Layout.Spacing.edge)
+                .padding(.vertical, Layout.Spacing.unit)
+            case nil:
+                EmptyView()
             }
+        }
+
+        /// The bound's step, plus the count of what still stands behind it.
+        private func stepLine(step: String, remaining: Int) -> String {
+            remaining > 0
+                ? String(localized: "\(step) · \(remaining) more")
+                : step
         }
     }
 }
@@ -1036,7 +1110,7 @@ extension NewDeliveryView.Content {
                         )
                 }
             }
-            .buttonStyle(.plain)
+            .selectableCard()
             .accessibilityLabel(Text(verbatim: "\(name), \(window.map { "\($0), " } ?? "")\(priceText)\(pickupWindow.map { ", \($0)" } ?? "")\(limits.map { ", \($0)" } ?? "")"))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
@@ -1068,12 +1142,16 @@ extension NewDeliveryView.Content {
         /// exists nowhere else is a bug, so the long-press menu repeats it
         /// (board `4a`). `nil` when the point isn't placed or places can't take it.
         var savePlace: (() -> Void)? = nil
+        /// The parcel bound's door — the first item's editor, which owns the
+        /// stop chooser. Rendered only while `row.parcelBound` speaks.
+        var editParcels: (() -> Void)? = nil
 
         var body: some View {
             HStack(alignment: .top, spacing: Layout.Spacing.gutter) {
                 PointBadge(role: row.badge)
                 VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
-                    Button(action: pick) {
+                    // The row's door to the point's sheet — the `›` marks it.
+                    RowDoor(action: pick) {
                         Group {
                             if let address = row.address {
                                 Text(address) // user data, never a localization key
@@ -1084,10 +1162,7 @@ extension NewDeliveryView.Content {
                             }
                         }
                         .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
 
                     if let warning = row.addressWarning {
                         Label(warning, systemSymbol: .exclamationmarkTriangle)
@@ -1095,18 +1170,18 @@ extension NewDeliveryView.Content {
                             .foregroundStyle(Color.secondary)
                     }
 
+                    // The prompt door: an empty contact *invites* — glyph + words
+                    // in tertiary, never tint (DesignSystem → "Control roles").
                     Button(action: editContact) {
                         VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
                             if let contactSummary = row.contactSummary {
-                                // Concrete `Color.secondary`: the hierarchical style
-                                // would resolve against the button's tint and read
-                                // as blue.
                                 Text(contactSummary)
                                     .font(.footnote)
                                     .foregroundStyle(Color.secondary)
                             } else {
                                 Label(row.contactInvitation, systemSymbol: .plus)
                                     .font(.footnote)
+                                    .foregroundStyle(.tertiary)
                                 // Steering, not a gate: prices don't ask who's at
                                 // the door — only the order does (author,
                                 // 2026-09-18). Fillable upfront all the same.
@@ -1116,12 +1191,20 @@ extension NewDeliveryView.Content {
                             }
                         }
                     }
-                    .buttonStyle(.borderless)
+                    .promptDoor()
 
                     if let parcelActions = row.parcelActions {
                         Label(parcelActions, systemSymbol: .shippingbox)
                             .font(.footnote)
                             .foregroundStyle(Color.secondary)
+                    } else if let parcelBound = row.parcelBound {
+                        // A bound that is itself a door — the first item's
+                        // editor holds the stop chooser.
+                        Button(action: editParcels ?? {}) {
+                            Notice(.bound, Text(parcelBound))
+                                .font(.footnote)
+                        }
+                        .boundDoor()
                     }
                 }
             }
@@ -1352,6 +1435,7 @@ private extension MKCoordinateRegion {
         optionsSummary: "pro courier · to the door",
         whenSummary: "as soon as possible",
         commentSummary: nil,
+        orderBar: .ready(priceText: "1 190 ₽"),
         canSwap: true,
         canReorder: false,
         pick: { _ in },
@@ -1571,13 +1655,19 @@ private extension MKCoordinateRegion {
 }
 
 #Preview("Order bar: hidden while no prices were asked") {
-    NewDeliveryView.Content.OrderBar(title: nil, openReview: {})
+    NewDeliveryView.Content.OrderBar(state: nil, action: {})
 }
 
-#Preview("Order bar: blocked — names its destination") {
-    NewDeliveryView.Content.OrderBar(title: "Review the order", openReview: {})
+#Preview("Order bar: blocked — names the next step, counts the rest") {
+    NewDeliveryView.Content.OrderBar(
+        state: .blocked(step: "Assign a parcel to stop 2", remaining: 2), action: {})
+}
+
+#Preview("Order bar: blocked — the last bound") {
+    NewDeliveryView.Content.OrderBar(
+        state: .blocked(step: "Fill in «Заказ»", remaining: 0), action: {})
 }
 
 #Preview("Order bar: ready") {
-    NewDeliveryView.Content.OrderBar(title: "Order Express · 1 190 ₽", openReview: {})
+    NewDeliveryView.Content.OrderBar(state: .ready(priceText: "1 190 ₽"), action: {})
 }

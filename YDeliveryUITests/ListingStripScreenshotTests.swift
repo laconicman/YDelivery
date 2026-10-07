@@ -47,19 +47,21 @@ final class ListingStripScreenshotTests: XCTestCase {
         snap("0-draft-map-priced")
 
         // The strip lives below the stops; item summaries carry ₽ too, so the anchor
-        // is the conditional class's card button — nothing else on the screen says
-        // the wire name (the card labels itself «Super-express» once TariffClass
-        // names the class, #111). A containing() query over .any resolves to the
-        // window (its subtree contains everything), so the frame source must be
-        // the button itself.
+        // is the conditional class's card button — «Super-express» is its label
+        // now that `TariffClass` names the class (#111). A containing() query
+        // over .any resolves to the window (its subtree contains everything),
+        // so the frame source must be the button itself.
         let fasterCard = app.buttons.containing(
-            NSPredicate(format: "label CONTAINS %@", "superexpress_d2d")
+            NSPredicate(format: "label CONTAINS %@", "Super-express")
         ).firstMatch
         let window = app.windows.firstMatch
+        // The strip is the List's last section now — it can only rise as far as
+        // the content below it allows, so "inside the middle band" was the wrong
+        // wait on a bottomed-out scroll. Ride to the floor, then settle for the
+        // card being on screen at all.
         for _ in 0..<10 {
             if fasterCard.waitForExistence(timeout: 1),
-               fasterCard.frame.minY > window.frame.height * 0.2,
-               fasterCard.frame.maxY < window.frame.height * 0.8 { break }
+               fasterCard.frame.maxY < window.frame.maxY { break }
             app.swipeUp()
         }
         XCTAssertTrue(fasterCard.waitForExistence(timeout: 5), "the priced strip must render")

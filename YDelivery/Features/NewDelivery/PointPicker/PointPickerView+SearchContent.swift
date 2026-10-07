@@ -159,6 +159,8 @@ extension PointPickerView {
                             .padding(.vertical, Layout.Spacing.chip)
                             .background(Color(.secondarySystemFill), in: Capsule())
                         }
+                        // A selectable chip — the capsule is the button, plain
+                        // keeps its own chrome (DesignSystem → "Control roles").
                         .buttonStyle(.plain)
                         .contextMenu {
                             Button {
@@ -293,11 +295,13 @@ extension PointPickerView {
                     Text("Your position appears on the map and becomes the pickup point. Everything works without it — points can be placed by hand.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    // Card actions — the prompt's own verbs
+                    // (DesignSystem → "Control roles").
                     HStack {
                         Button("Continue", action: continueLocationPrompt)
-                            .buttonStyle(.borderedProminent)
+                            .leadCardAction()
                         Button("Not now", action: dismissLocationPrompt)
-                            .buttonStyle(.bordered)
+                            .cardAction()
                     }
                 }
                 .padding(.vertical, Layout.Spacing.tight)
@@ -382,11 +386,13 @@ extension PointPickerView.SearchContent {
                         Text("\(coordinateLine(point)) · \(sourceName(source))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        // Card actions — the found place's own verbs
+                        // (DesignSystem → "Control roles").
                         HStack {
                             Button("Place the point", action: place)
-                                .buttonStyle(.borderedProminent)
+                                .leadCardAction()
                             Button("Not now", action: dismiss)
-                                .buttonStyle(.bordered)
+                                .cardAction()
                         }
                     }
                     .padding(.vertical, Layout.Spacing.tight)
@@ -399,13 +405,15 @@ extension PointPickerView.SearchContent {
                         Text(sourceName(source))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        // Card actions — the route preview's own verbs
+                        // (DesignSystem → "Control roles").
                         HStack {
                             if let fillRoute {
                                 Button("Fill both ends", action: fillRoute)
-                                    .buttonStyle(.borderedProminent)
+                                    .leadCardAction()
                             }
                             Button("Not now", action: dismiss)
-                                .buttonStyle(.bordered)
+                                .cardAction()
                         }
                     }
                     .padding(.vertical, Layout.Spacing.tight)

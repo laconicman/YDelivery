@@ -177,12 +177,13 @@ must still read apart with color removed. Survey, inventory and reasoning:
 |---|---|---|---|
 | primary action | the screen's one standing verb | bordered-prominent, large, headline, full width · `primaryAction()` | the bottom inset («New Delivery», the gate), the sheet's verb |
 | secondary action | the quieter choice beside a primary | `.bordered`, large, full width · `secondaryAction()` | only in an action stack under a primary («Close», «Leave it for now») |
-| card actions | two or three verbs on a card outside a `List` | `.borderedProminent` + `.bordered`, regular size, side by side, `actionSpacing` apart | the paste and location cards, the map callout |
+| card actions | two or three verbs on a card outside a `List` | `.borderedProminent` + `.bordered`, regular size, side by side, `actionSpacing` apart · `leadCardAction()` + `cardAction()` | the paste and location cards, the map callout |
 | action row | the whole row is the verb | tinted words (+ glyph), the List's default style, **alone in its row** | Settings' Sign In / Sign Out, «Share with the recipient», «Save as a template» |
 | add row | an action row whose verb is *add* | `plus` glyph + verb, alone in its row — one per section | «Add stop», «Add an item», «Add field» |
 | header action | arranges, filters, or opens a library *for* the section — never a member of it | footnote `Button`/`Menu`, trailing in the section header · `headerAction()` | Sort · ⓘ on «Delivery options»; Swap · Reorder on «Route»; «From library» on «What's inside» |
 | row door | the row opens its subject | `.plain` whole row (or a `NavigationLink`), trailing `chevron.forward` `.tertiary`, content never tinted · `rowDoor()` | «Options», item rows, Library rows, field rows |
-| prompt door | a row door not yet answered | its prompt in `.tertiary`, a `plus` glyph where the verb is *add*, untinted (field rule 4) | «Where to deliver?», «Who receives — a name and a phone» |
+| prompt door | a row door not yet answered | its prompt in `.tertiary`, a `plus` glyph where the verb is *add*, untinted (field rule 4) · `promptDoor()` | «Where to deliver?», «Who receives — a name and a phone» |
+| bound door | a bound line that is also the door to the editor answering it | the `bound` notice as its label, untinted · `boundDoor()` | a stop that carries nothing (<doc:DesignSystemControls> → "Prompts versus bound lines") |
 | chip-as-control | a capsule that acts — expands, filters, picks | `StatusChip(status:disclosure:)`: `chevron.down` *inside* the capsule, up when open, a mini spinner while the read is out | the Deliveries row's chip |
 | chip-as-indicator | a capsule that reports | glyph + words, never a `Button`, never a chevron | `StatusChip` on the detail header, in widgets |
 | selectable card | one of several, chosen | `.plain` card with the accent selection stroke | `TariffCard` |

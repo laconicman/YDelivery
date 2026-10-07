@@ -485,6 +485,15 @@ TestFlight build is an archive of `main` at a tag `tf/<marketing>-<build>`
 (e.g. `tf/1.0-4`); the listing metadata lives on `main` (#88). GitLab-flow
 version branches return only if a hotfix for a shipped version is ever needed.
 
+**Amended 2026-10-05 (author):** the tag names the build, not its channel — a
+build uploaded to TestFlight can later go to the App Store storefronts as is, so
+`tf/` would mislabel it. Tags are SemVer with the build number as build metadata,
+`<major>.<minor>.<patch>+<build>` (`MARKETING_VERSION` 1.0, build 5 → `1.0.0+5`),
+set on the commit actually archived, after the upload. `tf/1.0-5` was removed: it
+was never uploaded. The 1.0 (5) build itself is the first use of the hotfix
+exception above — `release/1.0.5`, cut ahead of `main` for the Live Activity fix
+(#134).
+
 ## See Also
 
 - <doc:Vision>

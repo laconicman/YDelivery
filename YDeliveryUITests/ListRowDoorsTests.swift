@@ -1,10 +1,10 @@
 import XCTest
 
-/// Two buttons in one `List` row must each open their own target: with the
-/// automatic style the row is the hit target and one tap fires every button in
-/// it, so «Add from library» opened the item editor and its dialog never drew
-/// (owner, 2026-10-05). The route card's action row is the precedent that was
-/// already borderless — asserted here too so it stays that way.
+/// One row, one target, one role: the library door is the «What's inside»
+/// header's control — a header action, not a bare tinted word in a shared row —
+/// and the item rows carry the trailing `›` of a row door (DesignSystem →
+/// "Control roles", "Lists and rows"). Reorder lives in the route header now;
+/// asserted here so it still toggles only itself.
 final class ListRowDoorsTests: XCTestCase {
     @MainActor
     func testEachDoorInASharedRowOpensItsOwnTarget() throws {
@@ -14,38 +14,61 @@ final class ListRowDoorsTests: XCTestCase {
         app.launchArguments = ["--uitest-three-stop-draft", "--uitest-templates"]
         app.launch()
 
-        // The route card's action row (three stops → «Add stop» and «Reorder»):
-        // «Reorder» flips its own label and adds no stop.
-        let reorder = app.buttons["Reorder"].firstMatch
-        XCTAssertTrue(reorder.waitForExistence(timeout: 10))
+        // The blocked gateway names the first bound's step — the seeded draft's
+        // third stop has no person, so the bar reads «Check out» plus the step.
+        let orderBar = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Check out")).firstMatch
+        XCTAssertTrue(orderBar.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            orderBar.label.contains("Name the person at stop 3"),
+            "the bar must name the first next step — got «\(orderBar.label)»")
+
+        // The route header's «Reorder» flips its own label and adds no stop.
+        // Section headers render their controls uppercase, so the element's
+        // label is «REORDER» — match case-insensitively.
+        let reorder = app.buttons.matching(
+            NSPredicate(format: "label ==[c] %@", "Reorder")).firstMatch
+        XCTAssertTrue(reorder.waitForExistence(timeout: 10), "«Reorder» header action never drew")
         reorder.tap()
-        let doneReordering = app.buttons["Done reordering"].firstMatch
+        let doneReordering = app.buttons.matching(
+            NSPredicate(format: "label ==[c] %@", "Done reordering")).firstMatch
         XCTAssertTrue(doneReordering.waitForExistence(timeout: 5))
         XCTAssertFalse(
             app.descendants(matching: .any)
                 .matching(NSPredicate(format: "label CONTAINS %@", "Where to deliver?"))
                 .firstMatch.exists,
-            "«Reorder» added a stop — the row fired its neighbour")
+            "«Reorder» added a stop — the header fired its neighbour")
         doneReordering.tap()
 
-        // «Add from library» sits below the fold with the item rows; List realizes
-        // rows lazily, so scroll the list until it exists. Its label degrades to
-        // «Library» under ViewThatFits — accept either, scoped to the list so the
-        // tab bar's «Library» never matches.
+        // The library door is the section header's control — it lives outside
+        // the collection view's element tree, so the query is app-wide (the tab
+        // bar says «Library», not «From library» — no clash).
         let list = app.collectionViews.firstMatch
-        let door = list.buttons.matching(
-            NSPredicate(format: "label == %@ OR label == %@", "Add from library", "Library")
-        ).firstMatch
-        for _ in 0..<14 where !door.waitForExistence(timeout: 1) {
+        let door = app.buttons.matching(
+            NSPredicate(format: "label ==[c] %@", "From library")).firstMatch
+        // The header only enters the element tree while on screen — and a full
+        // swipe jumps it straight past the viewport. Big swipes until its own
+        // rows draw, then short drags to ease the header into view.
+        let addItem = app.buttons.matching(
+            NSPredicate(format: "label ==[c] %@", "Add an item")).firstMatch
+        for _ in 0..<14 where !door.waitForExistence(timeout: 1) && !addItem.exists {
             (list.exists ? list : app).swipeUp()
         }
+        for _ in 0..<10 where !door.exists {
+            let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 90)))
+            if door.waitForExistence(timeout: 1) { break }
+        }
         XCTAssertTrue(door.waitForExistence(timeout: 10), "the library door never drew")
+        XCTAssertTrue(door.isHittable, "the library door drew but is not hittable")
         door.tap()
 
-        // The dialog, not the editor. A confirmationDialog may present as a sheet
-        // or a popover — sheet first, app-wide button as the fallback.
-        let sheetChoice = app.sheets.buttons["Папка с документами"].firstMatch
-        let anyChoice = app.buttons["Папка с документами"].firstMatch
+        // The dialog, not the editor. A confirmationDialog may present as a
+        // sheet or plain buttons — and renders its rows uppercase, like the
+        // section headers.
+        let chipQuery = NSPredicate(format: "label ==[c] %@", "Папка с документами")
+        let sheetChoice = app.sheets.buttons.matching(chipQuery).firstMatch
+        let anyChoice = app.buttons.matching(chipQuery).firstMatch
         let choiceWait = Date.now.addingTimeInterval(10)
         while Date.now < choiceWait, !sheetChoice.exists, !anyChoice.exists {
             Thread.sleep(forTimeInterval: 0.1)

@@ -69,7 +69,7 @@ final class DeviceDriveTests: XCTestCase {
 
         // The bar only works once an offer is priced and selected — a wire call.
         let orderBar = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "Order")).firstMatch
+            NSPredicate(format: "label BEGINSWITH %@", "Check out")).firstMatch
         guard orderBar.waitForExistence(timeout: 60) else {
             snap("02-no-order-bar")
             dump("DRAFT", app)
@@ -87,7 +87,7 @@ final class DeviceDriveTests: XCTestCase {
         snap("02-draft-priced")
         orderBar.tap()
 
-        XCTAssertTrue(app.navigationBars["Review the order"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["Checkout"].waitForExistence(timeout: 10))
         snap("03-review-sheet")
         dump("SHEET", app)
 
@@ -255,7 +255,7 @@ final class DeviceDriveTests: XCTestCase {
         let optionsRow = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "Options")).firstMatch
         let orderBar = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "Order")).firstMatch
+            NSPredicate(format: "label BEGINSWITH %@", "Check out")).firstMatch
         XCTAssertTrue(orderBar.waitForExistence(timeout: 60))
         var clearOfBar: Bool {
             optionsRow.isHittable && orderBar.exists
@@ -306,7 +306,7 @@ final class DeviceDriveTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [priced], timeout: 60), .completed)
         orderBar.tap()
 
-        XCTAssertTrue(app.navigationBars["Review the order"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["Checkout"].waitForExistence(timeout: 10))
         let confirm = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "Order for")).firstMatch
         // Ready puts Confirm in the footer's last section — below the fold, so

@@ -55,4 +55,78 @@ struct LiveActivityDispositionTests {
                     == .ending(.immediate))
         }
     }
+
+    @Test("A quiet card is re-armed by a journal check, never by time alone")
+    func quietCardIsRearmed() {
+        let window = LiveActivityController.staleAfter
+        let checked = Date(timeIntervalSince1970: 1_800_000_000)
+        let armed = LiveActivityController.staleDate(checkedAt: checked)
+        #expect(armed == checked.addingTimeInterval(window))
+        let state = DeliveryActivityAttributes.ContentState(
+            status: .active, orderNumber: "4417", destinationAddress: "Каширское шоссе, 52",
+            courierName: nil, courierVehicle: nil, providerStatus: "pickuped",
+            etaAt: nil, providerObservedAt: checked.addingTimeInterval(-45 * 60),
+            destinationPhone: nil)
+        // Freshly armed by this check: nothing moved, nothing to send — whatever
+        // the age of the provider's own stamp (review: it moves only on a claim
+        // change). Nor does any later reconcile on the same clock: searches
+        // succeeding while the journal fails never move it (review, PR #134).
+        #expect(!LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: armed, state: state, checkedAt: checked))
+        // A check half a window later re-sends the same state to push the date
+        // on; one just short of that waits.
+        #expect(LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: armed, state: state,
+            checkedAt: checked.addingTimeInterval(window / 2 + 1)))
+        #expect(!LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: armed, state: state,
+            checkedAt: checked.addingTimeInterval(window / 2 - 1)))
+        // A card started before stale dates existed is armed by the first
+        // check — and only by a check.
+        #expect(LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: nil, state: state, checkedAt: checked))
+        #expect(!LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: nil, state: state, checkedAt: nil))
+        // A moved state always goes out, check or not.
+        var moved = state
+        moved.providerStatus = "delivery_arrived"
+        #expect(LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: armed, state: moved, checkedAt: checked))
+        #expect(LiveActivityController.needsUpdate(
+            shown: state, shownStaleDate: armed, state: moved, checkedAt: nil))
+    }
+
+    @Test("A card's window comes from the newest read behind it, and never shrinks")
+    func windowTakesTheNewestRead() {
+        let window = LiveActivityController.staleAfter
+        let journal = Date(timeIntervalSince1970: 1_800_000_000)
+        let placed = journal.addingTimeInterval(45 * 60)
+        // The review's case (PR #134): the journal last succeeded at 10:00,
+        // the sender places at 10:45 — placement's own answer dates the card,
+        // so it is not born flagged…
+        let born = LiveActivityController.staleDate(
+            observedAt: placed, checkedAt: journal, shown: nil)
+        #expect(born == placed.addingTimeInterval(window))
+        // …and an update later in the same outage keeps that window: the
+        // 10:00 check cannot unsay the 10:45 answer.
+        #expect(LiveActivityController.staleDate(
+            observedAt: placed, checkedAt: journal, shown: born) == born)
+        // A newer check extends it.
+        let later = placed.addingTimeInterval(20 * 60)
+        #expect(LiveActivityController.staleDate(
+            observedAt: placed, checkedAt: later, shown: born) == later.addingTimeInterval(window))
+        // A quiet claim first sighted under a healthy journal rides the
+        // journal's window, not its hour-old provider stamp.
+        #expect(LiveActivityController.staleDate(
+            observedAt: journal.addingTimeInterval(-60 * 60), checkedAt: journal, shown: nil)
+                == journal.addingTimeInterval(window))
+        // Disk state at launch, no check yet: the card brings its real age.
+        let disk = journal.addingTimeInterval(-60 * 60)
+        #expect(LiveActivityController.staleDate(
+            observedAt: disk, checkedAt: nil, shown: nil) == disk.addingTimeInterval(window))
+        // Nothing vouches: no window — a new card opens one at birth, and an
+        // unarmed card stays unarmed until a read arrives.
+        #expect(LiveActivityController.staleDate(
+            observedAt: nil, checkedAt: nil, shown: nil) == nil)
+    }
 }

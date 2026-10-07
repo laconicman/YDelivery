@@ -202,7 +202,7 @@ extension LibraryView {
         /// menu for discoverability; the delete ask parks the row in the root's
         /// confirm dialog.
         private func placeRow(_ row: PlaceRow) -> some View {
-            Button { editPlace(row.id) } label: {
+            RowDoor { editPlace(row.id) } label: {
                 HStack(alignment: .top, spacing: Layout.Spacing.tight) {
                     Image(systemSymbol: row.symbol)
                         .foregroundStyle(.secondary)
@@ -226,10 +226,7 @@ extension LibraryView {
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .contextMenu {
                 Button { pinPlace(row.id) } label: {
                     Label(row.pinned ? "Unpin" : "Pin",
@@ -261,7 +258,7 @@ extension LibraryView {
         /// is the door, the menu and swipes the secondary doors, same shape as
         /// the places' half.
         private func parcelRow(_ row: ParcelRow) -> some View {
-            Button { editParcel(row.id) } label: {
+            RowDoor { editParcel(row.id) } label: {
                 VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
                     HStack {
                         Text(row.name)
@@ -275,10 +272,7 @@ extension LibraryView {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .contextMenu {
                 Button { pinParcel(row.id) } label: {
                     Label(row.pinned ? "Unpin" : "Pin",

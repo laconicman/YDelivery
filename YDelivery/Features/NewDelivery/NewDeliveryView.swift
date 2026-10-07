@@ -11,10 +11,6 @@ struct NewDeliveryView: View {
     /// the flow.
     let placed: () -> Void
     @State private var showsReview = false
-    /// A blocker's door, tapped while the review sheet is up: remembered so the
-    /// sheet can let go *before* the next sheet asks for the screen — two
-    /// presenters on one view can't share it.
-    @State private var blockerDoor: Model.Blocker.Destination?
     /// Bumped per confirm — the ordering task's id, so a retry is the same owned task
     /// run again (the Run pattern; attempt 0 no-ops through the model's queue gate).
     @State private var orderAttempt = 0
@@ -40,6 +36,10 @@ struct NewDeliveryView: View {
     /// The row a blocker's door is scrolling to — cleared once the card has
     /// brought it into view, so a second door to the same row still lands.
     @State private var scrollTarget: Content.ScrollAnchor?
+    /// The blocked bar's landing — which bound's row shakes, and the tap's own
+    /// serial so a repeat nudge at the same row still fires.
+    @State private var nudge: Content.Nudge?
+    @State private var nudgeSerial = 0
     /// The strip's order, kept in defaults — a sheet dismissal keeps it, and the
     /// draft reads it rather than owning the persistence.
     @AppStorage("tariffSort") private var tariffSort: OfferSort = .fastest
@@ -88,7 +88,7 @@ struct NewDeliveryView: View {
                 optionsSummary: draft.options.summary,
                 whenSummary: draft.options.effective().whenSummary,
                 commentSummary: draft.options.comment.isEmpty ? nil : draft.options.comment,
-                orderBarTitle: orderBarTitle,
+                orderBar: orderBar,
                 canSwap: draft.canSwap,
                 canReorder: draft.canReorder,
                 pick: { pickingPoint = draft.point(withID: $0) },
@@ -117,7 +117,7 @@ struct NewDeliveryView: View {
                 setFieldValue: { draft.setFieldValue($1, for: $0) },
                 revealField: { draft.revealField($0) },
                 editOptions: { editingOptions = $0 },
-                openReview: { showsReview = true }
+                openReview: orderBarTapped
             )
             content.templateChips = store.parcelTemplates.map {
                 Content.TemplateChip(id: $0.id, name: $0.name)
@@ -134,6 +134,7 @@ struct NewDeliveryView: View {
                 : nil
             content.scrollTarget = scrollTarget
             content.onScrolled = { scrollTarget = nil }
+            content.nudge = nudge
             content.sort = $tariffSort
             content.priceRefreshNote = draft.priceRefreshNote
             return content
@@ -147,31 +148,34 @@ struct NewDeliveryView: View {
         return { item, name in try await store.saveTemplate(item, name: name) }
     }
 
-    /// A blocker's door, once the review sheet has let go. `.field`/`.offer`/
-    /// `.fieldsSchema` want nothing presented: their bounds already speak on the
-    /// card the sheet just uncovered — the first two only need the draft left
-    /// showing, the third re-reads the schema (a read, never a write).
-    private func openBlocker(_ destination: Model.Blocker.Destination) {
-        switch destination {
+    /// The bar's tap. Ready opens the review sheet — the gateway's consent end.
+    /// Blocked presents nothing: the bar names the first bound's step and the
+    /// tap scrolls to that bound's row and shakes it — the row is the door
+    /// (DesignSystem → "The gateway"; no editor opens from a nudge).
+    private func orderBarTapped() {
+        guard let first = draft.orderBlockers.first else {
+            showsReview = true
+            return
+        }
+        let anchor: Content.ScrollAnchor
+        switch first.destination {
         case .point(let id), .contact(let id):
-            scrollTarget = .stop(id)
-            pickingPoint = draft.point(withID: id)
+            anchor = .stop(id)
         case .item(let id):
-            scrollTarget = .item(id)
-            editingItem = draft.item(withID: id)
+            anchor = .item(id)
         case .newItem:
-            editingItem = ParcelItem()
-        case .fieldsSchema:
-            Task { await store.refresh() }
+            anchor = .addItem
         case .field(let id):
             draft.revealField(id)
-            // The door lands on the row it names — the card scrolls the field
-            // into view once the sheet is gone.
-            scrollTarget = .field(id)
+            anchor = .field(id)
+        case .fieldsSchema:
+            anchor = .fieldsSchema
         case .offer:
-            // The class bound's door is the strip itself.
-            scrollTarget = .tariffStrip
+            anchor = .tariffStrip
         }
+        scrollTarget = anchor
+        nudgeSerial += 1
+        nudge = Content.Nudge(anchor: anchor, serial: nudgeSerial)
     }
 
     var body: some View {
@@ -330,22 +334,7 @@ struct NewDeliveryView: View {
                     save: { draft.options = $0 }
                 )
             }
-            .sheet(isPresented: $showsReview, onDismiss: {
-                // The door waits for the sheet to be gone — presenting into a
-                // dismissing sheet lands the next editor nowhere.
-                if let door = blockerDoor {
-                    blockerDoor = nil
-                    // The sheet's doors are gated on `ordering`; this is the same
-                    // guard again so a tap queued before the state moved can't
-                    // route into a draft a live run is reading.
-                    switch draft.ordering {
-                    case .idle, .failed:
-                        openBlocker(door)
-                    default:
-                        break
-                    }
-                }
-            }) {
+            .sheet(isPresented: $showsReview) {
                 ReviewSheet(
                     stops: reviewStops,
                     itemLines: draft.items.map { item in
@@ -371,10 +360,6 @@ struct NewDeliveryView: View {
                     done: {
                         showsReview = false
                         placed()
-                    },
-                    resolveBlocker: { blocker in
-                        blockerDoor = blocker.destination
-                        showsReview = false
                     },
                     // Closes the sheet and nothing else: the draft stays parked with its
                     // token, so a later attempt reuses it rather than buying a second
@@ -412,6 +397,7 @@ private extension NewDeliveryView {
                     ? String(localized: "No building number — the courier may have trouble finding the door.")
                     : nil,
                 parcelActions: draft.parcelActions(at: index),
+                parcelBound: draft.parcelBound(at: index),
                 isDeletable: index > 0 && points.count > 2,
                 isMovable: index > 0 && point.role != .return
             )
@@ -454,7 +440,8 @@ private extension NewDeliveryView {
                         ? nil
                         : String(localized: "Doesn't fit \(offer.tariff.words)")
                 },
-                journey: draft.journeyLine(for: item)
+                journey: draft.journeyLine(for: item),
+                bound: draft.itemBound(item)
             )
         }
     }
@@ -523,17 +510,18 @@ private extension NewDeliveryView {
         }
     }
 
-    /// The CTA's words. `nil` while the bar has no place on screen at all — no route,
-    /// no prices asked for yet. When the order cannot yet be placed, the title names
-    /// the destination the tap actually opens — the review sheet, which lists what is
-    /// owed — rather than promising a sale it cannot make (the drive's dead-CTA
-    /// finding; the bar was an `Order`-labeled button that swallowed taps).
-    var orderBarTitle: String? {
+    /// The bar's state. `nil` while no prices were asked — the gateway has no
+    /// place on screen at all. Blocked, it carries the first bound's step and
+    /// the count still standing; ready, the held price (an unchosen class is
+    /// itself a blocker, so `selectedOffer` can never be nil on the ready path).
+    var orderBar: Content.OrderBar.State? {
         guard draft.offers != .idle else { return nil }
-        guard draft.orderBlockers.isEmpty, let offer = draft.selectedOffer else {
-            return String(localized: "Review the order")
+        let blockers = draft.orderBlockers
+        guard blockers.isEmpty else {
+            return .blocked(step: blockers[0].step, remaining: blockers.count - 1)
         }
-        return String(localized: "Order \(offer.tariff.words) · \(offer.priceText)")
+        guard let offer = draft.selectedOffer else { return nil }
+        return .ready(priceText: offer.priceText)
     }
 
     /// Every class the app knows, priced where the strip has a price — the explainer

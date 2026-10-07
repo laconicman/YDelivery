@@ -42,6 +42,12 @@ final class ClaimsSyncController {
     /// When a pass last completed — either feed; the union error above carries
     /// the "but this half is stale" signal the timestamp alone cannot.
     private(set) var lastSyncedAt: Date?
+    /// When the journal was last read to the end of the feed — the one pass that
+    /// vouches for every claim's current state. Search lists only what can still
+    /// move, so a claim that finished between passes is the journal's alone to
+    /// report: the Live Activities' stale dates run on this clock, never on
+    /// ``lastSyncedAt`` (review, PR #134).
+    private(set) var lastJournalSyncedAt: Date?
     private(set) var isSyncing = false
 
     private let session: ClientController
@@ -149,7 +155,8 @@ final class ClaimsSyncController {
             try await drainPendingAcceptances(identity: identity)
             try await drainPendingDiscovery(identity: identity)
             try await journalPasses(from: syncState().cursor, identity: identity)
-            lastSyncedAt = .now
+            lastJournalSyncedAt = .now
+            lastSyncedAt = lastJournalSyncedAt
             journalError = nil
             return true
         } catch is JournalCursorInvalid {
@@ -161,7 +168,8 @@ final class ClaimsSyncController {
             try? writeSyncState(state, identity: identity)
             do {
                 try await journalPasses(from: nil, identity: identity)
-                lastSyncedAt = .now
+                lastJournalSyncedAt = .now
+                lastSyncedAt = lastJournalSyncedAt
                 journalError = nil
                 return true
             } catch is SyncSuperseded {
@@ -446,7 +454,14 @@ final class ClaimsSyncController {
     /// delivered on `.main` (see `register` in `YDeliveryApp`), but nothing
     /// here needs the actor — `BGTaskScheduler` and the `Task` spawn are
     /// off-actor safe, and the journal pass hops to MainActor at the `await`.
-    nonisolated func handleAppRefresh(_ task: BGAppRefreshTask) {
+    /// `publish` runs after the pass and before completion — the surfaces that
+    /// must move in this same wake (the Live Activities) are the composition
+    /// root's to name; the view-side republication hooks cannot be counted on
+    /// while the app is suspended between frames.
+    nonisolated func handleAppRefresh(
+        _ task: BGAppRefreshTask,
+        publish: @escaping @MainActor () async -> Void = {}
+    ) {
         scheduleAppRefresh()
         // BGTask predates Sendable — its completion/expiry API is thread-safe
         // by contract (the object lives to be driven from the queue the system
@@ -454,6 +469,7 @@ final class ClaimsSyncController {
         nonisolated(unsafe) let task = task
         let work = Task { @MainActor [weak self] in
             let completed = await self?.syncJournal() ?? true
+            await publish()
             task.setTaskCompleted(success: completed && !Task.isCancelled)
         }
         task.expirationHandler = { work.cancel() }
@@ -523,6 +539,7 @@ final class ClaimsSyncController {
         searchError = nil
         journalError = nil
         lastSyncedAt = nil
+        lastJournalSyncedAt = nil
         // The next tick must see this as a fresh sign-in — an out-and-in inside
         // one interval would otherwise keep `wasSignedIn` true and wait ~10
         // minutes for the reconcile tick to run search (review, PR #35).

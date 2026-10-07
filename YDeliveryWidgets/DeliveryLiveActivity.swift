@@ -16,7 +16,7 @@ import YDeliveryKit
 struct DeliveryLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DeliveryActivityAttributes.self) { context in
-            LockScreenView(state: context.state)
+            LockScreenView(state: context.state, isStale: context.isStale)
                 .widgetURL(WidgetLink.order(context.attributes.orderID))
         } dynamicIsland: { context in
             DynamicIsland {
@@ -24,6 +24,9 @@ struct DeliveryLiveActivity: Widget {
                     statusGlyph(context.state.status)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
+                    // Stale, the stamp below qualifies this figure — «~14 мин»
+                    // as of 9:27, the Lock Screen's own pairing. Only compact,
+                    // with no room for a stamp, trades it for the clock.
                     ETALabel(at: context.state.etaAt,
                              observedAt: context.state.providerObservedAt,
                              presentation: .duration)
@@ -34,22 +37,33 @@ struct DeliveryLiveActivity: Widget {
                         .font(.caption)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack {
-                        OrderIdentity(number: context.state.orderNumber, size: .compact)
-                        Text(verbatim: "·")
-                        Text(context.state.destinationAddress)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        callButton(phone: context.state.destinationPhone)
+                    VStack(alignment: .leading, spacing: Layout.Spacing.hairline) {
+                        HStack {
+                            OrderIdentity(number: context.state.orderNumber, size: .compact)
+                            Text(verbatim: "·")
+                            Text(context.state.destinationAddress)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            callButton(phone: context.state.destinationPhone)
+                        }
+                        .font(.caption2)
+                        // Board `5a` gives the island no as-of line; a stale
+                        // card earns one — the Lock Screen's own words
+                        // (review, PR #134).
+                        if context.isStale {
+                            ActivityStamp(observedAt: context.state.providerObservedAt,
+                                          isStale: true)
+                        }
                     }
-                    .font(.caption2)
                 }
             } compactLeading: {
                 statusGlyph(context.state.status)
             } compactTrailing: {
+                // Stale, the frozen «~14 мин» would read as a wait from now;
+                // the clock form stays true however old the reading is.
                 ETALabel(at: context.state.etaAt,
                          observedAt: context.state.providerObservedAt,
-                         presentation: .duration)
+                         presentation: context.isStale ? .clock : .duration)
                     .font(.caption2.weight(.semibold))
             } minimal: {
                 statusGlyph(context.state.status)
@@ -103,9 +117,12 @@ struct DeliveryLiveActivity: Widget {
 /// top, the wire's own phrase as the headline, the courier line, then the two
 /// ETA readings — the clock («9:41») the sender plans against and the duration
 /// («~14 мин») the wait feels like. The staleness stamp rides at the bottom:
-/// «as of 9:27» is what keeps a dead activity from posing as live.
+/// «as of 9:27» is what keeps a dead activity from posing as live — and once
+/// the card passes its stale date (`LiveActivityController.staleAfter` since
+/// the app last checked) the stamp says so outright: «not updating · as of 9:27».
 private struct LockScreenView: View {
     let state: DeliveryActivityAttributes.ContentState
+    let isStale: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.Spacing.tight) {
@@ -141,12 +158,7 @@ private struct LockScreenView: View {
                     }
                 }
             }
-            if let observed = state.providerObservedAt {
-                (Text("as of ")
-                    + Text(observed, style: .time))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            ActivityStamp(observedAt: state.providerObservedAt, isStale: isStale)
         }
         .padding(Layout.Spacing.edge)
     }
@@ -157,6 +169,32 @@ private struct LockScreenView: View {
             return String(localized: phrase)
         }
         return String(localized: state.status.words)
+    }
+}
+
+/// The as-of line, or its stale form — the one place a card admits the app
+/// has not been able to refresh it. The Lock Screen always carries it; the
+/// expanded island only once the card is stale.
+private struct ActivityStamp: View {
+    let observedAt: Date?
+    let isStale: Bool
+
+    var body: some View {
+        if isStale {
+            Group {
+                if let observedAt {
+                    Text("Not updating · as of \(Text(observedAt, style: .time))")
+                } else {
+                    Text("Not updating")
+                }
+            }
+            .font(.caption2.weight(.medium))
+        } else if let observedAt {
+            (Text("as of ")
+                + Text(observedAt, style: .time))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -177,7 +215,21 @@ private extension DeliveryActivityAttributes.ContentState {
 }
 
 #Preview("Lock screen") {
-    LockScreenView(state: .previewEnRoute)
+    LockScreenView(state: .previewEnRoute, isStale: false)
         .padding(.vertical)
+}
+
+#Preview("Lock screen, stale") {
+    LockScreenView(state: .previewEnRoute, isStale: true)
+        .padding(.vertical)
+}
+
+#Preview("Stamp — live, stale, stale with no stamp") {
+    VStack(alignment: .leading, spacing: Layout.Spacing.tight) {
+        ActivityStamp(observedAt: .now, isStale: false)
+        ActivityStamp(observedAt: .now, isStale: true)
+        ActivityStamp(observedAt: nil, isStale: true)
+    }
+    .padding()
 }
 #endif

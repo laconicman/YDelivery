@@ -101,6 +101,26 @@
         }
       }
     },
+    "Not updating" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не обновляется"
+          }
+        }
+      }
+    },
+    "Not updating · as of %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не обновляется · на %@"
+          }
+        }
+      }
+    },
     "Nothing on the way" : {
       "localizations" : {
         "ru" : {

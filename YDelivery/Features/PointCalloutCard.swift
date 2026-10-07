@@ -36,6 +36,8 @@ enum PointCallout {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    // The card's close — chrome, not a listed role: a small
+                    // borderless glyph beside the title.
                     Button(action: close) {
                         Image(systemSymbol: .xmark)
                             .font(.footnote.weight(.semibold))
