@@ -57,9 +57,11 @@ struct YDeliveryApp: App {
                 // The cards move in the wake that learned the news, and the
                 // task completes only once their calls landed — a delivered
                 // order must not keep an «en route» card until the next launch.
-                sync.handleAppRefresh(refresh) {
-                    guard let store, let activities else { return }
-                    activities.reconcile(with: store)
+                sync.handleAppRefresh(refresh) { [weak sync] in
+                    guard let sync, let store, let activities else { return }
+                    // A failed or skipped pass leaves the journal clock where
+                    // it was, so this pass re-arms nothing it cannot vouch for.
+                    activities.reconcile(with: store, checkedAt: sync.lastJournalSyncedAt)
                     await activities.settle()
                 }
             } else { task.setTaskCompleted(success: false) }

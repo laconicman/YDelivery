@@ -30,15 +30,17 @@ final class LiveActivityController {
     /// screen, then it dismisses itself.
     nonisolated static let deliveredLinger: TimeInterval = 4 * 60
 
-    /// How long a card stays trustworthy after the app last reconciled it.
-    /// There is no push relay, so a card only moves while the app runs: the
-    /// foreground journal ticks every 30 seconds, a background wake is asked
-    /// for every 15 minutes and granted when iOS decides. Two missed wakes
-    /// means nobody is updating the card — past this the system flags it
+    /// How long a card stays trustworthy after the app last checked the
+    /// journal. There is no push relay, so a card only moves while the app
+    /// runs: the foreground journal ticks every 30 seconds, a background wake
+    /// is asked for every 15 minutes and granted when iOS decides. Two missed
+    /// wakes means nobody is updating the card — past this the system flags it
     /// stale (`context.isStale`) and the Lock Screen says so instead of
     /// posing as live. The clock is the app's last *check*, not the
     /// provider's `providerObservedAt`: that stamp moves only when the claim
-    /// changes, and a quiet half-hour en route is a healthy card.
+    /// changes, and a quiet half-hour en route is a healthy card. Nor is it a
+    /// search, a store write or the wall clock: only a journal read to the end
+    /// of the feed vouches for every card (``ClaimsSyncController/lastJournalSyncedAt``).
     nonisolated static let staleAfter: TimeInterval = 30 * 60
 
     /// The last reconcile's ActivityKit calls. Each pass chains behind the
@@ -92,30 +94,37 @@ final class LiveActivityController {
         }
     }
 
-    /// When a card written `now` stops being trustworthy.
-    nonisolated static func staleDate(now: Date = .now) -> Date {
-        now.addingTimeInterval(staleAfter)
+    /// When a card the journal vouched for at `checkedAt` stops being
+    /// trustworthy.
+    nonisolated static func staleDate(checkedAt: Date) -> Date {
+        checkedAt.addingTimeInterval(staleAfter)
     }
 
-    /// Whether a live card must be re-sent: its state moved, or its stale
-    /// date is within half a window — a healthy sync re-arms the card before
-    /// it would ever flag, at most one extra update per card per 15 minutes,
-    /// while a card the app stopped checking runs out its window and says so.
+    /// Whether a live card must be re-sent: its state moved, or the last
+    /// journal check is half a window past the one that armed it — a healthy
+    /// sync re-arms the card before it would ever flag, at most one extra
+    /// update per card per 15 minutes. Time alone never re-arms: with no newer
+    /// check behind it — a failed or skipped journal pass, a search, a store
+    /// write — a card runs out its window and says so (review, PR #134).
     nonisolated static func needsUpdate(
         shown: DeliveryActivityAttributes.ContentState, shownStaleDate: Date?,
-        state: DeliveryActivityAttributes.ContentState, now: Date = .now
+        state: DeliveryActivityAttributes.ContentState, checkedAt: Date?
     ) -> Bool {
-        shown != state
-            || (shownStaleDate ?? .distantPast) < now.addingTimeInterval(staleAfter / 2)
+        guard let checkedAt else { return shown != state }
+        return shown != state
+            || (shownStaleDate ?? .distantPast) < checkedAt.addingTimeInterval(staleAfter / 2)
     }
 
     /// The store-facing entry: an unread store is not an empty one, and
     /// reconciling against `[]` would sweep every restored card as an orphan
     /// (review, PR #44). Every caller — the view's republication and
-    /// sync-success hooks, and the background refresh — goes through this gate.
-    func reconcile(with store: StoreController) {
+    /// journal-success hooks, and the background refresh — goes through this
+    /// gate. `checkedAt` is the journal's last full read, the clock every stale
+    /// date runs on.
+    func reconcile(with store: StoreController, checkedAt: Date?) {
         guard store.hasLoaded else { return }
-        reconcile(orders: store.orders, orderNumber: store.orderNumber(for:))
+        reconcile(orders: store.orders, orderNumber: store.orderNumber(for:),
+                  checkedAt: checkedAt)
     }
 
     /// Reconcile the store's truth against what the Lock Screen is showing.
@@ -123,7 +132,8 @@ final class LiveActivityController {
     /// sync merges, placement, and cancels all arrive through the one hook.
     /// `orderNumber` resolves the sender's own number — the surface's identity
     /// is «4417», never the vendor's claim id (board `5a`).
-    func reconcile(orders: [Order], orderNumber: (Order.ID) -> String?) {
+    func reconcile(orders: [Order], orderNumber: (Order.ID) -> String?,
+                   checkedAt: Date?) {
         guard reconciles, ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let live = Activity<DeliveryActivityAttributes>.activities
         var changes: [(Activity<DeliveryActivityAttributes>, Change)] = []
@@ -136,10 +146,17 @@ final class LiveActivityController {
                 if let activity {
                     guard Self.needsUpdate(shown: activity.content.state,
                                            shownStaleDate: activity.content.staleDate,
-                                           state: state) else { continue }
-                    changes.append((activity, .update(state)))
+                                           state: state, checkedAt: checkedAt) else { continue }
+                    // A state that moved with no check behind it keeps the
+                    // window the card already had.
+                    let staleDate = checkedAt.map(Self.staleDate(checkedAt:))
+                        ?? activity.content.staleDate
+                    changes.append((activity, .update(state, staleDate: staleDate)))
                 } else {
-                    start(order: order, state: state)
+                    // Before the first check, a new card's window opens at its
+                    // birth — the read that placed or listed the order.
+                    start(order: order, state: state,
+                          staleDate: Self.staleDate(checkedAt: checkedAt ?? .now))
                 }
             case .ending(let ending):
                 if let activity {
@@ -191,16 +208,15 @@ final class LiveActivityController {
 
     /// One ActivityKit call a reconcile pass owes.
     private enum Change {
-        case update(DeliveryActivityAttributes.ContentState)
+        case update(DeliveryActivityAttributes.ContentState, staleDate: Date?)
         /// `nil` content ends on the card's last state.
         case end(DeliveryActivityAttributes.ContentState?, ActivityUIDismissalPolicy)
 
         func apply(to activity: Activity<DeliveryActivityAttributes>) async {
             nonisolated(unsafe) let activity = activity
             switch self {
-            case .update(let state):
-                await activity.update(.init(
-                    state: state, staleDate: LiveActivityController.staleDate()))
+            case .update(let state, let staleDate):
+                await activity.update(.init(state: state, staleDate: staleDate))
             case .end(let state, let dismissal):
                 // A final card is stale-proof: it no longer claims to be live.
                 await activity.end(state.map { .init(state: $0, staleDate: nil) },
@@ -210,11 +226,12 @@ final class LiveActivityController {
     }
 
     private func start(order: Order,
-                       state: DeliveryActivityAttributes.ContentState) {
+                       state: DeliveryActivityAttributes.ContentState,
+                       staleDate: Date) {
         do {
             _ = try Activity.request(
                 attributes: DeliveryActivityAttributes(orderID: order.id),
-                content: .init(state: state, staleDate: Self.staleDate()),
+                content: .init(state: state, staleDate: staleDate),
                 pushType: nil  // no relay — updates are local, from sync
             )
         } catch {
