@@ -343,7 +343,7 @@ the courier edition):
 
 | Author | Subject kind | `subjectRef` | When the prompt appears |
 |---|---|---|---|
-| Owner | `leg` (the courier's run) | leg id, or the derived leg-0 id while `legs` is absent; `subjectLabel` = courier name and vehicle snapshot | After `delivered`/`delivered_finish`, once, dismissible, in the detail and the chat |
+| Owner | `leg` (the courier's run) | the logical leg ref (`orderID ‖ position`), or the derived leg-0 ref while `legs` is absent; `subjectLabel` = courier name and vehicle snapshot | After `delivered`/`delivered_finish`, once, dismissible, in the detail and the chat |
 | Owner | `party` (the receiver) | the receiver's `partyRef` | Optional, from the detail's members row |
 | Receiver (member) | `leg` | as above | After delivery, in the chat (the surface they already use) |
 | Receiver | `party` (the owner) | the owner's `partyRef` | Same prompt, second line |

@@ -330,12 +330,21 @@ design is written against the local 0.4.15 source, where stops upsert and prune.
    one device's signature beside the other's key id and read *invalid* for a fact both
    wrote honestly. Dedupe of the *fact* is a read-time derivation, like list ordering:
    the trail collapses `orderEvents` by `(orderID, providerEventID)`, and sightings by
-   `(orderID, providerStatus, source, routeDigest)` — but only rows whose signed columns
-   agree: one entry per fact, the verified one when any is, else the earliest `at`, then
-   the smallest id, so every device derives the same answer. Rows that share a key but
-   *disagree* are not collapsed: each renders with its own verdict (rule 6 — nothing is
-   hidden), and a verified row beside an invalid or not-entitled twin is the forgery
-   made visible, not a duplicate.
+   `(orderID, providerStatus, source, routeDigest)` — but only rows that *agree on the
+   fact*: the frozen column list minus `id`, plus the party the row's verdict names (the
+   binding's, so a row written before its device knew its party still folds once its
+   key row is bound, and stands apart as *unverifiable* until then), with writer
+   identity (`id`, `signingKeyID`, `signature`) left out of the comparison, since
+   it differs by construction between two honest devices while each row is still
+   verified on its own (amended 2026-10-08, second round: comparing the *signed* columns
+   could never match, because the writer-specific `id` heads every list). One entry per
+   fact, the verified one when any is, else the earliest `at`, then the smallest id, so
+   every device derives the same answer. Rows that share a key but disagree on the fact,
+   or come from a different party, are not collapsed: each renders with its own verdict
+   (rule 6 — nothing is hidden), and a verified row beside an invalid or not-entitled
+   twin is the forgery made visible, not a duplicate. UI identity follows the chosen
+   representative on each device; devices need not pick the same row, only the same
+   fact.
 2. **Unsigned projections:** the `orders` root, `orderProviderStates`, `orderOptions`,
    `orderItems`, `routeStops`, `orderCustomFields`. They keep today's writers and today's
    merge behaviour. Their integrity is a *derived verdict*: the mirror's `providerStatus`
@@ -548,7 +557,9 @@ Role resolution: the owner is the party the authority names as the order's owner
 share's owner in CloudKit mode; whoever the device is on a private order); a member is a
 party whose *effective* membership row names a role other than `removed`, or, before
 the owner's device has reconciled one, a party the authority lists as a participant; a
-courier is a member whose `partyRef` equals a `legs.courierPartyRef`. Only membership
+courier is a member whom the *effective* `legs` row for a leg names as
+`courierPartyRef` (<doc:Schema> → "Stage 2": a leg is a logical identity its rows fold
+by). Only membership
 rows that themselves read *verified* as the owner's count for roles — a row anyone else
 appends, a `removed` for the owner included, is *notEntitled*, rendered as such, and
 changes nobody's verdict. The effective row is the latest by `addedAt`; on an exact tie
@@ -573,14 +584,31 @@ refuses it instead. `participantKeys` carries no role: roles come from `membersh
 
 **Derived verdicts for projections.** `mirrorIntegrity(orderID:)` compares
 `orderProviderStates.providerStatus` with the `providerStatus` of the latest *verified*
-status-bearing event (by `at`; journal beats sighting on a tie; equally stamped
-sightings are an unordered set, and the mirror is consistent if it matches any of them)
-and yields `.consistent` / `.disagrees(expected:)` / `.noSignedHistory`.
-`routeIntegrity(orderID:)` hashes the stored stops' sender-authored columns (below) and
-compares with the `routeDigest` on the latest verified digest-bearing event, under the
-same tie rule: the route is consistent if it matches any equally stamped digest. Both
-read the trail deduped by fact (rule 1). Neither touches the projection tables' write
-paths (<doc:Schema> → "Derived integrity").
+status-bearing event and yields `.consistent` / `.disagrees(expected:)` /
+`.noSignedHistory`; `routeIntegrity(orderID:)` hashes the stored stops' sender-authored
+columns (below) and compares with the `routeDigest` on the latest verified
+digest-bearing event. "Latest" is one total order over the rows that read *verified* —
+a forged row fails verification, and a member's row fails entitlement, before either
+can compete, so a forged `providerRevision` competes with nothing — the same for both
+(amended 2026-10-08,
+second round: "the mirror is consistent if it matches any equally stamped status" let a
+read-write participant roll the mirror back to an older verified status that happened
+to share the stamp): by the provider's `revision` where both rows carry one, else by
+`at`, the provider's own clock on journal rows and sightings alike — a versioned row
+beside an unversioned one falls to `at` and then source, a guess about two counters'
+relative position, named as the residual it is until the one-counter verification
+lands; on a tie, journal
+beats a claim-card sighting beats a search sighting beats the app's own `placed`
+(among digest-bearing rows the journal never competes: it carries no route); a residual
+tie is settled by the smallest id — deterministic, and named for what it is. The
+provider documents `updated_ts` only as "last update" and the package records no
+guarantee that two reads at one stamp agree; `revision`, on the claim and on every
+journal event, is the key the package's evidence points at (whether the two are one
+counter is on the open-verifications list — one live capture matched). Exactly one
+event is the expected value; a projection that matches any other reads *disagrees*, so
+an honest provider anomaly shows as a warning rather than a forged rollback passing as
+consistent. Both read the trail deduped by fact (rule 1). Neither touches the
+projection tables' write paths (<doc:Schema> → "Derived integrity").
 
 #### The canonical payload
 
@@ -605,11 +633,11 @@ signingKeyID = "p256.v2." ‖ hex(SHA-256(x963PublicKey)[0..<8])      // v2 = th
 |---|---|
 | `participantKeys` | id, orderID, partyRef, keyID, publicKey, bindingKind, bindingProof, bindingKeyID, boundAt, addedAt |
 | `memberships` | id, orderID, partyRef, role, addedAt, authorRef |
-| `orderEvents` | id, orderID, legRef, providerEventID, at, kind, providerStatus, detail, source, routeDigest, authorRef |
+| `orderEvents` | id, orderID, legRef, providerEventID, providerRevision, at, kind, providerStatus, detail, source, routeDigest, authorRef |
 | `orderMessages` | id, orderID, sentAt, kind, text, attachmentRef, authorRef (not `authorHint`: a display cache) |
 | `orderAttachments` | id, orderID, kind, caption, byteSize, createdAt, dataHash, authorRef |
 | `orderRatings` | id, orderID, legRef, authorRef, subjectKind, subjectRef, subjectLabel, score, comment, at |
-| `legs` (later) | id, orderID, position, kind, providerAccountRef, courierPartyRef, fromStopRef, toStopRef, assignedAt, authorRef |
+| `legs` (later) | id, ref, orderID, position, kind, providerAccountRef, courierPartyRef, fromStopRef, toStopRef, assignedAt, authorRef |
 
 Adding a column to a signed table is a new payload version (`YDX3`, `p256.v3.`); rows
 keep verifying under the version their key id names. `dataHash` is
@@ -622,9 +650,9 @@ fails the attachment's verdict (the blob itself is a `CKAsset` and is not signed
 address, building, entrance, floor, apartment, intercom, contactName,
 contactGivenName, contactFamilyName, contactPhone, contactPhoneExtension. Visit columns
 are provider truth and excluded; stop ids are identity, not content, and excluded. It is
-carried by two event kinds: `placed` (written by the ordering flow with `source = "app"`
-when the claim is accepted; `detail` is JSON with claimID, tariff, price, currency as
-agreed) and every `sighting` (the route as the provider reported it, so a point the API
+carried by two event kinds: `placed` (a Stage 1 kind — today's code emits journal rows
+and sightings only — written by the ordering flow with `source = "app"` when the claim
+is accepted; `detail` is JSON with claimID, tariff, price, currency as agreed) and every `sighting` (the route as the provider reported it, so a point the API
 "invents" is simply the newer verified fact, per the package's *WorkingWithYandex*). A
 sighting's identity carries its digest — `orderID ‖ providerStatus ‖ source ‖
 routeDigest ‖ the writer's key id` (amended 2026-10-08, review of #135): the Kit's
@@ -633,7 +661,11 @@ not, so under the earlier identity `orderID ‖ status ‖ source` a corrected a
 have refreshed the stops while the second sighting was dropped, and the route would
 have disagreed with a stale digest for a change nobody made. Now a changed route is a
 new signed sighting, an identical re-sight stays a no-op, and the stops always have a
-signed digest to answer to.
+signed digest to answer to. The journal never carries a route — its change types are
+`status_changed` and `price_changed`, as <doc:Design> → "Claims sync" already records
+("its events carry no coordinates or routes"), and the package records no signal for a
+corrected route — so a route reaches the store only through a card or a search read,
+which is why the sighting, not the journal row, carries the digest.
 
 #### What this does not do
 
@@ -794,6 +826,11 @@ From the trust design (2026-10-06), each with the check that settles it:
   pure function and tested there; the device pass covers the rest.
 - **Whether a second iCloud account exists for the device pass** — the share-acceptance
   item above needs it too.
+- **Whether a journal event's `revision` and the claim card's `revision` are one
+  counter.** The derived verdicts order by it before `at`; the package's live capture
+  matched once (the terminal event's revision equalled the claim's), and nothing
+  documents it — nor whether the card's `version` is a second counter or an alias of
+  `revision`. A journal page and the same claim's card, compared, settle both.
 
 ## See Also
 

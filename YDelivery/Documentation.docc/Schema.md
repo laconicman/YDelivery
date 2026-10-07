@@ -62,7 +62,7 @@ Order ────────────────────────�
  ├─ OrderProviderState orderID → Order (PK=FK)  1 FK ✓ shared, 1:1 — projection
  ├─ OrderOptions       orderID → Order (PK=FK)  1 FK ✓ shared, 1:1 — projection
  ├─ OrderEvent         orderID → Order          1 FK ✓ shared, append-only, signed
- │    (today's ProviderEvent, renamed at the epoch; legRef — value → Leg.id)
+ │    (today's ProviderEvent, renamed at the epoch; legRef — value → Leg.ref, the logical leg)
  ├─ OrderMessage       orderID → Order          1 FK ✓ shared, append-only, signed
  │    (attachmentRef — value, NOT an FK)
  ├─ OrderAttachment    orderID → Order          1 FK ✓ shared, append-only, signed
@@ -188,7 +188,10 @@ order — plus `at`, `kind`, `providerStatus`, `detail`?, `source`
 table becomes `orderEvents` and the model `OrderEvent`, because with `placed`, `legRef`
 and non-owner writers it stopped being the provider's feed — a rename on a live container
 would orphan a record type; on a fresh one it costs nothing. Stage 1 adds `legRef`
-(value → `legs.id`; NULL = the order's only leg), `routeDigest`, and the signing triple
+(value → the logical leg `legs.ref`; NULL = the order's only leg), `providerRevision`
+(the wire's `revision` — the journal event's own, and the claim card's `revision`, not
+its `version` or `user_request_revision` — the key the derived verdicts order by before
+`at`), `routeDigest`, and the signing triple
 `authorRef`/`signingKeyID`/`signature`; `kind` gains `placed` and `source` gains `app` —
 the ordering flow's own fact, written when the claim is accepted, with the agreed
 claimID, tariff, price and currency in `detail` and the digest of the route as sent.
@@ -335,7 +338,10 @@ referenced key's type — no `REFERENCES` clause — named `*Ref` to mark it:
 - `OrderItem.pickupStopRef` / `dropoffStopRef` → `RouteStop.id` (an item's journey ends)
 - `OrderMessage.attachmentRef` → `OrderAttachment.id` (a photo message's payload)
 - `Order.providerAccountRef` → `ProviderAccount.key` (the root can't have FKs at all)
-- `OrderEvent.legRef` → `Leg.id` (an event's leg; NULL = the order's only leg)
+- `OrderEvent.legRef` → `Leg.ref`, the *logical* leg (`orderID ‖ position`), never a
+  row id (an event's leg; NULL = the order's only leg). Any `*Ref` that names a leg —
+  this one, and `OrderRating.subjectRef` for a `leg` subject — resolves to `Leg.ref`: the
+  convention's one exception, because a leg's rows are per writer
 - `Leg.fromStopRef` / `toStopRef` → `RouteStop.id`; `Leg.providerAccountRef` →
   `ProviderAccount.key` or `Leg.courierPartyRef` → a party, exactly one of the two set
 - `OrderRating.subjectRef` → a leg, a party, a stop or a provider account, as
@@ -496,27 +502,37 @@ signature columns. Their integrity is a verdict computed at read from the signed
 never a column:
 
 - **`mirrorIntegrity(orderID:)`** compares `orderProviderStates.providerStatus` with the
-  `providerStatus` of the latest *verified* status-bearing event (by `at`; journal beats
-  sighting on a tie; equally stamped sightings are an unordered set, and the mirror is
-  consistent if it matches any of them) and yields `.consistent` /
-  `.disagrees(expected:)` / `.noSignedHistory`. A mirror row rewritten out of band
+  `providerStatus` of the latest *verified* status-bearing event and yields
+  `.consistent` / `.disagrees(expected:)` / `.noSignedHistory`. "Latest" is one total
+  order over the rows that read verified *and* entitled — a member's validly signed
+  event loses on entitlement before it can compete: by the provider's `revision` where
+  both rows carry one, else by `at`, the provider's clock on journal rows and sightings
+  alike (a versioned row beside an unversioned one falls to `at` and then source, a
+  guess about two counters' relative position, named as a residual until the
+  one-counter verification lands); on a tie,
+  journal beats a claim-card sighting beats a search sighting beats `placed`; then the
+  smallest id. One
+  expected value, never a set to match any of — a set let a forged rollback to an older,
+  equally stamped verified status pass as consistent (second round, 2026-10-08); the
+  residual, two reads at one stamp that disagree, is named because the provider
+  documents `updated_ts` only as "last update". A mirror row rewritten out of band
   disagrees with the signed history; a legitimate newer event makes it consistent again.
 - **`routeIntegrity(orderID:)`** hashes the stored stops' sender-authored columns —
   every `RouteStop` column but the id and the `visit*` provider truth, in `position`
   order — and compares with the `routeDigest` carried by the latest verified
   digest-bearing event: `placed`, written by the ordering flow over the route as sent,
-  and every `sighting`, over the route as the provider reported it, under the same tie
-  rule — the route is consistent if it matches any equally stamped digest. A stop
+  and every `sighting`, over the route as the provider reported it, under the same
+  total order — one expected digest. A stop
   address rewritten out of band mismatches; a fresh sighting carrying the new route
   restores consistency, and because a sighting's identity carries its digest, a route
   the provider corrected under an unchanged status *is* a fresh sighting (amended
   2026-10-08, review of #135). The digest's encoding is the canonical payload's
   (<doc:Collaboration>).
 
-Both read the trail deduped by fact — agreeing rows collapsed to one entry per
-`(orderID, providerEventID)` and per `(orderID, providerStatus, source, routeDigest)`,
-disagreeing ones kept apart with their verdicts — since each writer's row is its own
-record ("Epoch 2" → identity, below). Both are one event scan per order on demand, never on the list
+Both read the trail deduped by fact — rows agreeing on the fact columns collapsed to one
+entry per `(orderID, providerEventID)` and per `(orderID, providerStatus, source,
+routeDigest)`, disagreeing ones kept apart with their verdicts — since each writer's row
+is its own record ("Epoch 2" → identity, below). Both are one event scan per order on demand, never on the list
 read, and neither touches the projection tables' write paths. The order detail renders a disagreement as one line
 under the provider block — "the recorded status differs from the signed history", "the
 route differs from what was signed" — in the feedback role, never as a refusal.
@@ -792,13 +808,16 @@ rows, never one CloudKit record: the engine merges a colliding insert column by 
 and overwrites the loser's local row with the result, which would put one device's
 signature beside the other's key id and read *invalid* for a fact both wrote honestly
 (<doc:Collaboration> → "The facts that reshaped the design", 6). The *fact* is deduped
-at read, like list ordering: rows whose signed columns agree collapse to one entry per
-`(orderID, providerEventID)`, per `(orderID, providerStatus, source, routeDigest)`, per
-`(orderID, position)` leg — the verified one when any is, else the earliest stamp, then
-the smallest id, so every device derives the same answer — while rows that share a key
-but disagree stay apart, each with its own verdict: nothing is hidden, and a verified row
-beside an invalid twin is the forgery made visible. Membership rows are never collapsed;
-a party's rows are its role history, read latest-first. The cost is one
+at read, like list ordering: rows that agree on the fact — the frozen column list minus
+`id`, plus the author's party; writer identity (`id`, `signingKeyID`, `signature`) is
+left out, since it differs by construction between two honest devices (second round,
+2026-10-08) — collapse to one entry per `(orderID, providerEventID)`, per
+`(orderID, providerStatus, source, routeDigest)`, per leg `ref` — the verified one when
+any is, else the earliest stamp, then the smallest id, so every device derives the same
+answer — while rows that share a key but disagree, or come from a different party, stay
+apart, each with its own verdict: nothing is hidden, and a verified row beside an invalid
+twin is the forgery made visible. Membership rows are never collapsed; a party's rows
+are its role history, read latest-first. The cost is one
 row per owner device for each journal operation, and a trail read that collapses them;
 the alternative — one record per operation with signatures as a side table — would have
 moved the signature out of the statement that binds the values, which rule 3 forbids.
@@ -836,7 +855,9 @@ CREATE TABLE IF NOT EXISTS "orderEvents" (             -- today's providerEvents
                                                        -- sighting: UUIDv5(providerEvent ‖ orderID ‖ providerStatus ‖ source ‖ routeDigest ‖ keyID)
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "legRef" TEXT,                                       -- value → legs.id; NULL = the order's only leg
-  "providerEventID" INTEGER, "at" REAL NOT NULL,
+  "providerEventID" INTEGER,
+  "providerRevision" INTEGER,                          -- the wire's revision: the journal event's own, the claim card's `revision` (not `version`)
+  "at" REAL NOT NULL,
   "kind" TEXT NOT NULL,                                -- status_changed · price_changed · sighting · placed
   "providerStatus" TEXT, "detail" TEXT, "source" TEXT NOT NULL,   -- journal · search · card · app
   "routeDigest" TEXT,
@@ -849,7 +870,7 @@ CREATE TABLE IF NOT EXISTS "orderRatings" (
   "legRef" TEXT,
   "authorRef" TEXT,
   "subjectKind" TEXT NOT NULL,                         -- leg · party · stop · provider
-  "subjectRef" TEXT NOT NULL,                          -- leg id · partyRef · stop id · providerAccountRef
+  "subjectRef" TEXT NOT NULL,                          -- leg ref (the logical leg) · partyRef · stop id · providerAccountRef
   "subjectLabel" TEXT,                                 -- display snapshot: «Сергей · м 234 ор 77», a place name
   "score" INTEGER NOT NULL,                            -- 1…5, checked at the write boundary
   "comment" TEXT,
@@ -930,7 +951,8 @@ T2), so no second schema deploy stands between the two (clarified 2026-10-08, re
 
 ```sql
 CREATE TABLE IF NOT EXISTS "legs" (
-  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(leg ‖ orderID ‖ position ‖ keyID); deduped at read by (orderID, position)
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(leg ‖ orderID ‖ position ‖ keyID): this writer's row, the one its signature covers
+  "ref" TEXT NOT NULL,                                 -- UUIDv5(leg ‖ orderID ‖ position): the logical leg every legRef names; rows fold by it
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "position" INTEGER NOT NULL,                         -- travel order of legs
   "kind" TEXT NOT NULL,                                -- platform · courier
@@ -948,7 +970,17 @@ per leg are projections computed at read from that leg's events (`orderEvents.le
 stop role: it is the stop that is `toStopRef` of leg *n* and `fromStopRef` of leg
 *n+1*. Existing orders get an implicit leg 0 (events with NULL `legRef`). Two columns for
 the carrier instead of one mixed-type `providerRef`, so a server with real foreign keys
-can constrain each.
+can constrain each. A leg has two identities (second round, 2026-10-08): `ref`, the
+logical leg `UUIDv5(leg ‖ orderID ‖ position)` that every `legRef` — an event's, a
+rating's — names and that two owner devices derive alike; and `id`, this writer's row,
+which its signature covers. Leg rows fold by `ref`: the effective assignment is the
+latest verified owner-written row by `assignedAt`, ties by the smallest id — named as the
+residual it is, like a membership tie — earlier rows the assignment's history; a courier's entitlement follows the effective assignment as of
+the event's own stamp, the rule memberships use. Two owner devices assigning one
+position offline is a conflict the fold makes visible — both rows shown, the effective
+one marked — never an event that lost its leg: an event names the logical leg, so no
+row's demotion can orphan it. (The earlier wording let `legRef` name a row id and folded
+legs by position, which would have dropped the row some events pointed at.)
 
 ### What is deliberately not changed
 
