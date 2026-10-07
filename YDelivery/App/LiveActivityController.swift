@@ -100,20 +100,23 @@ final class LiveActivityController {
         checkedAt.addingTimeInterval(staleAfter)
     }
 
-    /// A new card's stale date — as fresh as the newest read that vouches for
-    /// it: the order's own provider stamp (placement's answer, a merged
-    /// sighting) or the journal's last check, whichever is later. Not the
-    /// journal's alone: an order placed during an outage would be born
-    /// flagged. Not birth alone: a launch or a shared-database arrival starts
-    /// a card from disk state of its own age (review, PR #134). With neither,
-    /// the window opens at birth. The journal's check vouches for the feed,
-    /// not this claim — a stampless order arriving from the shared database
-    /// can borrow its window — but only for one window: re-arms need a newer
-    /// check.
-    nonisolated static func birthStaleDate(
-        observedAt: Date?, checkedAt: Date?, now: Date = .now
-    ) -> Date {
-        staleDate(checkedAt: [observedAt, checkedAt].compactMap(\.self).max() ?? now)
+    /// The window a card carries after this pass — as fresh as the newest
+    /// read that vouches for it: the order's own provider stamp (placement's
+    /// answer, a merged sighting), the journal's last check, or the window the
+    /// card already has. It never shrinks: a window says "no read since", and
+    /// an older read cannot unsay a newer one — a fresh card updated during a
+    /// journal outage keeps its own window, not the outage's (review, PR
+    /// #134). Not the journal's alone: an order placed during an outage would
+    /// be born flagged. Not birth alone: a launch or a shared-database arrival
+    /// starts a card from disk state of its own age. `nil` when nothing
+    /// vouches at all. The journal's check vouches for the feed, not this
+    /// claim — a stampless order arriving from the shared database can borrow
+    /// its window — but only for one window: re-arms need a newer check.
+    nonisolated static func staleDate(
+        observedAt: Date?, checkedAt: Date?, shown: Date?
+    ) -> Date? {
+        let vouched = [observedAt, checkedAt].compactMap(\.self).map(staleDate(checkedAt:))
+        return (vouched + [shown].compactMap(\.self)).max()
     }
 
     /// Whether a live card must be re-sent: its state moved, or the last
@@ -163,15 +166,17 @@ final class LiveActivityController {
                     guard Self.needsUpdate(shown: activity.content.state,
                                            shownStaleDate: activity.content.staleDate,
                                            state: state, checkedAt: checkedAt) else { continue }
-                    // A state that moved with no check behind it keeps the
-                    // window the card already had.
-                    let staleDate = checkedAt.map(Self.staleDate(checkedAt:))
-                        ?? activity.content.staleDate
+                    let staleDate = Self.staleDate(
+                        observedAt: order.providerObservedAt, checkedAt: checkedAt,
+                        shown: activity.content.staleDate)
                     changes.append((activity, .update(state, staleDate: staleDate)))
                 } else {
+                    // With nothing to date it by, a new card's window opens
+                    // at its birth.
                     start(order: order, state: state,
-                          staleDate: Self.birthStaleDate(
-                              observedAt: order.providerObservedAt, checkedAt: checkedAt))
+                          staleDate: Self.staleDate(
+                              observedAt: order.providerObservedAt, checkedAt: checkedAt,
+                              shown: nil) ?? Self.staleDate(checkedAt: .now))
                 }
             case .ending(let ending):
                 if let activity {

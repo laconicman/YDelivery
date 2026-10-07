@@ -96,28 +96,37 @@ struct LiveActivityDispositionTests {
             shown: state, shownStaleDate: armed, state: moved, checkedAt: nil))
     }
 
-    @Test("A new card is as fresh as the newest read behind it")
-    func newCardTakesTheNewestRead() {
+    @Test("A card's window comes from the newest read behind it, and never shrinks")
+    func windowTakesTheNewestRead() {
         let window = LiveActivityController.staleAfter
         let journal = Date(timeIntervalSince1970: 1_800_000_000)
-        let now = journal.addingTimeInterval(45 * 60)
+        let placed = journal.addingTimeInterval(45 * 60)
         // The review's case (PR #134): the journal last succeeded at 10:00,
         // the sender places at 10:45 — placement's own answer dates the card,
-        // so it is not born flagged.
-        #expect(LiveActivityController.birthStaleDate(
-            observedAt: now, checkedAt: journal, now: now) == now.addingTimeInterval(window))
-        // A quiet claim first sighted while the journal is healthy rides the
+        // so it is not born flagged…
+        let born = LiveActivityController.staleDate(
+            observedAt: placed, checkedAt: journal, shown: nil)
+        #expect(born == placed.addingTimeInterval(window))
+        // …and an update later in the same outage keeps that window: the
+        // 10:00 check cannot unsay the 10:45 answer.
+        #expect(LiveActivityController.staleDate(
+            observedAt: placed, checkedAt: journal, shown: born) == born)
+        // A newer check extends it.
+        let later = placed.addingTimeInterval(20 * 60)
+        #expect(LiveActivityController.staleDate(
+            observedAt: placed, checkedAt: later, shown: born) == later.addingTimeInterval(window))
+        // A quiet claim first sighted under a healthy journal rides the
         // journal's window, not its hour-old provider stamp.
-        #expect(LiveActivityController.birthStaleDate(
-            observedAt: journal.addingTimeInterval(-60 * 60), checkedAt: journal, now: now)
+        #expect(LiveActivityController.staleDate(
+            observedAt: journal.addingTimeInterval(-60 * 60), checkedAt: journal, shown: nil)
                 == journal.addingTimeInterval(window))
-        // Disk state at launch, no check yet: the card brings its real age —
-        // past its window, it says so at once.
-        let disk = now.addingTimeInterval(-60 * 60)
-        #expect(LiveActivityController.birthStaleDate(
-            observedAt: disk, checkedAt: nil, now: now) == disk.addingTimeInterval(window))
-        // Nothing to date it by: the window opens at birth.
-        #expect(LiveActivityController.birthStaleDate(
-            observedAt: nil, checkedAt: nil, now: now) == now.addingTimeInterval(window))
+        // Disk state at launch, no check yet: the card brings its real age.
+        let disk = journal.addingTimeInterval(-60 * 60)
+        #expect(LiveActivityController.staleDate(
+            observedAt: disk, checkedAt: nil, shown: nil) == disk.addingTimeInterval(window))
+        // Nothing vouches: no window — a new card opens one at birth, and an
+        // unarmed card stays unarmed until a read arrives.
+        #expect(LiveActivityController.staleDate(
+            observedAt: nil, checkedAt: nil, shown: nil) == nil)
     }
 }
