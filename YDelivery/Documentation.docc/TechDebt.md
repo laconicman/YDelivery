@@ -306,7 +306,14 @@ the new identity's shareable log.
   (`finishTasksAndInvalidate` plus settling) was rejected in the register: paying
   latency on every sign-in to fence a one-line leak is the wrong trade.
 
-## YD-19 — The provider prices routes it will not carry — **open**
+## YD-19 — The provider prices routes it will not carry — **open** — the one YD-19: the parked #92 registered another, now renumbered away
+
+*Numbering note, 2026-10-06:* the parked signing draft (#92, on a branch cut before this
+entry reached `main`) registered its own YD-19 — "private-order attribution shows a
+pseudonym, not a name", the production rule for a `--record-authorship` debug flag. That
+item is dropped with the design it served (<doc:Collaboration> → "Sign facts, derive
+state": with the share as the only source of names, a private order has one writer and
+shows nothing — the owner's ruling), so the number is not reused and this entry keeps it.
 
 Device-drive finding B1: a three-stop route priced exactly one offer, and the
 accept refused outright — «Для точки назначения 2 нет отправлений», no shipments
@@ -704,6 +711,113 @@ of the add-row misfire — PR #131).
   the chevron inside the chip as the control/indicator line. Discharged when the two
   retrofit PRs land (the compose card; the Deliveries row) and no bare `.buttonStyle(…)`
   remains under `YDelivery/Features/` outside `Button+Roles.swift`.
+
+## YD-40 — Stop identity is derived from the position index — **open**
+
+<doc:Schema> promises `RouteStop.id` as "stable identity — reorders never renumber it",
+and `OrderItem` journeys reference stops by id for that reason. The writer does not
+deliver it: `insertStops` derives every stop's id as
+`UUIDv5(orderChild ‖ orderID ‖ "stop" ‖ index)`, so the id *is* the position, and a
+route whose stops are reordered after placement would renumber every one of them.
+`RoutePoint` carries no id of its own. Harmless while placed routes are not editable —
+the same window YD-34 names at `insertStops` — and the right fallback for legacy stops,
+which had no ids to keep.
+
+- **Cost:** the schema's contract and the writer's behaviour disagree, and everything
+  that wants to hold a stop across a reorder — a leg's `fromStopRef`/`toStopRef`
+  (<doc:Schema> → "Stage 2"), a rating's `stop` subject, the route digest's exclusion of
+  ids "because they are identity, not content" — rests on an identity that is not one
+  yet.
+- **Discharge:** stable ids at the epoch (<doc:Schema> → "Epoch 2", decided
+  2026-10-06): `RoutePoint.id: UUID`, defaulted on init and tolerant on decode, written
+  as `routeStops.id`, minted at placement; the index-derived id stays only as the
+  import's fallback. On the additive path it would have been an optional `RoutePoint.id`
+  column landing before legs.
+
+## YD-41 — Shared primary keys declare `ON CONFLICT REPLACE` — **open**
+
+The Kit's DDL (0.4.15) declares `ON CONFLICT REPLACE` on the primary keys of `orders`,
+`routeStops`, `orderItems`, `orderCustomFields`, `orderMessages` and `orderAttachments`
+(and across the private and device tiers); `providerEvents` does not. A colliding plain
+`INSERT` silently rewrites the existing row. Found reading the DDL against the trust
+design (2026-10-06).
+
+- **Cost:** under signing, a signed row can be replaced wholesale by anyone who can
+  insert, and the replacement is invisible to sync — SQLite's REPLACE fires no delete
+  trigger without `recursive_triggers` and never bumps `userModificationTime`, which is
+  YD-34's finding wearing a different hat. Every writer that relies on a column's clause
+  rather than stating its own policy carries the exposure.
+- **Discharge:** the epoch drops the clause from every shared primary key
+  (<doc:Schema> → "Primary keys"); until then, and on the additive path forever, every
+  writer on a signed table states `INSERT OR IGNORE` in the statement, which SQLite lets
+  override the column's clause. The private and device tiers keep theirs where a writer
+  relies on it (`saveDraft`'s wholesale rewrite), stated per table.
+
+## YD-42 — Attachment blobs carry no integrity — **open**
+
+`attachmentBlobs.data` rides CloudKit as a `CKAsset` beside its `orderAttachments`
+metadata row, and nothing ties the bytes to the row: a blob swapped under the same
+attachment id — by a read-write participant, by a sync fault, by our own bug — reads as
+the photo the caption describes.
+
+- **Cost:** a parcel photo is the receiver's evidence of condition; evidence whose bytes
+  can change under a stable id is not evidence.
+- **Discharge:** `dataHash` = `hex(SHA-256(attachmentBlobs.data))` on the attachment row,
+  computed by the poster before the transaction and signed with the row's frozen column
+  list (<doc:Collaboration> → "The canonical payload"); a swapped blob fails the
+  attachment's verdict. The blob itself stays unsigned — it is the asset, and the hash is
+  what binds it.
+
+## YD-43 — `authorHint` is self-asserted — **open**
+
+`orderMessages.authorHint` and `orderAttachments.authorHint` are a display-name cache the
+*writer* fills. Real posts write it `nil` (`StoreController`'s `postMessage` and its
+photo sibling, by design); only previews, the schema seed and the `--uitest-history`
+fixture fill it («Ирина», «Irina», «Seed»). The chat's byline reads it first and falls
+back to "A participant"; nothing verifies it, and the real attribution — CloudKit's
+system fields — is read nowhere in the app.
+
+- **Cost:** a byline is a claim by the row's own writer, so on a shared order it is
+  exactly as trustworthy as the participant who wrote it; and today every real message
+  reads "A participant", because the honest writer has nothing better to write.
+- **Discharge:** `authorRef` (a `partyRef`) on both rows, signed with the row, with the
+  name resolved through the identity authority at render — `Party.displayName` first,
+  `authorHint` second as the cache it always was, "A participant" last. The Kit's half
+  lands with the signed columns (<doc:Schema> → "Stage 1"); the app's half with its
+  adoption, under the #92 read-side lessons (<doc:Collaboration>): no names for an
+  unshared order, and the lookup keyed and guarded like the row it decorates.
+
+## YD-44 — The `--uitest-history` fixture writes event `kind: "status"` — **open**
+
+`seedHistoryIfFlagged` writes its provider events with `kind: "status"`; real journal
+rows carry `status_changed` / `price_changed`, and sightings carry `sighting`. The same
+word rides the schema seed, the Deliveries previews and `DeliveriesRowsTests`.
+
+- **Cost:** harmless today — the trail's phrases key on `providerStatus`, not on
+  `kind` — and misleading for anyone reading the fixture as the vocabulary, which is what
+  a fixture is for. The moment a reader branches on `kind` (the `placed` event, the
+  digest-bearing `sighting`), a fixture that speaks a word no real row speaks tests
+  nothing.
+- **Discharge:** the fixture, the seed, the previews and the tests write the real kinds;
+  the app's adoption of the trust layer carries it, or it goes on its own.
+
+## YD-45 — Membership lives only in the `CKShare` — **open**
+
+Who is in an order is recorded nowhere but the share's participant list: <doc:Schema>
+ruled membership "not a table" on 2026-09-25, and the chat, the share row and every name
+lookup read `CKShare` through the Kit. Roles — receiver, dispatcher, courier — have no
+home at all.
+
+- **Cost:** the one piece of shared state that lives only in CloudKit. A future host
+  would have to reconstruct membership from CloudKit before it could enforce anything; a
+  courier's entitlement to a leg has nothing to hang on; and "the receiver" is a word the
+  owner says, not a fact a reader can check.
+- **Discharge:** a signed, append-only `memberships` table — `partyRef`, `role`,
+  `addedAt`, owner-written — mirrored from the share by the owner's device after each
+  sync pass, a role change appended as a later row (<doc:Schema> → "Epoch 2", decided
+  2026-10-06). The Kit's half is the table, the reconcile and the authority that merges
+  it with the share; the app's half calls the reconcile and renders the members. The
+  share stays the only grant.
 
 ## See Also
 

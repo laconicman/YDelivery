@@ -40,9 +40,13 @@ is organized by which list a table lands in:
 | **Private** | `privateTables:` | Owner's iCloud private DB across their devices; never shareable |
 | **Device** | not registered | This device only — no CloudKit at all |
 
-Membership in a share is **not a table** — it rides the `CKShare` participant list, which
-`UICloudSharingController`/`CloudSharingView` already manages. No `Collaborator` entity
-exists by design.
+Membership in a share **rides the `CKShare` participant list** — the grant, which
+`UICloudSharingController`/`CloudSharingView` already manages — and, since 2026-10-06, is
+*also* a signed, append-only `memberships` table the owner's device mirrors from the
+share (<doc:TechDebt> YD-45; "Epoch 2" below). The share stays the only grant; the table
+is the record of it, so roles (receiver, dispatcher, courier) have a home and a future
+host has nothing to reconstruct from CloudKit. No `Collaborator` entity with fields of
+its own exists — a membership row is a party reference, a role and a stamp.
 
 ## The shared hierarchy — root `Order`
 
@@ -51,18 +55,31 @@ row is deliberately minimal — identity and creation, nothing else — because 
 with an author or a lifecycle hangs below it.
 
 ```
-Order ─────────────────────────── share root, 0 FK
- ├─ RouteStop          orderID → Order          1 FK ✓ shared
- ├─ OrderItem          orderID → Order          1 FK ✓ shared
+Order ─────────────────────────── share root, 0 FK — projection
+ ├─ RouteStop          orderID → Order          1 FK ✓ shared — projection
+ ├─ OrderItem          orderID → Order          1 FK ✓ shared — projection
  │    (pickupStopRef, dropoffStopRef — values, NOT FKs)
- ├─ OrderProviderState orderID → Order (PK=FK)  1 FK ✓ shared, 1:1
- ├─ OrderOptions       orderID → Order (PK=FK)  1 FK ✓ shared, 1:1
- ├─ ProviderEvent      orderID → Order          1 FK ✓ shared
- ├─ OrderMessage       orderID → Order          1 FK ✓ shared, append-only
+ ├─ OrderProviderState orderID → Order (PK=FK)  1 FK ✓ shared, 1:1 — projection
+ ├─ OrderOptions       orderID → Order (PK=FK)  1 FK ✓ shared, 1:1 — projection
+ ├─ OrderEvent         orderID → Order          1 FK ✓ shared, append-only, signed
+ │    (today's ProviderEvent, renamed at the epoch; legRef — value → Leg.id)
+ ├─ OrderMessage       orderID → Order          1 FK ✓ shared, append-only, signed
  │    (attachmentRef — value, NOT an FK)
- └─ OrderAttachment    orderID → Order          1 FK ✓ shared
-      └─ AttachmentBlob attachmentID → (PK=FK)  1 FK ✓ shared transitively
+ ├─ OrderAttachment    orderID → Order          1 FK ✓ shared, append-only, signed
+ │    └─ AttachmentBlob attachmentID → (PK=FK)  1 FK ✓ shared transitively (CKAsset, dataHash on the parent)
+ ├─ ParticipantKey     orderID → Order          1 FK ✓ shared, append-only, self-signed   (epoch 2)
+ ├─ Membership         orderID → Order          1 FK ✓ shared, append-only, signed        (epoch 2)
+ ├─ OrderRating        orderID → Order          1 FK ✓ shared, append-only, signed        (epoch 2)
+ └─ Leg                orderID → Order          1 FK ✓ shared, append-only, signed        (Stage 2, later)
+      (providerAccountRef or courierPartyRef — values, exactly one set; fromStopRef, toStopRef → RouteStop.id)
 ```
+
+*Signed* means the row carries `authorRef`, `signingKeyID` and `signature` over its
+frozen column list, written once by the device that wrote the row (<doc:Collaboration> →
+"The canonical payload"); *projection* means the row is merged per field by the engine
+and checked against the signed facts at read ("Derived integrity", below). The four
+tables marked *epoch 2* and the Stage 2 `Leg` are designed, not yet in the DDL
+("Epoch 2", below).
 
 ### `Order` — the root
 
@@ -120,7 +137,7 @@ is lossy; both forms are kept, as `RoutePoint` already does).
 
 | Column | Type | Note |
 |---|---|---|
-| `id` | UUID PK | Stable identity — reorders never renumber it |
+| `id` | UUID PK | Stable identity — reorders never renumber it. **Not what the writer does today:** `insertStops` derives it from the position index (`UUIDv5(orderChild ‖ orderID ‖ "stop" ‖ index)`), so a reorder *is* a renumbering — <doc:TechDebt> YD-40; the epoch mints it on the model (`RoutePoint.id`) at placement |
 | `orderID` | UUID FK → `Order` | The one FK |
 | `position` | Int | Travel order; mutable on reorder. Items reference stops by `id`, never by position, so reordering never breaks journeys |
 | `role` | TEXT | `pickup` / `dropoff` / `return` — the sender's vocabulary |
@@ -162,12 +179,21 @@ All order-level, matching the app's model: loaders ride the whole run, not a sto
 Per-stop data that does exist — contacts, address parts — lives on `RouteStop`. If the
 wire ever offers per-point options they become `RouteStop` columns, not this row.
 
-### `ProviderEvent` — the history feed (owner-written)
+### `ProviderEvent` → `OrderEvent` — the history feed, every writer's, signed
 
 Append-only; conflicts impossible by construction. Columns: `id` UUID PK, `orderID` FK,
 `providerEventID` INTEGER? — the journal's own `operation_id`, monotonic and unique per
 order — plus `at`, `kind`, `providerStatus`, `detail`?, `source`
-(`journal`/`search`/`claimCard`).
+(`journal`/`search`/`claimCard`). **Renamed at the epoch** (decided 2026-10-06): the
+table becomes `orderEvents` and the model `OrderEvent`, because with `placed`, `legRef`
+and non-owner writers it stopped being the provider's feed — a rename on a live container
+would orphan a record type; on a fresh one it costs nothing. Stage 1 adds `legRef`
+(value → `legs.id`; NULL = the order's only leg), `routeDigest`, and the signing triple
+`authorRef`/`signingKeyID`/`signature`; `kind` gains `placed` and `source` gains `app` —
+the ordering flow's own fact, written when the claim is accepted, with the agreed
+claimID, tariff, price and currency in `detail` and the digest of the route as sent.
+Every row is signed over its frozen column list by the device that wrote it
+(<doc:Collaboration> → "The canonical payload").
 
 Dedup is **identity, not a constraint** — and it has to be: `SyncEngine` rejects every
 non-PK unique index on a synchronized table at init (`SchemaError.uniquenessConstraint`
@@ -176,9 +202,13 @@ random: `UUIDv5(orderID ‖ providerEventID)` for journal events — replaying a
 re-produces the same key, and two devices recording the same event produce one
 `CKRecord` that merges rather than colliding. Synthesized sightings (`search`/
 claim-card rows carry no provider id) derive their key from
-`(orderID, providerStatus, source)` and upsert on re-sight — `at` keeps the latest
-observation; one row per observed state. This is the activity timeline the 3e card
-reads, and what "members see each other's activity" means for provider truth.
+`(orderID, providerStatus, source)` and are written `INSERT OR IGNORE` — the first
+observation's `at` stands and a re-sight changes nothing; one row per observed state.
+(*Corrected 2026-10-06:* this sentence used to say a re-sight "upserts `at`", a
+behaviour `recordProviderEvent` never had — and immutability is exactly what signing
+needs, so the code was right and the sentence was wrong.) This is the activity timeline
+the 3e card reads, and what "members see each other's activity" means for provider
+truth.
 
 ### `OrderMessage` — the chat, and the only participant-writable stream
 
@@ -196,7 +226,8 @@ no participant-writable history table, only a stream where every row has an auth
 | `kind` | TEXT | `text` · `photo` · `receptionConfirmed` — structured kinds render as human events («Ирина подтвердила получение»), never as provider status |
 | `text` | TEXT? | |
 | `attachmentRef` | UUID? | **Value** → `OrderAttachment.id` — a photo message carries its payload |
-| `authorHint` | TEXT? | Display name cache; `createdBy`/`lastModifiedBy` system fields carry the real attribution |
+| `authorHint` | TEXT? | Display name cache, self-asserted — real posts write it NULL, only previews and fixtures fill it (<doc:TechDebt> YD-43); the name a reader shows resolves from the identity authority at render |
+| `authorRef`, `signingKeyID`, `signature` | TEXT? | Stage 1 of the epoch: the writer's `partyRef` and its signature over the frozen column list — `authorHint` is not signed (<doc:Collaboration> → "The canonical payload") |
 
 `receptionConfirmed` is the deliberate shape of "the receiver marks it arrived": a
 human-authored event in the stream, **never** a write to provider state — the two are
@@ -206,8 +237,12 @@ records it on its own authority.
 
 ### `OrderAttachment` + `AttachmentBlob` — parcel photos
 
-Metadata row (`id`, `orderID`, `createdAt`, `kind`, `caption`, `byteSize`, `authorHint`)
-with the payload in a 1:1 `AttachmentBlob` child (`attachmentID` PK+FK, `data` BLOB).
+Metadata row (`id`, `orderID`, `createdAt`, `kind`, `caption`, `byteSize`, `authorHint` —
+and, from Stage 1 of the epoch, `dataHash` = `hex(SHA-256(data))`, signed with the row so
+a blob swapped under the same attachment id fails the attachment's verdict, plus
+`authorRef`/`signingKeyID`/`signature`; <doc:TechDebt> YD-42) with the payload in a 1:1
+`AttachmentBlob` child (`attachmentID` PK+FK, `data` BLOB — the asset itself is not
+signed; the hash is what binds it).
 `sqlite-data` turns BLOB columns into `CKAsset` automatically, and the package's own
 guidance is exactly this split — keep megabytes out of the metadata row so list queries
 never drag image data. Participants may add photos (a receiver documenting condition is
@@ -288,6 +323,13 @@ referenced key's type — no `REFERENCES` clause — named `*Ref` to mark it:
 - `OrderItem.pickupStopRef` / `dropoffStopRef` → `RouteStop.id` (an item's journey ends)
 - `OrderMessage.attachmentRef` → `OrderAttachment.id` (a photo message's payload)
 - `Order.providerAccountRef` → `ProviderAccount.key` (the root can't have FKs at all)
+- `OrderEvent.legRef` → `Leg.id` (an event's leg; NULL = the order's only leg)
+- `Leg.fromStopRef` / `toStopRef` → `RouteStop.id`; `Leg.providerAccountRef` →
+  `ProviderAccount.key` or `Leg.courierPartyRef` → a party, exactly one of the two set
+- `OrderRating.subjectRef` → a leg, a party, a stop or a provider account, as
+  `subjectKind` says
+- `authorRef`, `partyRef`, `courierPartyRef` → a **party**, which is not a table at all on
+  CloudKit: the identity authority resolves it ("`partyRef`", below)
 
 The convention has a type-level signature: `*Ref` columns are declared `UUID?`/`TEXT?`,
 **never `SomeTable.ID`** — an `.ID`-typed column is what an FK declaration gets written
@@ -308,11 +350,19 @@ moves.
 
 | Table | Writer | Participant read |
 |---|---|---|
-| `Order`, `RouteStop`, `OrderItem`, `OrderOptions` | Owner UI (order definition) | via share |
-| `OrderProviderState`, `ProviderEvent` | Owner sync only | via share |
-| `OrderMessage`, `OrderAttachment` | Read-write participants — append-only | via share |
+| `Order`, `RouteStop`, `OrderItem`, `OrderOptions`, `OrderCustomField` | Owner UI (order definition) — unsigned projections | via share |
+| `OrderProviderState` | Owner sync only — an unsigned projection, checked against the signed events at read | via share |
+| `OrderEvent` (today's `ProviderEvent`) | Owner sync (`legRef` NULL) and the ordering flow (`placed`); a courier for its own leg, later — signed | via share |
+| `OrderMessage`, `OrderAttachment`, `OrderRating` | Read-write participants — append-only, signed | via share |
+| `ParticipantKey` | Each device, its own row — self-signed, bound by the authority's stamp | via share |
+| `Membership`, `Leg` | Owner — signed | via share |
 | Private tier | Owner | never |
 | Device tier | This device | never |
+
+Since 2026-10-06 the table is a *matrix of entitlement judged at read*, not a promise
+about what CloudKit lets a participant write: who may write which row kind for which leg
+is in <doc:Collaboration> → "Verdicts and entitlement", and a correctly signed row by a
+party outside it renders as *not entitled*, never as valid.
 
 ### The forgery boundary — the finding that reshaped the write surface
 
@@ -330,24 +380,37 @@ thin; the chat model is the real fix, and it works on three levels:
    **read-only** — locally enforced (`SyncEngine.writePermissionError`), no trust
    required. Read-write is reserved for collaborators who actually post.
 3. **The owner remains the authority of last resort.** A forged mirror row lives only
-   until the owner's next sync overwrite; and since `CKRecord` system fields expose
-   `lastModifiedUserRecordID`, a later hardening pass can have reads distrust provider
-   rows the owner didn't write — noted as available, not yet designed.
+   until the owner's next sync overwrite — and the window until that overwrite, which
+   this paragraph once treated as the whole exposure, is what the derived verdict closes
+   (2026-10-06): a mirror that disagrees with the latest *signed* event renders as such
+   the moment it is read ("Derived integrity", below). Since `CKRecord` system fields
+   expose `lastModifiedUserRecordID`, a later hardening pass could have reads distrust
+   provider rows the owner didn't write — noted as available then, **designed now**: the
+   events are signed facts, the mirror is checked against them, and the server-stamped
+   *creator* is the trust anchor for every key row (<doc:Collaboration> → "Sign facts,
+   derive state").
 
 One residual the layers don't remove, stated plainly: within the read-write set,
 "append-only" is convention too — record-level permissions cannot distinguish "add a
 row" from "edit a row", so a collaborator *can* rewrite an existing message. The
 mitigation is audit, not enforcement: `lastModifiedUserRecordID` exposes who touched
 what, and an owner who sees history rewritten has a social and administrative answer
-(remove the participant), not a technical one. Shared editing trust is granted per
+(remove the participant), not a technical one. With signed facts (2026-10-06) the audit
+gets a verdict: a rewritten message fails its author's signature and renders *invalid*
+beside the bubble — rendered, never refused; the answer stays social. Shared editing trust is granted per
 participant; the audit trail is what makes that grant accountable.
 
 ## Conflict semantics
 
-`CKSyncEngine` merges at record-field granularity, last-writer-wins. The schema is shaped
-so that policy suffices: append-only tables (`ProviderEvent`, `OrderMessage`,
+`CKSyncEngine` merges at record-field granularity, last-writer-wins — verified upstream
+on 2026-10-06: each column carries its own `userModificationTime`, so two devices editing
+different columns of one row both win, and the merged row was written by nobody in full
+(<doc:Collaboration> → "Five facts that reshaped the design"). The schema is shaped so
+that policy suffices: append-only tables (`ProviderEvent`, `OrderMessage`,
 `OrderAttachment`) can't conflict; the mirror has one writer; the root's mutable surface
-is one denormalized `lastActivityAt`. The only true last-writer-wins exposure is
+is one denormalized `lastActivityAt`. The same grain is why a signature lives only on
+append-only rows and the mirror's integrity is derived, never signed ("Derived
+integrity", below). The only true last-writer-wins exposure is
 participants editing each other's message/attachment rows — the append-only convention
 says they shouldn't, and `lastModifiedBy` preserves the audit trail if they do.
 
@@ -361,6 +424,79 @@ with messages but no attachments would otherwise sort to NULL rather than its re
 latest activity (Devin Review, PR #36); coalescing each child aggregate to the epoch
 means "no such activity" simply never wins. Ordering is a presentation derivation,
 which needs no write authority at all.
+
+## Primary keys — no `ON CONFLICT REPLACE` on shared tables (2026-10-06)
+
+The DDL at Kit 0.4.15 declares `ON CONFLICT REPLACE` on the primary keys of `orders`,
+`routeStops`, `orderItems`, `orderCustomFields`, `orderMessages` and `orderAttachments`
+(and across the private and device tiers); `providerEvents` does not. A colliding plain
+`INSERT` therefore silently rewrites the existing row — which under signing means a
+signed row can be replaced wholesale by anyone who can insert, and which `sqlite-data`
+never sees as an edit: SQLite's REPLACE fires no delete trigger without
+`recursive_triggers` and never bumps `userModificationTime` (YD-34's finding). The rule
+from here: **a shared primary key carries no conflict clause, and every writer states
+its policy in the statement** — `INSERT OR IGNORE` for facts (a retry re-inserts the
+same caller-held id and is a no-op), an explicit upsert for projections (YD-34's write
+discipline). The epoch drops the clause from every shared table; until then a writer on
+a signed table states `OR IGNORE`, which SQLite lets override the column's clause. The
+private and device tiers keep theirs where a writer relies on it (`saveDraft`'s
+wholesale rewrite), stated per table. <doc:TechDebt> YD-41.
+
+## `partyRef` — the only person reference (2026-10-06)
+
+Every reference to a person — an author, a subject, a member, a courier — is a
+`partyRef`: an opaque UUID stored as lowercase TEXT like every other id, under the
+`*Ref` convention (a value, never a `REFERENCES` clause, never a type the schema could
+mistake for a table's own key). Two distinctions carry the design: a **party** (who is
+accountable) versus a **device** (what holds a key), and a party's **reference** (the
+`partyRef` every row uses) versus its **identities** (the credentials an authority
+accepts for it: a CloudKit user record today; Apple, Google, email and phone on a server
+tomorrow). Rows know only references; authorities know identities (<doc:Design> →
+"Parties, not CloudKit names" for the rejected alternatives).
+
+**How a `partyRef` is minted.** In CloudKit mode, deterministically on every device:
+`UUIDv5(DerivedNamespace.party ‖ "cloudkit" ‖ userRecordName)`, so two devices derive the
+same reference for the same iCloud user with no server in between. A server later stores
+that very UUID as the party's id and records `("cloudkit", userRecordName)` as one of its
+identities, beside `("apple", sub)`, `("google", sub)`, `("email", address)`,
+`("phone", e164)` — nothing in the order tables moves (<doc:Collaboration> → "Ready for
+an independent host"). User record names are container-scoped, so a new container mints
+new references; local history has none yet, which is one more reason to do the epoch now.
+
+The device learns its own reference from the authority (`CKContainer.userRecordID()`
+once sync starts) and caches it in a device-tier `localIdentity` table (`authority`
+TEXT PK — `cloudkit:<container>` · `server:<host>` — `subject`, `partyRef`,
+`fetchedAt`). Until it is known, rows carry `authorRef = NULL` and the device's key row
+carries `partyRef = NULL`; the authority's stamp fills the gap for readers after the
+first sync. No CloudKit vocabulary — `CKCurrentUserDefaultName`, record names, `CKShare`
+participants — reaches a row or a model; it lives inside the identity authority adapter
+alone. The derivation above runs inside that adapter too: a `partyRef` is
+CloudKit-derived in CloudKit mode, and no row or model can tell.
+
+## Derived integrity — projections checked against the facts (2026-10-06)
+
+The projections (`orders`, `orderProviderStates`, `orderOptions`, `orderItems`,
+`routeStops`, `orderCustomFields`) keep their writers, their merge rules and no
+signature columns. Their integrity is a verdict computed at read from the signed events,
+never a column:
+
+- **`mirrorIntegrity(orderID:)`** compares `orderProviderStates.providerStatus` with the
+  `providerStatus` of the latest *verified* status-bearing event (by `at`; journal beats
+  sighting on a tie) and yields `.consistent` / `.disagrees(expected:)` /
+  `.noSignedHistory`. A mirror row rewritten out of band disagrees with the signed
+  history; a legitimate newer event makes it consistent again.
+- **`routeIntegrity(orderID:)`** hashes the stored stops' sender-authored columns —
+  every `RouteStop` column but the id and the `visit*` provider truth, in `position`
+  order — and compares with the `routeDigest` carried by the latest verified
+  digest-bearing event: `placed`, written by the ordering flow over the route as sent,
+  and every `sighting`, over the route as the provider reported it. A stop address
+  rewritten out of band mismatches; a fresh sighting carrying the new route restores
+  consistency. The digest's encoding is the canonical payload's (<doc:Collaboration>).
+
+Both are one event scan per order on demand, never on the list read, and neither touches
+the projection tables' write paths. The order detail renders a disagreement as one line
+under the provider block — "the recorded status differs from the signed history", "the
+route differs from what was signed" — in the feedback role, never as a refusal.
 
 ## Freshness — the timestamps every surface needs
 
@@ -479,17 +615,22 @@ termination (0xDEAD10CC), Data Protection classes gate locked-device access, and
   both lists **landed** (Kit 0.4.7, additive DDL — see the private-tier table above).
   What stays open is *shared* tags: a tag vocabulary a team shares is the workspace-root
   question above; private tags wait until someone names a use pin doesn't cover.
-- **Signed provider state**: `signature BLOB` + `signingKeyID` on `OrderProviderState` and
-  `ProviderEvent`; Curve25519 over a canonical serialisation; the owner's private key in
-  the iCloud Keychain, so the owner's devices sign and everyone verifies
-  (<doc:Collaboration> → "Where this landed", 5). **Superseded 2026-10-05 in one
-  respect:** the public key does *not* ride the `Order` root as `ownerSigningKey` — keys
-  are rows of a shared, append-only `participantKeys` table so that couriers and other
-  writers can publish theirs too (<doc:Collaboration> → "Generalised 2026-10-05"); the
-  Kit migration follows that contract, not this bullet's earlier wording. Additive DDL;
-  rows written before the columns exist read as *unsigned*, not *forged*. *Who* wrote a
-  row is already free from CloudKit's `lastModifiedUserRecordID`; the signature answers
-  *whether a key entitled to write it did*, which permissions cannot.
+- **Signed provider state** — the 2026-09-29 bullet, kept as history: `signature BLOB` +
+  `signingKeyID` on `OrderProviderState` and `ProviderEvent`; Curve25519 over a canonical
+  serialisation; the owner's private key in the iCloud Keychain, so the owner's devices
+  sign and everyone verifies (<doc:Collaboration> → "Where this landed", 5). Superseded
+  2026-10-05 in one respect — keys are rows of a shared, append-only `participantKeys`
+  table, not `ownerSigningKey` on the root, so that couriers and other writers can
+  publish theirs too — and **2026-10-06 in four more** (<doc:Collaboration> → "Sign
+  facts, derive state"; "Epoch 2" below): the mirror is *not* signed, it is a projection
+  merged per field and checked against the signed events at read; the signature column
+  is base64 `TEXT`, never a BLOB (a BLOB becomes a `CKAsset` per row); the curve is P-256
+  in the Secure Enclave, one key per device, never synchronised; and rows written before
+  the columns exist read as *legacy*, quietly, while NULL signatures on an order that has
+  key rows read as *unsigned*, warned. The two sentences that hold: *who* wrote a row is
+  already free from CloudKit's system fields — now the trust anchor itself — and the
+  signature answers *whether a key entitled to write it did*, which permissions cannot.
+  No longer deferred: it is Stage 1 of the epoch.
 - **Accountless couriers and support staff**: out of this design's reach — a private
   `CKShare` requires an iCloud account per participant, and an App Clip changes the
   install experience, not the identity requirement (Devin Review, second round — an
@@ -553,6 +694,207 @@ item stays open only as a regression watch for future raw writes).
 Nothing here promotes anything: the schema lives in **development**, and
 "Deploy Schema Changes" in CloudKit Console remains a deliberate, separate act.
 
+The inventory above is epoch 1's, and stays as the record of what was deployed there.
+The epoch below seeds its new container from scratch — the seed inventory becomes the
+new catalogue of record types, one fully populated row per table and every column — and
+deploys it once.
+
+## Epoch 2 — a fresh container, a fresh file, one import (decided 2026-10-06)
+
+The production CloudKit schema is deployed but carries no real users — two TestFlight
+testers (owner, 2026-10-06). Production schemas are additive: record types and fields
+deploy forward and the console does not take them back, so "drop and redesign" means a
+new container identifier, not a cleaned one — cheap now, expensive the day there is a
+user. That unlocks a schema **epoch**, and the owner chose it (decision 1, 2026-10-06):
+the schema is organised the way it should be rather than the way it happened, which is
+this file's own founding sentence.
+
+The epoch is: a new CloudKit container identifier (`SyncIdentity.cloudKitContainer` and
+the entitlement), a new local file (`ydelivery-2.sqlite`), and a one-time import of the
+old file's orders, places, templates, field definitions, drafts and sync state through
+the typed writers — orders arrive as *legacy* rows with no key rows, which is the truth.
+The old container is abandoned, not cleaned; the old file is marked in place and never
+destroyed (the migration's own rule, above). What the epoch changes beyond "additive":
+
+- `providerEvents` becomes `orderEvents` (and `ProviderEvent` becomes `OrderEvent`):
+  with `placed`, `legRef` and non-owner writers it stopped being the provider's feed. A
+  rename on a live container would orphan a record type; on a fresh one it costs nothing.
+- No `ON CONFLICT REPLACE` on any shared primary key ("Primary keys", above). The
+  private and device tiers keep theirs where a writer relies on it (`saveDraft`'s
+  wholesale rewrite), stated per table.
+- Stops get stable ids on the model (<doc:TechDebt> YD-40): `RoutePoint.id`, written as
+  `routeStops.id`, minted at placement; the index-derived id stays only as the import's
+  fallback.
+- `partyRef` columns everywhere a person is referenced, from day one; `memberships` and
+  `participantKeys` exist before the first synced row.
+- The development schema is seeded from scratch and deployed once; the seed inventory
+  becomes the new catalogue of record types.
+
+**The additive alternative**, priced and not chosen: the same tables and columns as
+additive migrations on the existing container; `providerEvents` keeps its name
+(`OrderEvent` can still be the Swift name over the old table name); the REPLACE clauses
+stay and every signed writer states `OR IGNORE`; stop ids arrive later as an optional
+column. Everything in the doctrine holds either way. The cost of the alternative is
+carried forever in two names and one footgun.
+
+**The container, the bundle id and the app record.** The container is the only
+identifier that changes. A container is an entitlement value and a CloudKit namespace,
+nothing more; an app may list several, and the app record, the bundle id, the App Group
+and the Keychain access group all stay. Name it `iCloud.com.learnable.YDelivery.v2`:
+epochs are small integers, never semantic versions, because an epoch is a wipe and
+nothing else about it is comparable. Containers cannot be deleted from a developer
+account; the old one simply stops being opened and may stay listed in the entitlement
+during the transition. The Console's "reset environment" applies to development only,
+which is fine: the new container's development schema is seeded fresh and deployed once.
+*Not a new app, not a new bundle id:* a new bundle id is a new App Store Connect record —
+the listing work of #88 redone, new TestFlight groups, and every identifier-bound thing
+(App Group, Keychain access group, push topic) re-registered, for nothing the container
+does not already give. Apple does not ban two listings, but Guideline 4.3 can reject a
+duplicate, and the old record would be deleted anyway, so the question answers itself.
+macOS later rides the same bundle id and the same record as a universal purchase; a
+separate Mac bundle id is only for a Mac app sold separately, which is not the plan.
+
+The three laws stand: a root has zero FKs, a shared child has exactly one, FK-ness is a
+DDL fact. Synced tables use plain `TEXT PRIMARY KEY NOT NULL` with no conflict clause
+and `ON DELETE CASCADE` on their one FK (`sqlite-data` rejects `RESTRICT`/`NO ACTION`
+on single-FK tables). Every reference to a person is a `partyRef`.
+
+### Stage 1 — keys, memberships, ratings, the signed columns (epoch 2 spelling)
+
+```sql
+CREATE TABLE IF NOT EXISTS "participantKeys" (
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(participantKey ‖ orderID ‖ keyID)
+  "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
+  "partyRef" TEXT,                                     -- the writer's party; NULL until the device knows itself
+  "keyID" TEXT NOT NULL,                               -- p256.v2.<16 hex>
+  "publicKey" TEXT NOT NULL,                           -- base64 X9.63, 65 bytes
+  "bindingKind" TEXT NOT NULL,                         -- cloudkit · server
+  "bindingProof" TEXT,                                 -- NULL for cloudkit (the proof is the server stamp)
+  "bindingKeyID" TEXT,                                 -- which server key attested, server mode only
+  "addedAt" REAL NOT NULL,
+  "signature" TEXT                                     -- self-signed; signingKeyID is keyID
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS "memberships" (
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(membership ‖ orderID ‖ partyRef)
+  "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
+  "partyRef" TEXT NOT NULL,
+  "role" TEXT NOT NULL,                                -- participant · receiver · dispatcher · courier
+  "addedAt" REAL NOT NULL,
+  "authorRef" TEXT, "signingKeyID" TEXT, "signature" TEXT   -- owner-written
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS "orderEvents" (             -- today's providerEvents, renamed
+  "id" TEXT PRIMARY KEY NOT NULL,
+  "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
+  "legRef" TEXT,                                       -- value → legs.id; NULL = the order's only leg
+  "providerEventID" INTEGER, "at" REAL NOT NULL,
+  "kind" TEXT NOT NULL,                                -- status_changed · price_changed · sighting · placed
+  "providerStatus" TEXT, "detail" TEXT, "source" TEXT NOT NULL,   -- journal · search · card · app
+  "routeDigest" TEXT,
+  "authorRef" TEXT, "signingKeyID" TEXT, "signature" TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS "orderRatings" (
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- caller-held UUID (retry = same id, INSERT OR IGNORE)
+  "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
+  "legRef" TEXT,
+  "authorRef" TEXT,
+  "subjectKind" TEXT NOT NULL,                         -- leg · party · stop · provider
+  "subjectRef" TEXT NOT NULL,                          -- leg id · partyRef · stop id · providerAccountRef
+  "subjectLabel" TEXT,                                 -- display snapshot: «Сергей · м 234 ор 77», a place name
+  "score" INTEGER NOT NULL,                            -- 1…5, checked at the write boundary
+  "comment" TEXT,
+  "at" REAL NOT NULL,
+  "signingKeyID" TEXT, "signature" TEXT
+) STRICT;
+
+-- orderMessages: + authorRef, signingKeyID, signature (authorHint kept as a display cache)
+-- orderAttachments: + dataHash, authorRef, signingKeyID, signature
+-- routeStops: "id" minted by the writer, no REPLACE clause
+
+-- device tier (never registered with SyncEngine):
+CREATE TABLE IF NOT EXISTS "localIdentity" (
+  "authority" TEXT PRIMARY KEY NOT NULL,               -- cloudkit:<container> · server:<host>
+  "subject" TEXT NOT NULL,                             -- the user record name, or the server's party id
+  "partyRef" TEXT NOT NULL,
+  "fetchedAt" REAL NOT NULL
+) STRICT;
+```
+
+Registered with the engine: `participantKeys`, `memberships`, `orderRatings` join
+`tables:`. `DerivedNamespace` gains `party`, `participantKey`, `membership`, and later
+`leg`. The schema seed writes one fully populated row per table and every column, because
+NULL columns never become CloudKit fields.
+
+**`memberships` — the share's mirror and the server's source.** The owner's device
+writes an `INSERT OR IGNORE` signed `participant` row for every accepted share
+participant without one, after each sync pass; a role change is a *new* row with a later
+`addedAt` (append-only: the effective role is the latest, like ratings). Roles live here
+and in `legs`, never on `participantKeys`, never in a writer's claim. Before the owner's
+device has reconciled a row, a party the authority lists as a participant counts as a
+member; a membership row's role wins over the share's binary participant status. So a
+participant the owner's device has not yet mirrored — a courier invited while the owner
+is offline — still reads as a member through the share, and the verdict never degrades
+to a generic warning for want of a row; only a role beyond *participant* waits for the
+owner's device, as a leg assignment does anyway. On the host the table imports as is
+(<doc:Collaboration> → "Ready for an independent host"). <doc:TechDebt> YD-45.
+
+**`orderRatings` — a fact, not a message kind.** A rating is a human statement in the
+order's stream — attributable, appendable, revisable by posting again — but its storage
+is a table: it is *aggregated* (per courier, per place, per sender), it has a structured
+*subject*, and messages' free text should stay free text. The chat *renders* it as an
+event row by merging the two streams by time; "only the last counts" is a read-time
+derivation — the effective rating per (author, subject) is the row with the latest `at`,
+earlier rows stay as history (<doc:Vision> → "Players, trust and reputation" for who
+rates whom and where ratings aggregate). The id is caller-held so a retry is the same row.
+Entitlement for a rating needs no join to anything mutable: every member may post one,
+and the row carries its author, subject and leg itself.
+
+### Stage 2 — legs (when a second provider or the courier edition starts)
+
+```sql
+CREATE TABLE IF NOT EXISTS "legs" (
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(leg ‖ orderID ‖ position)
+  "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
+  "position" INTEGER NOT NULL,                         -- travel order of legs
+  "kind" TEXT NOT NULL,                                -- platform · courier
+  "providerAccountRef" TEXT,                           -- platform legs: "yandex:<corp>"
+  "courierPartyRef" TEXT,                              -- courier legs: the assignee; exactly one of the two is set
+  "fromStopRef" TEXT NOT NULL, "toStopRef" TEXT NOT NULL,   -- values → routeStops.id
+  "assignedAt" REAL NOT NULL,
+  "authorRef" TEXT, "signingKeyID" TEXT, "signature" TEXT
+) STRICT;
+```
+
+A leg row is an *assignment fact*, written once by the owner. Status, price and courier
+per leg are projections computed at read from that leg's events (`orderEvents.legRef`);
+`orderProviderStates` stays the order-level projection the list reads. A dock is not a
+stop role: it is the stop that is `toStopRef` of leg *n* and `fromStopRef` of leg
+*n+1*. Existing orders get an implicit leg 0 (events with NULL `legRef`). Two columns for
+the carrier instead of one mixed-type `providerRef`, so a server with real foreign keys
+can constrain each.
+
+### What is deliberately not changed
+
+- `orderProviderStates`, `routeStops` (beyond its id), `orderItems`, `orderOptions`,
+  `orderCustomFields`: same writers, same merge rules, no signature columns. Their
+  integrity is derived ("Derived integrity", above).
+- The private and device tiers: unsigned. The owner is the only writer and nothing there
+  is shared.
+- The sighting dedupe (`INSERT OR IGNORE` on `orderID ‖ status ‖ source`): kept, because
+  immutability is what signing needs.
+- The widget snapshot contract, the wire log as a file, the share grant model, read-only
+  by default.
+
+### What the epoch discharges
+
+YD-40 (stop ids minted on the model) and YD-41 (no REPLACE on shared keys) at the epoch
+itself; YD-42 (`dataHash`) and the Kit's half of YD-43 (`authorRef`) with the signed
+columns; the Kit's half of YD-45 (`memberships`) with its table. The app's halves —
+names resolved through the authority, the membership reconcile after each sync pass —
+land with the app's adoption (<doc:Roadmap> → "Next — the trust layer").
+
 ## Direction — legs and participants: what not to cement (2026-10-05)
 
 The owner's direction (<doc:Vision> → "Direction — many providers, docked legs,
@@ -560,14 +902,17 @@ independent couriers") does not change the schema today. It changes what a new c
 may assume. Three rules for every schema PR from here:
 
 1. **Provider-specific state goes on the mirror, never on `Order`.** `OrderProviderState`
-   is 1:1 today and becomes *one row per leg* later (`LegState`, keyed by a `legID`); a
-   column added to `Order` because "there is only one claim" is the thing the migration
-   would have to unpick. `claimID`, `tariff`, `price`, courier fields stay on the mirror.
+   is 1:1 today; per-leg state arrives later as a *projection of that leg's events* at
+   read (Stage 2 above, 2026-10-06 — not the `LegState` row per leg this rule first
+   named), and the order-level mirror stays what the list reads; a column added to
+   `Order` because "there is only one claim" is the thing the migration would have to
+   unpick. `claimID`, `tariff`, `price`, courier fields stay on the mirror.
 2. **Events name their writer.** `ProviderEvent` is "owner-written" today; a courier's
    leg will have events the courier writes. New event columns must not assume the owner —
-   an `authorRef` (the `*Ref` convention: a participant reference, not a user record id)
-   and the signing columns (<doc:Collaboration>) are the shape; until they exist, nothing
-   should read "the owner wrote this" from the table alone.
+   an `authorRef` (the `*Ref` convention: a `partyRef`, not a user record id), a `legRef`,
+   and the signing columns (<doc:Collaboration>) are the shape. **Landing in Stage 1 of
+   the epoch** (2026-10-06) — until the columns exist, nothing should read "the owner
+   wrote this" from the table alone.
 3. **A stop may be a dock.** `RouteStop.role` is `pickup`/`dropoff`/`return` from the
    sender's point of view; a dock is not a fourth role but a leg boundary — the stop where
    leg *n* ends and leg *n+1* begins, whatever the sender calls it (a `return` stop can be
@@ -577,12 +922,17 @@ may assume. Three rules for every schema PR from here:
 
 Identity, for the record: `providerAccountRef` is the Yandex account's name for the
 owner and stays that; a courier is a **share participant** (a CloudKit user the owner
-granted), so their identity rides the share, not a provider account. The private tier is
-the owner's and stays unshared; a courier's own private notes would be their own
-database's private tier — the courier edition is a participant, not a second owner.
+granted), so their identity rides the share and a `memberships` row, never a provider
+account. The private tier is the owner's and stays unshared; a courier's own private
+notes would be their own database's private tier — the courier edition is a participant,
+not a second owner. It is the same app with a member's view: it holds a device key like
+any other install, publishes it into the shares it is invited to, and writes its leg's
+events under `legRef`; entitlement comes from the owner's `legs` row naming it — no
+second store, no second schema.
 
-Known schema work that respects these rules and is next: the signing columns once the
-participant key table is designed (<doc:Collaboration>). `OrderPrivateState.archivedAt`
+Known schema work that respects these rules and is next: the epoch and its Stage 1
+tables (above) — the participant key table is designed, and the signing columns ride it.
+`OrderPrivateState.archivedAt`
 has already landed — 0.4.14, the archive's home on the private tier, the seed carrying
 it (<doc:Design>).
 
@@ -591,4 +941,5 @@ it (<doc:Design>).
 - <doc:Collaboration> — the stack research and grant model this schema implements
 - <doc:Design> — the persistence decision this settles
 - <doc:Roadmap> — where the migration sits in the phase order
-- <doc:TechDebt> — YD-5, YD-12, YD-13, whose discharges this design carries
+- <doc:TechDebt> — YD-5, YD-12, YD-13, whose discharges this design carries; YD-40 to
+  YD-45, which the epoch and its Stage 1 carry

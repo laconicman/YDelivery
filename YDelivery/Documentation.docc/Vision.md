@@ -229,6 +229,37 @@ what a backend would add**, and today that list is short and priced:
    thing that needs a real backend with state, and the point where the SQL-shaped schema
    pays: <doc:Schema> ports to server SQL unchanged (<doc:Design> → "iOS-only",
    revisited 2026-09-26).
+4. **The host — an identity layer and a registry (direction recorded 2026-10-06).** The
+   owner will ship on iCloud and later move to a host of their own, leaning to
+   server-side Swift; the design goal, met by the trust layer, is that the move is a
+   migration of *transport and authority*, never of the rows. What the server adds, and
+   nothing the app needs now:
+   - *An identity layer*: `parties` (an opaque UUID per person); `identities`
+     (`provider`, `subject`) → party — where `("cloudkit", userRecordName)` carries the
+     very UUID the devices already derived, so every author and member written on iCloud
+     stays valid, and `("apple", sub)`, `("google", sub)`, `("email", address)`,
+     `("phone", e164)` are added by sign-in; `deviceKeys`, the server's copy of the key
+     bindings; `memberships`, imported from the devices' signed rows. Email is a login
+     handle and an identity row, never the party id (<doc:Design> → "Parties, not
+     CloudKit names"). Sign in with Apple is not needed on CloudKit and becomes mandatory
+     the day Google or any third-party sign-in is offered (App Review 4.8).
+   - *Two tiers or three*: a hosted Postgres with row-level security could enforce
+     membership and reject malformed rows, and signatures travel unchanged — but it
+     cannot attest key bindings, run invites and push, verify signatures in a trigger
+     without extensions, or moderate a registry. Those are application logic, so the
+     honest target is three-tier: Postgres, a Swift application server (Vapor the mature
+     choice, Hummingbird the lighter one; Kitura is not a candidate — IBM stepped back in
+     2020 and the community fork has had little activity since), the iOS app and later a
+     web client.
+   - *What migrates, device by device*: the person signs in (any identity) and the
+     device presents its CloudKit-derived `partyRef`, so nothing it wrote changes author;
+     the device registers its key and the server attests it — future key rows carry the
+     server's binding, old CloudKit-bound rows stay verifiable by signature; the device
+     uploads its rows and the server dedupes by UUID and verifies every signature it can,
+     labelling the legacy ones rather than refusing them; sync switches to the host, with
+     CloudKit readable for a grace period. The widget snapshot, the wire log and the
+     drafts are untouched. Row signing stays as the second layer behind the server's own
+     access rules — priced in <doc:Collaboration> → "Ready for an independent host".
 
 The app "as scaffolded" is therefore not a compromise against the clean approach; it is
 the clean approach's first stage, and the stages are ordered by what each unlocks. The
@@ -255,16 +286,97 @@ What this changes about the product's shape, stated so nothing built now contrad
   person with a phone. The courier edition is a participant that is granted a leg and
   writes its events; it is not a second app with a second store.
 - **Journal entries are attributed and verifiable.** Every event names who wrote it and
-  carries that writer's signature; a reader checks against keys it has seen. This is the
-  2026-09-29 signing idea generalised from "the owner signs the provider mirror" to
-  "every writer signs their own rows" — see <doc:Collaboration>.
+  carries that writer's signature; a reader checks against the key row the authority
+  stamped — CloudKit's server now, a server of our own later — not against keys it
+  happens to have seen. This is the 2026-09-29 signing idea generalised from "the owner
+  signs the provider mirror" to "every writer signs their own rows", settled on
+  2026-10-06 as *sign facts, derive state* — see <doc:Collaboration>.
 - **The first integration stays Yandex Express; the second provider arrives as a package
   of its own** (rule 7), behind the same controller boundary. The HDD/warehouse family
   is still out of scope until a user needs it.
 
 What it does *not* change now: no second provider, no legs table, no courier edition in
-1.0. The schema notes in <doc:Schema> list what not to cement; the Later tier in
-<doc:Roadmap> carries the sequence.
+1.0. The schema notes in <doc:Schema> list what not to cement — and, since 2026-10-06,
+the epoch that cements the right things; <doc:Roadmap> → "Next — the trust layer"
+carries the sequence, the Later tier what waits behind it.
+
+### Players, trust and reputation (2026-10-06)
+
+The design pass that followed the direction above settled who the people in a delivery
+are to the schema, what a rating is, and where reputation can live. The rules are in
+<doc:Collaboration> → "Sign facts, derive state" and <doc:Schema> → "Epoch 2"; this is
+the product's statement of them.
+
+**The players.** Two distinctions carry everything: a *party* (who is accountable)
+versus a *device* (what holds a key), and a party's *reference* (the opaque `partyRef`
+every row uses) versus its *identities* (the credentials an authority accepts for it: a
+CloudKit user record today; Apple, Google, email, phone on a server tomorrow). Rows know
+only references; authorities know identities.
+
+| Player | Reference in rows | Identity, CloudKit mode | Writes |
+|---|---|---|---|
+| Owner (the sender, the share's owner) | `partyRef` | Their user record; on their own devices the creator stamp reads `__defaultOwner__`, on a participant's device it is their real record name via `CKShare.owner` (observed values to be recorded by the two-device pass) | Order definition, order events, memberships, leg assignments, messages, ratings |
+| Receiver, dispatcher, colleague (share participants) | `partyRef` | User record via `CKShare.participants[].userIdentity.userRecordID`; name and email/phone only with the user's consent (`CKUserIdentity`) | Messages, attachments, ratings |
+| Independent courier (the courier edition) | `partyRef`, named by `legs.courierPartyRef` | A participant like any other | Their leg's events, messages, ratings |
+| Platform courier (a Yandex performer) | None: `performer_info` carries name, legal name, car model and number, transport type — no id | None | Nothing; the owner's sync writes on the provider's behalf |
+| Provider account | `providerAccountRef` (`"yandex:<corpClientID>"`) | The OAuth token in the Keychain | Nothing directly |
+
+**Ratings are facts the chat renders.** The owner's idea — "mention one another in the
+chat with a rate message where only the last one counts" — has the right social shape: a
+rating is a human statement in the order's stream, attributable, appendable, revisable
+by posting again. Its storage shape is not a message, for three reasons: a rating is
+*aggregated* (per courier, per place, per sender), and the schema's own rule is that
+anything queried or branched on earns a column, which for an aggregated thing means a
+table; a rating has a structured *subject* that a mention would only encode by
+convention; and messages' free text should stay free text. So: a dedicated append-only
+`orderRatings` table, signed like every other fact, which the chat *renders* as an event
+row («Ирина оценила курьера ★★★★★») by merging the two streams by time. "Only the last
+counts" becomes a read-time derivation, exactly like list ordering: the effective rating
+per (author, subject) is the row with the latest `at`; earlier rows stay as history and
+are visible in the detail. Score 1 to 5 as an integer, an optional comment. No
+per-aspect tags in v1; if "late / careful / hard to find" ever earn structure they become
+a `tags` JSON column under the same hatch rule as `providerDetail`, and a column the day
+one of them is queried.
+
+Who rates whom, v1 (owner's decision 6, 2026-10-06: leg and party; stop ratings wait for
+the courier edition):
+
+| Author | Subject kind | `subjectRef` | When the prompt appears |
+|---|---|---|---|
+| Owner | `leg` (the courier's run) | leg id, or the derived leg-0 id while `legs` is absent; `subjectLabel` = courier name and vehicle snapshot | After `delivered`/`delivered_finish`, once, dismissible, in the detail and the chat |
+| Owner | `party` (the receiver) | the receiver's `partyRef` | Optional, from the detail's members row |
+| Receiver (member) | `leg` | as above | After delivery, in the chat (the surface they already use) |
+| Receiver | `party` (the owner) | the owner's `partyRef` | Same prompt, second line |
+| Courier (edition, later) | `stop` (how the door went), `party` (owner, receiver) | stop id; party refs | After their leg completes |
+
+Only read-write participants can post — CloudKit's permission is per share, enforced by
+`sqlite-data`'s trigger — so an invite that should allow rating must be read-write,
+which the chat already requires. Accepted for now (owner's decision 7, 2026-10-06), and
+reversible: it is an invite policy, not schema; on the host, per-table permissions
+replace it with no row change.
+
+**Where ratings aggregate, and the honest limit.** Inside one order everything is
+simple: every member sees every rating of that order, verifies the author's key, and
+renders it. *Across orders* is the real problem, and it is a trust-domain problem, not a
+schema problem: a per-order share is the unit of visibility on CloudKit, so a courier's
+reputation across many senders has no place to live until there is a host. The owner's
+own experience aggregates privately for free — the sender's device holds all its orders:
+"your last 12 Yandex couriers averaged 4.6". A courier's standing visible to a *new*
+sender needs a registry. Three options, recorded so the decision is not re-litigated:
+
+| Option | Mechanism | Cost and limits |
+|---|---|---|
+| A · CloudKit public database registry | Each rating of a party or courier subject is also written as a pseudonymous public record (subject partyRef, order id hash, score, at) by the rater's device; readable by anyone via `CKQuery`; the server-stamped creator is the Sybil cost (one iCloud account per fake rater). | Zero backend. `sqlite-data` has no public-database support (verified), so this is hand-written `CKDatabase` code beside the engine. Public means public: no PII, no addresses, no names. Abuse, deletion and quota policies are ours. |
+| B · Self-carried receipts | The courier edition exports its received, signed rating rows and shows them to a prospective sender. | Unverifiable by the recipient: the sender cannot see the raters' key rows (they live in shares it is not in). Social proof only. Rejected as a mechanism; kept as a presentation the courier can show from their own device. |
+| C · The host's registry | Once the app has its own backend (the fourth stage of the backend question, above), the ratings table is simply queryable across orders under the server's access rules, and the server verifies every rating's signature at upload. | The clean answer and the one the rows are already shaped for. |
+
+**Decided (owner, 2026-10-06): C, by default.** A registry is simply a place where
+ratings from many orders can be looked up by subject under access rules; on CloudKit
+there is no such place, and on the host the ratings table *is* the registry — one query
+per subject, with the server deciding who may ask. Independent couriers arrive after the
+host exists, so A is dropped from the plan and nothing is built now beyond shaping each
+rating row so the server imports it unchanged: self-contained, signed, pseudonymous
+subject and author, the order id present. B stays what it was.
 
 ## See Also
 
