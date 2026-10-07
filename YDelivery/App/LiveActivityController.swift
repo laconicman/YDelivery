@@ -100,6 +100,22 @@ final class LiveActivityController {
         checkedAt.addingTimeInterval(staleAfter)
     }
 
+    /// A new card's stale date — as fresh as the newest read that vouches for
+    /// it: the order's own provider stamp (placement's answer, a merged
+    /// sighting) or the journal's last check, whichever is later. Not the
+    /// journal's alone: an order placed during an outage would be born
+    /// flagged. Not birth alone: a launch or a shared-database arrival starts
+    /// a card from disk state of its own age (review, PR #134). With neither,
+    /// the window opens at birth. The journal's check vouches for the feed,
+    /// not this claim — a stampless order arriving from the shared database
+    /// can borrow its window — but only for one window: re-arms need a newer
+    /// check.
+    nonisolated static func birthStaleDate(
+        observedAt: Date?, checkedAt: Date?, now: Date = .now
+    ) -> Date {
+        staleDate(checkedAt: [observedAt, checkedAt].compactMap(\.self).max() ?? now)
+    }
+
     /// Whether a live card must be re-sent: its state moved, or the last
     /// journal check is half a window past the one that armed it — a healthy
     /// sync re-arms the card before it would ever flag, at most one extra
@@ -153,10 +169,9 @@ final class LiveActivityController {
                         ?? activity.content.staleDate
                     changes.append((activity, .update(state, staleDate: staleDate)))
                 } else {
-                    // Before the first check, a new card's window opens at its
-                    // birth — the read that placed or listed the order.
                     start(order: order, state: state,
-                          staleDate: Self.staleDate(checkedAt: checkedAt ?? .now))
+                          staleDate: Self.birthStaleDate(
+                              observedAt: order.providerObservedAt, checkedAt: checkedAt))
                 }
             case .ending(let ending):
                 if let activity {

@@ -95,4 +95,29 @@ struct LiveActivityDispositionTests {
         #expect(LiveActivityController.needsUpdate(
             shown: state, shownStaleDate: armed, state: moved, checkedAt: nil))
     }
+
+    @Test("A new card is as fresh as the newest read behind it")
+    func newCardTakesTheNewestRead() {
+        let window = LiveActivityController.staleAfter
+        let journal = Date(timeIntervalSince1970: 1_800_000_000)
+        let now = journal.addingTimeInterval(45 * 60)
+        // The review's case (PR #134): the journal last succeeded at 10:00,
+        // the sender places at 10:45 — placement's own answer dates the card,
+        // so it is not born flagged.
+        #expect(LiveActivityController.birthStaleDate(
+            observedAt: now, checkedAt: journal, now: now) == now.addingTimeInterval(window))
+        // A quiet claim first sighted while the journal is healthy rides the
+        // journal's window, not its hour-old provider stamp.
+        #expect(LiveActivityController.birthStaleDate(
+            observedAt: journal.addingTimeInterval(-60 * 60), checkedAt: journal, now: now)
+                == journal.addingTimeInterval(window))
+        // Disk state at launch, no check yet: the card brings its real age —
+        // past its window, it says so at once.
+        let disk = now.addingTimeInterval(-60 * 60)
+        #expect(LiveActivityController.birthStaleDate(
+            observedAt: disk, checkedAt: nil, now: now) == disk.addingTimeInterval(window))
+        // Nothing to date it by: the window opens at birth.
+        #expect(LiveActivityController.birthStaleDate(
+            observedAt: nil, checkedAt: nil, now: now) == now.addingTimeInterval(window))
+    }
 }
