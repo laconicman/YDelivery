@@ -190,8 +190,9 @@ and non-owner writers it stopped being the provider's feed — a rename on a liv
 would orphan a record type; on a fresh one it costs nothing. Stage 1 adds `legRef`
 (value → the logical leg `legs.ref`; NULL = the order's only leg), `providerRevision`
 (the wire's `revision` — the journal event's own, and the claim card's `revision`, not
-its `version` or `user_request_revision` — the key the derived verdicts order by before
-`at`), `routeDigest`, and the signing triple
+its `version` or `user_request_revision`, required by the wire on both — part of a
+sighting's identity and the derived verdicts' tie-break within one family),
+`routeDigest`, and the signing triple
 `authorRef`/`signingKeyID`/`signature`; `kind` gains `placed` and `source` gains `app` —
 the ordering flow's own fact, written when the claim is accepted, with the agreed
 claimID, tariff, price and currency in `detail` and the digest of the route as sent.
@@ -213,11 +214,16 @@ observation's `at` stands and a re-sight changes nothing; one row per observed s
 (*Corrected 2026-10-06:* this sentence used to say a re-sight "upserts `at`", a
 behaviour `recordProviderEvent` never had — and immutability is exactly what signing
 needs, so the code was right and the sentence was wrong.) *Amended 2026-10-08, review of
-#135:* at the epoch both derivations gain two inputs. A sighting keys on
-`orderID ‖ providerStatus ‖ source ‖ routeDigest ‖ keyID` — `recordOrder` rewrites the
-stops from any card whose stamp is not older, status unchanged or not, and a second
-sighting dropped under the old key would leave the refreshed stops answering to a stale
-signed digest; so one row per observed state *and route*. A journal row keys on
+#135:* at the epoch both derivations gain inputs. A sighting keys on
+`orderID ‖ providerRevision ‖ providerStatus ‖ routeDigest ‖ keyID` —
+`recordOrder` rewrites the stops from any card whose stamp is not older, status
+unchanged or not, and a second sighting dropped under the old key would leave the
+refreshed stops answering to a stale signed digest; and a claim can return to an earlier
+status at a later revision (an edit at `ready_for_approval` sends it back to
+`estimating`), which under a key without the revision would collide with the first
+sighting and vanish (third round). So one row per observed revision — a card read and
+a search read of one revision are one observation, whichever lands first — and a retry
+of one revision is a no-op. A journal row keys on
 `orderID ‖ providerEventID ‖ keyID` — every owner device ingests the journal itself, and
 two devices minting one id for one operation would have their signatures merged column
 by column into a row that verifies for neither (<doc:Collaboration> → rule 1). The
@@ -505,18 +511,20 @@ never a column:
   `providerStatus` of the latest *verified* status-bearing event and yields
   `.consistent` / `.disagrees(expected:)` / `.noSignedHistory`. "Latest" is one total
   order over the rows that read verified *and* entitled — a member's validly signed
-  event loses on entitlement before it can compete: by the provider's `revision` where
-  both rows carry one, else by `at`, the provider's clock on journal rows and sightings
-  alike (a versioned row beside an unversioned one falls to `at` and then source, a
-  guess about two counters' relative position, named as a residual until the
-  one-counter verification lands); on a tie,
-  journal beats a claim-card sighting beats a search sighting beats `placed`; then the
-  smallest id. One
-  expected value, never a set to match any of — a set let a forged rollback to an older,
-  equally stamped verified status pass as consistent (second round, 2026-10-08); the
-  residual, two reads at one stamp that disagree, is named because the provider
-  documents `updated_ts` only as "last update". A mirror row rewritten out of band
-  disagrees with the signed history; a legitimate newer event makes it consistent again.
+  event loses on entitlement before it can compete — and it is one lexicographic key:
+  by `at`, the provider's clock on journal rows and sightings alike; on a tie, by family —
+  journal beats a claim read (card or search, one claim `revision`) beats `placed`; then,
+  within one family, the higher `providerRevision`; then the smallest id. Timestamp first because
+  it is the order the mirror's own writer gates on, so an honest write never reads as
+  tampering; revision only within one family, where it is one counter (third round,
+  2026-10-08: comparing by revision when both rows carried one and by `at` otherwise
+  could cycle through a third row). One expected value, never a set to match any of — a
+  set let a forged rollback to an older, equally stamped verified status pass as
+  consistent (second round); the residuals — two disagreeing rows at one exact stamp,
+  where the mirror's last arrival can differ per device, and a pass's batch stamp running
+  ahead of a card's content when a card and an event disagree about the clock — can only
+  produce false positives. A mirror row rewritten out of band disagrees with the
+  signed history; a legitimate newer event makes it consistent again.
 - **`routeIntegrity(orderID:)`** hashes the stored stops' sender-authored columns —
   every `RouteStop` column but the id and the `visit*` provider truth, in `position`
   order — and compares with the `routeDigest` carried by the latest verified
@@ -524,14 +532,14 @@ never a column:
   and every `sighting`, over the route as the provider reported it, under the same
   total order — one expected digest. A stop
   address rewritten out of band mismatches; a fresh sighting carrying the new route
-  restores consistency, and because a sighting's identity carries its digest, a route
-  the provider corrected under an unchanged status *is* a fresh sighting (amended
-  2026-10-08, review of #135). The digest's encoding is the canonical payload's
+  restores consistency, and because a sighting's identity carries its revision and its
+  digest, a route the provider corrected under an unchanged status *is* a fresh sighting
+  (amended 2026-10-08, reviews of #135). The digest's encoding is the canonical payload's
   (<doc:Collaboration>).
 
 Both read the trail deduped by fact — rows agreeing on the fact columns collapsed to one
-entry per `(orderID, providerEventID)` and per `(orderID, providerStatus, source,
-routeDigest)`, disagreeing ones kept apart with their verdicts — since each writer's row
+entry per `(orderID, providerEventID)` and per `(orderID, providerRevision,
+providerStatus, routeDigest)`, disagreeing ones kept apart with their verdicts — since each writer's row
 is its own record ("Epoch 2" → identity, below). Both are one event scan per order on demand, never on the list
 read, and neither touches the projection tables' write paths. The order detail renders a disagreement as one line
 under the provider block — "the recorded status differs from the signed history", "the
@@ -801,8 +809,8 @@ on single-FK tables). Every reference to a person is a `partyRef`.
 **Identity on signed tables** (amended 2026-10-08, review of #135). A signed row's id
 belongs to one writer: a caller-held id is held by the device that minted it, and a
 *derived* id carries the writer's key id among its inputs — `orderID ‖ providerEventID ‖
-keyID` for a journal row, `orderID ‖ providerStatus ‖ source ‖ routeDigest ‖ keyID` for
-a sighting, `orderID ‖ partyRef ‖ keyID` for a share-mirrored membership, `orderID ‖
+keyID` for a journal row, `orderID ‖ providerRevision ‖ providerStatus ‖ routeDigest ‖
+keyID` for a sighting, `orderID ‖ partyRef ‖ keyID` for a share-mirrored membership, `orderID ‖
 position ‖ keyID` for a leg. Two devices that record the same fact therefore write two
 rows, never one CloudKit record: the engine merges a colliding insert column by column
 and overwrites the loser's local row with the result, which would put one device's
@@ -812,7 +820,8 @@ at read, like list ordering: rows that agree on the fact — the frozen column l
 `id`, plus the author's party; writer identity (`id`, `signingKeyID`, `signature`) is
 left out, since it differs by construction between two honest devices (second round,
 2026-10-08) — collapse to one entry per `(orderID, providerEventID)`, per
-`(orderID, providerStatus, source, routeDigest)`, per leg `ref` — the verified one when
+`(orderID, providerRevision, providerStatus, routeDigest)` (a sighting's `source` is
+provenance, left out like writer identity), per leg `ref` — the verified one when
 any is, else the earliest stamp, then the smallest id, so every device derives the same
 answer — while rows that share a key but disagree, or come from a different party, stay
 apart, each with its own verdict: nothing is hidden, and a verified row beside an invalid
@@ -852,9 +861,9 @@ CREATE TABLE IF NOT EXISTS "memberships" (
 
 CREATE TABLE IF NOT EXISTS "orderEvents" (             -- today's providerEvents, renamed
   "id" TEXT PRIMARY KEY NOT NULL,                      -- journal: UUIDv5(providerEvent ‖ orderID ‖ providerEventID ‖ keyID)
-                                                       -- sighting: UUIDv5(providerEvent ‖ orderID ‖ providerStatus ‖ source ‖ routeDigest ‖ keyID)
+                                                       -- sighting: UUIDv5(providerEvent ‖ orderID ‖ providerRevision ‖ providerStatus ‖ routeDigest ‖ keyID)
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
-  "legRef" TEXT,                                       -- value → legs.id; NULL = the order's only leg
+  "legRef" TEXT,                                       -- value → legs.ref, the logical leg; NULL = the order's only leg
   "providerEventID" INTEGER,
   "providerRevision" INTEGER,                          -- the wire's revision: the journal event's own, the claim card's `revision` (not `version`)
   "at" REAL NOT NULL,
@@ -989,9 +998,10 @@ legs by position, which would have dropped the row some events pointed at.)
   integrity is derived ("Derived integrity", above).
 - The private and device tiers: unsigned. The owner is the only writer and nothing there
   is shared.
-- The sighting dedupe: kept as `INSERT OR IGNORE`, with the route digest and the
-  writer's key joining its key (identity, above), because immutability is what signing
-  needs and a changed route is a new fact, not a refresh of the old one.
+- The sighting dedupe: kept as `INSERT OR IGNORE`, with the provider's revision, the
+  route digest and the writer's key joining its key (identity, above), because
+  immutability is what signing needs and a later revision is a new fact, not a refresh
+  of the old one.
 - The widget snapshot contract, the wire log as a file, the share grant model, read-only
   by default.
 
