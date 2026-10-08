@@ -322,30 +322,42 @@ design is written against the local 0.4.15 source, where stops upsert and prune.
    with `INSERT OR IGNORE`; a conflicting insert is a no-op, never a replace. **A signed
    row's identity belongs to one writer** (amended 2026-10-08, review of #135): a
    caller-held id is held by the device that minted it, and a *derived* id — a journal
-   event, a sighting, a share-mirrored membership, a leg — carries the writer's key id
-   among its inputs, so two devices that record the same fact write two rows rather
-   than one CloudKit record. The engine merges a colliding insert column by column —
-   `serverRecordChanged` runs the same per-field `upsertFromServerRecord` as a fetched
-   change, and the loser's local row is overwritten with the result — which would leave
-   one device's signature beside the other's key id and read *invalid* for a fact both
-   wrote honestly. Dedupe of the *fact* is a read-time derivation, like list ordering:
+   event, a sighting, a share-mirrored membership — carries the writer's key id among
+   its inputs, so two devices that record the same fact write two rows rather than one
+   CloudKit record. Which of the two a row gets follows from what it records (third
+   round, 2026-10-08): a *re-observation of one external fact* — a journal operation, a
+   provider revision, the share's member list, a device key's publication under one
+   binding — derives its id, so a retry or a second look is a no-op; a *decision that a
+   later decision can supersede* — a role assignment, a leg assignment, a rating, a
+   message — holds a caller-held id minted per decision, reused only to retry that one
+   decision, because a derived id would make the second decision collide with the first
+   and vanish under `INSERT OR IGNORE`. Rounds one and three each found one instance of
+   the mistake: memberships, then legs. The engine merges a colliding insert column by
+   column — `serverRecordChanged` runs the same per-field `upsertFromServerRecord` as a
+   fetched change, and the loser's local row is overwritten with the result — which
+   would leave one device's signature beside the other's key id and read *invalid* for a
+   fact both wrote honestly. Dedupe of the *fact* is a read-time derivation, like list
+   ordering, and only observations fold: two decisions with identical content — two
+   equal messages, two equal ratings — are two decisions, never one. For observations,
    the trail collapses `orderEvents` by `(orderID, providerEventID)`, and sightings by
-   `(orderID, providerRevision, providerStatus, routeDigest)` — but only rows that
-   *agree on the fact*: the frozen column list minus `id` (and, for a sighting, minus
-   `source`: a card read and a search read of one revision are one observation), plus
-   the party the row's verdict names (the binding's, so a row written before its device
-   knew its party still folds once its key row is bound, and stands apart as
-   *unverifiable* until then), with writer identity (`id`, `signingKeyID`, `signature`)
-   left out of the comparison, since it differs by construction between two honest
-   devices while each row is still verified on its own (amended 2026-10-08, second
-   round: comparing the *signed* columns could never match, because the writer-specific
-   `id` heads every list). One entry per fact, the verified one when any is, else the
-   earliest `at`, then the smallest id, so every device derives the same answer. Rows
-   that share a key but disagree on the fact, or come from a different party, are not
-   collapsed: each renders with its own verdict (rule 6 — nothing is hidden), and a
-   verified row beside an invalid or not-entitled twin is the forgery made visible, not
-   a duplicate. UI identity follows the chosen representative on each device; devices
-   need not pick the same row, only the same fact.
+   `(orderID, providerRevision, providerStatus, routeDigest)`, but only rows that *agree
+   on the fact*. Agreement compares the frozen column list with three kinds of column
+   taken out. Writer identity (`id`, `signingKeyID`, `signature`) differs by
+   construction between two honest devices (second round, 2026-10-08: comparing the
+   *signed* columns could never match, because the writer-specific `id` heads every
+   list). A sighting's `source` is provenance: a card read and a search read of one
+   revision are one observation. And the raw `authorRef` gives way to the party the
+   row's verdict names, because a row signed before its device knew its party carries
+   NULL there and a later row the party's UUID, and both resolve to the same owner once
+   the key rows are bound (third round); a row whose key is not yet bound stands apart
+   as *unverifiable* until it is. Each row is still verified on its own, its `authorRef`
+   checked against its binding, before it folds. One entry per fact, the verified one
+   when any is, else the earliest `at`, then the smallest id, so every device derives
+   the same answer. Rows that share a key but disagree on the fact, or come from a
+   different party, are not collapsed: each renders with its own verdict (rule 6 —
+   nothing is hidden), and a verified row beside an invalid or not-entitled twin is the
+   forgery made visible, not a duplicate. UI identity follows the chosen representative
+   on each device; devices need not pick the same row, only the same fact.
 2. **Unsigned projections:** the `orders` root, `orderProviderStates`, `orderOptions`,
    `orderItems`, `routeStops`, `orderCustomFields`. They keep today's writers and today's
    merge behaviour. Their integrity is a *derived verdict*: the mirror's `providerStatus`
@@ -461,20 +473,22 @@ them (decision 3, 2026-10-06); the explanations are the record.
   says, cached in the device-tier `localIdentity` table). Until known, rows carry
   `authorRef = NULL` and the key row carries `partyRef = NULL`; the authority's stamp
   fills the gap for readers after the first sync.
-- **Publication.** A `participantKeys` row per (order, device key), id derived from
-  `orderID ‖ keyID`, inserted with `INSERT OR IGNORE` inside the first signed write of
-  that device into that order. Self-signed over *every* column it carries — the public
-  key and the binding fields alike (amended 2026-10-08, review of #135: a
-  self-signature that skipped `bindingProof` and `bindingKeyID` would let a participant
-  rewrite the evidence a row claims without touching its signature) — so a rewrite of
-  `publicKey`, of the proof or of the key that attested it is detectable. The row names
-  its binding: `bindingKind = "cloudkit"` (the proof is the server stamp in sync
-  metadata; the proof columns are NULL and signed as NULL) or, later, `"server"` with
-  `bindingProof` holding the server's signature over `(partyRef, keyID, publicKey,
+- **Publication.** A `participantKeys` row per (order, device key, binding), id derived from
+  `orderID ‖ keyID ‖ bindingKind` — one binding statement, so the same key published
+  later under a server binding (the host migration's step 2) is a new row, not a
+  collision (third round, 2026-10-08) — inserted with `INSERT OR IGNORE` inside the
+  first signed write of that device into that order. Self-signed over *every* column it
+  carries — the public key and the binding fields alike (amended 2026-10-08, review of
+  #135: a self-signature that skipped `bindingProof` and `bindingKeyID` would let a
+  participant rewrite the evidence a row claims without touching its signature) — so a
+  rewrite of `publicKey`, of the proof or of the key that attested it is detectable. The
+  row names its binding: `bindingKind = "cloudkit"` (the proof is the server stamp in
+  sync metadata; the proof columns are NULL and signed as NULL) or, later, `"server"`
+  with `bindingProof` holding the server's signature over `(partyRef, keyID, publicKey,
   boundAt)`, `bindingKeyID` naming the server key that signed it, and `boundAt` the
   attestation's own time. A `server`-bound row whose proof is missing, or verifies under
-  no pinned server key, is *invalid*, not *unverifiable*: the row claims evidence it does
-  not carry.
+  no pinned server key, is *invalid*, not *unverifiable*: the row claims evidence it
+  does not carry.
 - **Trust.** The identity authority answers one question per key row: *which party does
   your binding name?* CloudKit: the creator stamp resolves to a party (a real record
   name, or `__defaultOwner__` on a device whose own party is known); server: the
@@ -577,8 +591,9 @@ engine's `permissionFailure` path takes server truth or deletes the local row �
 rule governs what was written before the removal and whatever a stale share cache might
 still let through. A row's stamp is its writer's claim, as every offline-first write is:
 a writer whose role was reduced could date a row into its former role. The server's
-modification date in the sync metadata bounds the claim — when it is later than the role
-change, the row renders verified, entitled as of its stamp, and flagged "arrived after
+`creationDate` in the sync metadata — CloudKit's stamp of the record's first save, which
+later merges do not move, unlike `modificationDate` — bounds the claim: when it is later
+than the role change, the row renders verified, entitled as of its stamp, and flagged "arrived after
 the role changed", never hidden; on the host, where upload is the arbiter, the server
 refuses it instead. `participantKeys` carries no role: roles come from `memberships` and
 `legs`, never from a writer's claim.
@@ -604,34 +619,40 @@ How it got here. The second round (2026-10-08) replaced "the mirror is consisten
 matches any equally stamped status" — a set a read-write participant could roll the
 mirror back into — with a total order, and put `revision` first where both rows carried
 one, falling back to `at` otherwise. The third round showed that rule is not transitive:
-a row with revision 1 at `at` 300, a row with revision 2 at 100 and an unversioned row at
-200 beat one another in a cycle, and a sort over them has no stable winner. The key is
-now timestamp-first for a reason that does not depend on the open question about
+a row with revision 1 at `at` 300, a row with revision 2 at 100 and an unversioned row
+at 200 beat one another in a cycle, and a sort over them has no stable winner. The key
+is now timestamp-first for a reason that does not depend on the open question about
 `revision`: it is the order the projection's own writer uses. `recordOrder` skips a card
 only when the stored observation is strictly newer, and the mirror update after an event
-applies when the stored stamp is not later — so within one sync pass, where the mirror is
-stamped with the batch's latest provider stamp, an event at that stamp lands after the
-card's write, which is the journal-beats-claim-read tie rule. A verdict that ordered
-differently would read an honest write as tampering. `revision` compares rows of one family only, where it
-is one counter; if the open verification shows the journal's and the card's revisions
-are one counter, the writer's gate and the verdict move to revision-first together, never
-one without the other. Nor is the order CloudKit's server timestamp, the natural
-"server time" of a hosted database: `modificationDate` in the sync metadata records when
-a device uploaded, and a device that was offline for an hour would make an old provider
-fact look newest — <doc:Design>'s rule that provider time is the freshness clock. The
-server stamp is the right bound on a writer's own claimed time (role resolution, above),
-not the order of the provider's facts.
+applies when the stored stamp is not later — so within one sync pass, where the mirror
+is stamped with the batch's latest provider stamp, an event at that stamp lands after
+the card's write, which is the journal-beats-claim-read tie rule. A verdict that ordered
+differently would read an honest write as tampering. `revision` compares rows of one
+family only, where it is one counter; if the open verification shows the journal's and
+the card's revisions are one counter, the writer's gate and the verdict move to
+revision-first together, never one without the other. Nor is the order CloudKit's server
+timestamp, the natural "server time" of a hosted database: `creationDate` and
+`modificationDate` in the sync metadata record when a device uploaded and last saved,
+and a device that was offline for an hour would make an old provider fact look newest —
+<doc:Design>'s rule that provider time is the freshness clock. The server stamp is the
+right bound on a writer's own claimed time (role resolution, above), not the order of
+the provider's facts.
 
 Exactly one event is the expected value; a projection that matches any other reads
-*disagrees*, so a forged rollback cannot pass as consistent. Two residuals, both false
-positives on honest data — the safe direction — and both named because the provider
-documents `updated_ts` only as "last update" and the package records no guarantee that
-two reads at one stamp agree. An exact tie of `at` between rows that disagree: the mirror
-keeps the last arrival, which can differ per device, while the verdict keeps the order's
-winner, so one device may show the disagreement line and another not, with nothing in the
-signed trail to tell them apart. And a sync pass stamps the mirror with the latest
-provider stamp among its events and cards, which can run ahead of the content it holds
-only if a card and an event disagree about the clock — the one-counter question again. Both verdicts read the trail deduped by fact (rule 1). Neither
+*disagrees*, so a forged rollback cannot pass as consistent. The residuals all come from
+the provider's clocks — `updated_ts` is documented only as "last update", and the
+package records no guarantee that two reads at one stamp agree — and none of them lets a
+forgery pass. An exact tie of `at` between rows that disagree: the mirror keeps the last
+arrival, which can differ per device, while the verdict keeps the order's winner, so one
+device may show the disagreement line and another not, with nothing in the signed trail
+to tell them apart. If a journal event and a card at one stamp carry incompatible
+revisions, the family rule picks the journal row for both the mirror and the verdict, so
+they agree on what may be the staler word; the open verification decides whether both
+move to revision-first. And today's sync pass stamps the mirror with the latest provider
+stamp among a batch's events and cards rather than the stamp of the content it writes,
+so a card older than an event can be written under the event's stamp and hold back a
+later correction at the mirror's own gate — a writer defect, not a verdict rule, and
+<doc:TechDebt> YD-46. Both verdicts read the trail deduped by fact (rule 1). Neither
 touches the projection tables' write paths (<doc:Schema> → "Derived integrity").
 
 #### The canonical payload
@@ -671,23 +692,23 @@ fails the attachment's verdict (the blob itself is a `CKAsset` and is not signed
 
 **`routeDigest`** = `hex(SHA-256(payload))` where the payload encodes, per stop in
 `position` order, the sender-authored columns: position, role, latitude, longitude,
-address, building, entrance, floor, apartment, intercom, contactName,
-contactGivenName, contactFamilyName, contactPhone, contactPhoneExtension. Visit columns
-are provider truth and excluded; stop ids are identity, not content, and excluded. It is
-carried by two event kinds: `placed` (a Stage 1 kind — today's code emits journal rows
-and sightings only — written by the ordering flow with `source = "app"` when the claim
-is accepted; `detail` is JSON with claimID, tariff, price, currency as agreed) and every `sighting` (the route as the provider reported it, so a point the API
-"invents" is simply the newer verified fact, per the package's *WorkingWithYandex*). A
-sighting's identity carries its revision and its digest — `orderID ‖ providerRevision ‖
-providerStatus ‖ routeDigest ‖ the writer's key id` (amended 2026-10-08, reviews of
-#135): the Kit's
-`recordOrder` rewrites the stops from any card that is not older, status unchanged or
-not, so under the earlier identity `orderID ‖ status ‖ source` a corrected address would
-have refreshed the stops while the second sighting was dropped, and the route would
-have disagreed with a stale digest for a change nobody made. Now a changed route is a
-new signed sighting, an identical re-sight stays a no-op, and the stops always have a
-signed digest to answer to. The revision joined the identity in the third round: a
-claim can return to an earlier status — Yandex documents the loop where a claim edited at
+address, building, entrance, floor, apartment, intercom, contactName, contactGivenName,
+contactFamilyName, contactPhone, contactPhoneExtension. Visit columns are provider truth
+and excluded; stop ids are identity, not content, and excluded. It is carried by two
+event kinds: `placed` (a Stage 1 kind — today's code emits journal rows and sightings
+only — written by the ordering flow with `source = "app"` when the claim is accepted;
+`detail` is JSON with claimID, tariff, price, currency as agreed) and every `sighting`
+(the route as the provider reported it, so a point the API "invents" is simply the newer
+verified fact, per the package's *WorkingWithYandex*). A sighting's identity carries its
+revision and its digest — `orderID ‖ providerRevision ‖ providerStatus ‖ routeDigest ‖
+the writer's key id` (amended 2026-10-08, reviews of #135): the Kit's `recordOrder`
+rewrites the stops from any card that is not older, status unchanged or not, so under
+the earlier identity `orderID ‖ status ‖ source` a corrected address would have
+refreshed the stops while the second sighting was dropped, and the route would have
+disagreed with a stale digest for a change nobody made. Now a changed route is a new
+signed sighting, an identical re-sight stays a no-op, and the stops always have a signed
+digest to answer to. The revision joined the identity in the third round: a claim can
+return to an earlier status — Yandex documents the loop where a claim edited at
 `ready_for_approval` goes back to `estimating` — and with the same route a later
 revision's sighting collided with the first one's and vanished, so an older journal
 status could win the order while the mirror showed the newer card. The wire requires
@@ -695,13 +716,16 @@ status could win the order while the mirror showed the newer card. The wire requ
 provider row carries it; a retry of one revision keeps one id, and a new revision is a
 new fact even when nothing else changed. `source` left the identity in the same pass: a
 card read and a search read return the same claim response, so one revision seen both
-ways is one observation, and the first read to see it writes the row. Only the app's
-`placed` has no revision — the accept response carries `version`, not `revision` — and
-`placed` is its own family, ranked last, keyed by its writer. The journal never carries a route — its change types are
-`status_changed` and `price_changed`, as <doc:Design> → "Claims sync" already records
-("its events carry no coordinates or routes"), and the package records no signal for a
-corrected route — so a route reaches the store only through a card or a search read,
-which is why the sighting, not the journal row, carries the digest.
+ways is one observation, and the first read to see it writes the row. The app's `placed`
+gets neither field from the accept response, which carries `version` but no `revision`
+and no `updated_ts`; it takes both from the last claim card the ordering flow read
+before accepting (the flow watches the card until `ready_for_approval`), so it stays in
+the provider's clock domain and never carries the device's clock. It is its own family,
+ranked last, keyed by its writer. The journal never carries a route — its change types
+are `status_changed` and `price_changed`, as <doc:Design> → "Claims sync" already
+records ("its events carry no coordinates or routes"), and the package records no signal
+for a corrected route — so a route reaches the store only through a card or a search
+read, which is why the sighting, not the journal row, carries the digest.
 
 #### What this does not do
 

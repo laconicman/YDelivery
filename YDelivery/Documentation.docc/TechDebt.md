@@ -819,6 +819,26 @@ home at all.
   it with the share; the app's half calls the reconcile and renders the members. The
   share stays the only grant.
 
+## YD-46 — A sync pass stamps the mirror with the batch's newest stamp, not its content's — **open**
+
+A journal pass applies its events to the known orders, fetches cards for the claims it
+had not seen, merges those cards, and then stamps each changed order with the maximum
+provider stamp among that claim's events and cards (`stamps`, then `persistChanged`).
+The content written and the stamp written can therefore come from different reads: a
+card's status and route under an event's later stamp. Found by the post-draft review of
+the trust doctrine's third round (2026-10-08).
+
+- **Cost:** if a card's `updated_ts` and an event's `updated_ts` disagree about the
+  clock — the open question in <doc:Collaboration> → "Open verifications before
+  committing" — the mirror can hold older content under a newer stamp, and a later
+  correction at or below that stamp is refused by the mirror's own freshness gate.
+  Bounded today: a card fetched at sync time should be at least as new as the events
+  that made the app fetch it, if the two stamps are one clock.
+- **Discharge:** stamp each write with the stamp of the content it carries — apply a
+  pass's events and cards in the doctrine's order (by `at`, then family, then revision
+  within a family) and take the winner's own stamp — in the trust layer's adoption or
+  on its own; settle the one-clock question either way.
+
 ## See Also
 
 - <doc:Design>

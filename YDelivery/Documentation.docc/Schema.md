@@ -195,7 +195,9 @@ sighting's identity and the derived verdicts' tie-break within one family),
 `routeDigest`, and the signing triple
 `authorRef`/`signingKeyID`/`signature`; `kind` gains `placed` and `source` gains `app` —
 the ordering flow's own fact, written when the claim is accepted, with the agreed
-claimID, tariff, price and currency in `detail` and the digest of the route as sent.
+claimID, tariff, price and currency in `detail` and the digest of the route as sent,
+stamped with the `updated_ts` and `revision` of the last claim card the flow read before
+accepting — provider time, never the device's clock (third round).
 Every row is signed over its frozen column list by the device that wrote it
 (<doc:Collaboration> → "The canonical payload").
 
@@ -344,8 +346,8 @@ referenced key's type — no `REFERENCES` clause — named `*Ref` to mark it:
 - `OrderItem.pickupStopRef` / `dropoffStopRef` → `RouteStop.id` (an item's journey ends)
 - `OrderMessage.attachmentRef` → `OrderAttachment.id` (a photo message's payload)
 - `Order.providerAccountRef` → `ProviderAccount.key` (the root can't have FKs at all)
-- `OrderEvent.legRef` → `Leg.ref`, the *logical* leg (`orderID ‖ position`), never a
-  row id (an event's leg; NULL = the order's only leg). Any `*Ref` that names a leg —
+- `OrderEvent.legRef` → `Leg.ref`, the *logical* leg (`orderID ‖ fromStopRef ‖
+  toStopRef`, by stable stop ids), never a row id (an event's leg; NULL = the order's only leg). Any `*Ref` that names a leg —
   this one, and `OrderRating.subjectRef` for a `leg` subject — resolves to `Leg.ref`: the
   convention's one exception, because a leg's rows are per writer
 - `Leg.fromStopRef` / `toStopRef` → `RouteStop.id`; `Leg.providerAccountRef` →
@@ -520,10 +522,13 @@ never a column:
   2026-10-08: comparing by revision when both rows carried one and by `at` otherwise
   could cycle through a third row). One expected value, never a set to match any of — a
   set let a forged rollback to an older, equally stamped verified status pass as
-  consistent (second round); the residuals — two disagreeing rows at one exact stamp,
-  where the mirror's last arrival can differ per device, and a pass's batch stamp running
-  ahead of a card's content when a card and an event disagree about the clock — can only
-  produce false positives. A mirror row rewritten out of band disagrees with the
+  consistent (second round). The residuals come from the provider's clocks and none
+  lets a forgery pass: two disagreeing rows at one exact stamp, where the mirror's last
+  arrival can differ per device; incompatible revisions at one stamp, where the mirror
+  and the verdict agree on the journal row; and today's batch stamp, which can write a
+  card's content under a newer event's stamp — a writer defect, <doc:TechDebt> YD-46. The
+  verdicts check status and route only: price, tariff and the courier fields on the
+  mirror stay unsigned projection data with no verdict of their own. A mirror row rewritten out of band disagrees with the
   signed history; a legitimate newer event makes it consistent again.
 - **`routeIntegrity(orderID:)`** hashes the stored stops' sender-authored columns —
   every `RouteStop` column but the id and the `visit*` provider truth, in `position`
@@ -810,34 +815,42 @@ on single-FK tables). Every reference to a person is a `partyRef`.
 belongs to one writer: a caller-held id is held by the device that minted it, and a
 *derived* id carries the writer's key id among its inputs — `orderID ‖ providerEventID ‖
 keyID` for a journal row, `orderID ‖ providerRevision ‖ providerStatus ‖ routeDigest ‖
-keyID` for a sighting, `orderID ‖ partyRef ‖ keyID` for a share-mirrored membership, `orderID ‖
-position ‖ keyID` for a leg. Two devices that record the same fact therefore write two
-rows, never one CloudKit record: the engine merges a colliding insert column by column
-and overwrites the loser's local row with the result, which would put one device's
-signature beside the other's key id and read *invalid* for a fact both wrote honestly
-(<doc:Collaboration> → "The facts that reshaped the design", 6). The *fact* is deduped
-at read, like list ordering: rows that agree on the fact — the frozen column list minus
-`id`, plus the author's party; writer identity (`id`, `signingKeyID`, `signature`) is
-left out, since it differs by construction between two honest devices (second round,
-2026-10-08) — collapse to one entry per `(orderID, providerEventID)`, per
+keyID` for a sighting, `orderID ‖ partyRef ‖ keyID` for a share-mirrored membership; a
+decision a later one can supersede — a role or leg assignment, a rating, a message —
+holds a caller-held id per decision instead, or the second decision would collide with
+the first (<doc:Collaboration> → rule 1). Two devices that record the same fact
+therefore write two rows, never one CloudKit record: the engine merges a colliding
+insert column by column and overwrites the loser's local row with the result, which
+would put one device's signature beside the other's key id and read *invalid* for a fact
+both wrote honestly (<doc:Collaboration> → "The facts that reshaped the design", 6).
+Only observations fold — two decisions with identical content are two decisions. The
+*fact* is deduped at read, like list ordering: rows that agree on the fact — the frozen
+column list minus `id` and `authorRef`, plus the party the verdict resolves in place of
+the raw `authorRef` (a pre-identity row signs NULL there, a later row the UUID, and both
+resolve to the same owner; third round); writer identity (`id`, `signingKeyID`,
+`signature`) is left out, since it differs by construction between two honest devices
+(second round, 2026-10-08) — collapse to one entry per `(orderID, providerEventID)`, per
 `(orderID, providerRevision, providerStatus, routeDigest)` (a sighting's `source` is
-provenance, left out like writer identity), per leg `ref` — the verified one when
-any is, else the earliest stamp, then the smallest id, so every device derives the same
+provenance, left out like writer identity), per leg `ref` — the verified one when any
+is, else the earliest stamp, then the smallest id, so every device derives the same
 answer — while rows that share a key but disagree, or come from a different party, stay
-apart, each with its own verdict: nothing is hidden, and a verified row beside an invalid
-twin is the forgery made visible. Membership rows are never collapsed; a party's rows
-are its role history, read latest-first. The cost is one
-row per owner device for each journal operation, and a trail read that collapses them;
-the alternative — one record per operation with signatures as a side table — would have
-moved the signature out of the statement that binds the values, which rule 3 forbids.
-Projections keep today's device-independent ids (`routeStops`, `orderCustomFields`, the
-discovered order's `(providerAccountRef, claimID)`): they are *meant* to merge.
+apart, each with its own verdict: nothing is hidden, and a verified row beside an
+invalid twin is the forgery made visible. Membership rows are never collapsed; a party's
+rows are its role history, read latest-first. The cost is one row per owner device for
+each journal operation, and a trail read that collapses them; the alternative — one
+record per operation with signatures as a side table — would have moved the signature
+out of the statement that binds the values, which rule 3 forbids. Derived ids use the
+Kit's existing derivation, components joined with `|` under a per-kind namespace; every
+component is a UUID, a hex digest, a key id, a status word, a binding kind or an
+integer, none of which can contain the separator. Projections keep today's
+device-independent ids (`routeStops`, `orderCustomFields`, the discovered order's
+`(providerAccountRef, claimID)`): they are *meant* to merge.
 
 ### Stage 1 — keys, memberships, ratings, the signed columns (epoch 2 spelling)
 
 ```sql
 CREATE TABLE IF NOT EXISTS "participantKeys" (
-  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(participantKey ‖ orderID ‖ keyID)
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(participantKey ‖ orderID ‖ keyID ‖ bindingKind): one binding statement
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "partyRef" TEXT,                                     -- the writer's party; NULL until the device knows itself
   "keyID" TEXT NOT NULL,                               -- p256.v2.<16 hex>
@@ -960,8 +973,8 @@ T2), so no second schema deploy stands between the two (clarified 2026-10-08, re
 
 ```sql
 CREATE TABLE IF NOT EXISTS "legs" (
-  "id" TEXT PRIMARY KEY NOT NULL,                      -- UUIDv5(leg ‖ orderID ‖ position ‖ keyID): this writer's row, the one its signature covers
-  "ref" TEXT NOT NULL,                                 -- UUIDv5(leg ‖ orderID ‖ position): the logical leg every legRef names; rows fold by it
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- caller-held, one per assignment (a retry reuses it): the row its signature covers
+  "ref" TEXT NOT NULL,                                 -- UUIDv5(leg ‖ orderID ‖ fromStopRef ‖ toStopRef): the logical leg every legRef names; rows fold by it
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "position" INTEGER NOT NULL,                         -- travel order of legs
   "kind" TEXT NOT NULL,                                -- platform · courier
@@ -976,20 +989,26 @@ CREATE TABLE IF NOT EXISTS "legs" (
 A leg row is an *assignment fact*, written once by the owner. Status, price and courier
 per leg are projections computed at read from that leg's events (`orderEvents.legRef`);
 `orderProviderStates` stays the order-level projection the list reads. A dock is not a
-stop role: it is the stop that is `toStopRef` of leg *n* and `fromStopRef` of leg
-*n+1*. Existing orders get an implicit leg 0 (events with NULL `legRef`). Two columns for
-the carrier instead of one mixed-type `providerRef`, so a server with real foreign keys
-can constrain each. A leg has two identities (second round, 2026-10-08): `ref`, the
-logical leg `UUIDv5(leg ‖ orderID ‖ position)` that every `legRef` — an event's, a
-rating's — names and that two owner devices derive alike; and `id`, this writer's row,
-which its signature covers. Leg rows fold by `ref`: the effective assignment is the
-latest verified owner-written row by `assignedAt`, ties by the smallest id — named as the
-residual it is, like a membership tie — earlier rows the assignment's history; a courier's entitlement follows the effective assignment as of
-the event's own stamp, the rule memberships use. Two owner devices assigning one
-position offline is a conflict the fold makes visible — both rows shown, the effective
-one marked — never an event that lost its leg: an event names the logical leg, so no
-row's demotion can orphan it. (The earlier wording let `legRef` name a row id and folded
-legs by position, which would have dropped the row some events pointed at.)
+stop role: it is the stop that is `toStopRef` of leg *n* and `fromStopRef` of leg *n+1*.
+Existing orders get an implicit leg 0 (events with NULL `legRef`). Two columns for the
+carrier instead of one mixed-type `providerRef`, so a server with real foreign keys can
+constrain each. A leg has two identities (second round, 2026-10-08): `ref`, the logical
+leg `UUIDv5(leg ‖ orderID ‖ fromStopRef ‖ toStopRef)` that every `legRef` — an event's,
+a rating's — names and that two owner devices derive alike, keyed by its endpoints'
+stable stop ids rather than its position, which a restructured route can renumber (third
+round, the same reason items reference stops by id); and `id`, one assignment's row,
+which its signature covers — caller-held and minted per assignment (third round,
+2026-10-08: a derived `orderID ‖ position ‖ keyID` made a device's reassignment of a
+position collide with its first assignment and vanish, leaving the previous courier
+assigned). Leg rows fold by `ref`: the effective assignment is the latest verified
+owner-written row by `assignedAt`, ties by the smallest id — named as the residual it
+is, like a membership tie — earlier rows the assignment's history; a courier's
+entitlement follows the effective assignment as of the event's own stamp, the rule
+memberships use. Two owner devices assigning one position offline is a conflict the fold
+makes visible — both rows shown, the effective one marked — never an event that lost its
+leg: an event names the logical leg, so no row's demotion can orphan it. (The earlier
+wording let `legRef` name a row id and folded legs by position, which would have dropped
+the row some events pointed at.)
 
 ### What is deliberately not changed
 
