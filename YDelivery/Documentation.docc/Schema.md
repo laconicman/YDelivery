@@ -831,16 +831,20 @@ resolve to the same owner; third round); writer identity (`id`, `signingKeyID`,
 `signature`) is left out, since it differs by construction between two honest devices
 (second round, 2026-10-08) — collapse to one entry per `(orderID, providerEventID)`, per
 `(orderID, providerRevision, providerStatus, routeDigest)` (a sighting's `source` is
-provenance, left out like writer identity), per leg `ref` — the verified one when any
-is, else the earliest stamp, then the smallest id, so every device derives the same
-answer — while rows that share a key but disagree, or come from a different party, stay
-apart, each with its own verdict: nothing is hidden, and a verified row beside an
-invalid twin is the forgery made visible. Membership rows are never collapsed; a party's
-rows are its role history, read latest-first. The cost is one row per owner device for
-each journal operation, and a trail read that collapses them; the alternative — one
-record per operation with signatures as a side table — would have moved the signature
-out of the statement that binds the values, which rule 3 forbids. Derived ids use the
-Kit's existing derivation, components joined with `|` under a per-kind namespace; every
+provenance, left out like writer identity) — the verified one when any is, else the
+earliest stamp, then the smallest id, so every device derives the same answer — while
+rows that share a key but disagree, or come from a different party, stay apart, each
+with its own verdict: nothing is hidden, and a verified row beside an invalid twin is
+the forgery made visible. A decision's rows are a different operation, *selection*, not
+dedupe (fourth round, 2026-10-08): membership rows group by party and leg rows by `ref`,
+every row stays as the decision's history, and the read selects the effective one — the
+latest verified owner-written row — without collapsing the others. Dedupe merges rows
+that record one fact into one entry; selection picks which of several decisions is in
+force and keeps them all. The cost is one row per owner device for each journal
+operation, and a trail read that collapses them; the alternative — one record per
+operation with signatures as a side table — would have moved the signature out of the
+statement that binds the values, which rule 3 forbids. Derived ids use the Kit's
+existing derivation, components joined with `|` under a per-kind namespace; every
 component is a UUID, a hex digest, a key id, a status word, a binding kind or an
 integer, none of which can contain the separator. Projections keep today's
 device-independent ids (`routeStops`, `orderCustomFields`, the discovered order's
@@ -974,7 +978,7 @@ T2), so no second schema deploy stands between the two (clarified 2026-10-08, re
 ```sql
 CREATE TABLE IF NOT EXISTS "legs" (
   "id" TEXT PRIMARY KEY NOT NULL,                      -- caller-held, one per assignment (a retry reuses it): the row its signature covers
-  "ref" TEXT NOT NULL,                                 -- UUIDv5(leg ‖ orderID ‖ fromStopRef ‖ toStopRef): the logical leg every legRef names; rows fold by it
+  "ref" TEXT NOT NULL,                                 -- UUIDv5(leg ‖ orderID ‖ fromStopRef ‖ toStopRef): the logical leg every legRef names; rows group by it
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "position" INTEGER NOT NULL,                         -- travel order of legs
   "kind" TEXT NOT NULL,                                -- platform · courier
@@ -1000,15 +1004,16 @@ round, the same reason items reference stops by id); and `id`, one assignment's 
 which its signature covers — caller-held and minted per assignment (third round,
 2026-10-08: a derived `orderID ‖ position ‖ keyID` made a device's reassignment of a
 position collide with its first assignment and vanish, leaving the previous courier
-assigned). Leg rows fold by `ref`: the effective assignment is the latest verified
-owner-written row by `assignedAt`, ties by the smallest id — named as the residual it
-is, like a membership tie — earlier rows the assignment's history; a courier's
-entitlement follows the effective assignment as of the event's own stamp, the rule
-memberships use. Two owner devices assigning one position offline is a conflict the fold
-makes visible — both rows shown, the effective one marked — never an event that lost its
-leg: an event names the logical leg, so no row's demotion can orphan it. (The earlier
-wording let `legRef` name a row id and folded legs by position, which would have dropped
-the row some events pointed at.)
+assigned). Leg rows group by `ref` and are *selected*, never deduped — each assignment
+stays as history, since only observations fold (rule 1): the effective assignment is the
+latest verified owner-written row by `assignedAt`, ties by the smallest id — named as
+the residual it is, like a membership tie — earlier rows the assignment's history; a
+courier's entitlement follows the effective assignment as of the event's own stamp, the
+rule memberships use. Two owner devices assigning one leg offline is a conflict the
+selection makes visible — both rows shown, the effective one marked — never an event
+that lost its leg: an event names the logical leg, so no row's demotion can orphan it.
+(The earlier wording let `legRef` name a row id and collapsed legs by position, which
+would have dropped the row some events pointed at.)
 
 ### What is deliberately not changed
 

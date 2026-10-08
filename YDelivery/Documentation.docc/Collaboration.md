@@ -338,7 +338,9 @@ design is written against the local 0.4.15 source, where stops upsert and prune.
    would leave one device's signature beside the other's key id and read *invalid* for a
    fact both wrote honestly. Dedupe of the *fact* is a read-time derivation, like list
    ordering, and only observations fold: two decisions with identical content — two
-   equal messages, two equal ratings — are two decisions, never one. For observations,
+   equal messages, two equal ratings — are two decisions, never one; where decisions
+   supersede one another (role and leg assignments) the read *selects* the effective one
+   and keeps the rest as history, which is not dedupe (fourth round). For observations,
    the trail collapses `orderEvents` by `(orderID, providerEventID)`, and sightings by
    `(orderID, providerRevision, providerStatus, routeDigest)`, but only rows that *agree
    on the fact*. Agreement compares the frozen column list with three kinds of column
@@ -573,8 +575,7 @@ share's owner in CloudKit mode; whoever the device is on a private order); a mem
 party whose *effective* membership row names a role other than `removed`, or, before
 the owner's device has reconciled one, a party the authority lists as a participant; a
 courier is a member whom the *effective* `legs` row for a leg names as
-`courierPartyRef` (<doc:Schema> → "Stage 2": a leg is a logical identity its rows fold
-by). Only membership
+`courierPartyRef` (<doc:Schema> → "Stage 2": a leg is a logical identity its rows group by, the read selecting the effective one). Only membership
 rows that themselves read *verified* as the owner's count for roles — a row anyone else
 appends, a `removed` for the owner included, is *notEntitled*, rendered as such, and
 changes nobody's verdict. The effective row is the latest by `addedAt`; on an exact tie
