@@ -217,6 +217,33 @@ parcel form's re-typing is the evidence it is not enough.
 (chips like the places', pinned first, «Save as template» from a filled form), then the
 Library tab. Search reaches both lists. Two evenings.
 
+## Next — the trust layer, in phases (2026-10-06)
+
+The design pass of 2026-10-06 (<doc:Collaboration> → "Sign facts, derive state";
+<doc:Schema> → "Epoch 2"; <doc:Design> → "Parties, not CloudKit names" and "P-256 in
+the Secure Enclave"; <doc:Vision> → "Players, trust and reputation"), read by the owner
+as the design review and its decisions recorded, replaces the two Later bullets that
+used to carry this. The doctrine lands as a documentation PR before any Kit code; the
+Kit changes are small, tagged one by one, each with its own review; the two-device
+verification gates the *app* adoption, not the Kit PRs — the Kit's tests pin the logic
+with injected identities, the device pass proves CloudKit's stamping. The parked PRs
+(Kit #36 / app #92) are closed, not rebased: the quarry for the primitives, not the plan.
+
+| Phase | Steps | Done when |
+|---|---|---|
+| **T0 · Epoch 2** | the doctrine (docs) → a new container, a new file, one import (a Kit minor, then an app PR); every Stage 1 table, `orderRatings` included, is created, seeded and deployed here | A tester's device opens with its history intact, the development schema shows the new catalogue, production deployed once. |
+| **T1 · Trusted history** | signing primitives and per-device key custody → `participantKeys`, `memberships` and the identity authority → signed facts and derived integrity (three Kit patches) → the app adopts the trust layer, with the two-device pass before any TestFlight build | A participant's rewritten order event shows as "written by a participant" on the owner's phone, with the name the share discloses, and a tampered stored event shows "signature does not match". Verified on two devices, two accounts. |
+| **T2 · Ratings** | the `orderRatings` writer and reads (Kit; the table itself is deployed at T0) → the rating UX (the star control's role ruled with the owner) | The receiver rates the courier from the chat; the sender sees the star on the order; posting again replaces the shown rating and keeps the history. |
+| **T3 · Legs and couriers** | `legs` (Kit then app), gated on a second provider package or the courier edition | An independent courier accepts a leg and their events verify as the leg's writer. |
+| **T4 · The host** | the identity layer and the registry on the server (<doc:Vision> → "The backend question", stage 4); not planned beyond the decision record | A migrated device's history verifies on the server with its original authors. |
+
+The sequence, with what can run side by side: the doctrine ∥ the epoch (different
+repos; the doctrine merges first) → the three Kit patches, strictly ordered by tag →
+the ratings table ∥ the app adoption (different repos) → the rating UX → legs, later.
+Before any TestFlight build from the adoption branch the owner runs the schema seed on
+a development-signed device, confirms `cktool export-schema` lists the new tables and
+fields, and deploys the schema to production — the first deploy of the new container.
+
 ## Later — design Phase 4 and beyond
 
 - Regular width: sidebar + detail, map inside detail, shortcut set, focus order — decide
@@ -237,13 +264,16 @@ Library tab. Search reaches both lists. Two evenings.
   consumer (its own roadmap wants maps); before that, extraction is speculation.
 - **Many providers, docked legs, independent couriers** (owner direction, 2026-10-05 —
   <doc:Vision>): a second provider as its own package behind the controller boundary;
-  legs under one order with docks between them (`LegState` per leg, events per leg);
-  the courier edition as a share participant granted a leg. Schema rules to respect
-  meanwhile in <doc:Schema> → "Direction — legs and participants".
-- **Signing for every writer** (<doc:Collaboration> → "Generalised 2026-10-05"):
-  `participantKeys` as an append-only shared table, `signingKeyID`/`signature` on the
-  mirror and the events, read-time verdicts that never refuse. Supersedes the owner-only
-  draft (Kit #36 / #92, parked as the quarry).
+  legs under one order with docks between them — a `legs` assignment table, each leg's
+  state derived from its events at read — and the courier edition as a share participant
+  granted a leg. Designed on 2026-10-06 as Stage 2 of the epoch (<doc:Schema> →
+  "Epoch 2") and sequenced as T3 above; the rules to respect meanwhile stay in
+  <doc:Schema> → "Direction — legs and participants".
+- **Signing for every writer** — no longer a Later item: the trust layer is T0–T2 above
+  (<doc:Collaboration> → "Sign facts, derive state"). Facts are signed, projections are
+  checked against them, keys are per device and published as rows, verdicts are
+  read-time and never refuse. Supersedes the owner-only draft (Kit #36 / #92, parked as
+  the quarry) and the two wrong mechanisms of the 2026-10-05 generalisation.
 
 ### Deferred, deliberately (no stubs)
 

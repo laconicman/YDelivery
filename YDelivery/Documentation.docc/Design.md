@@ -127,7 +127,9 @@ answer describes *older* provider truth and must not be able to rewind what a
 newer event already saw. `recordOrder` treats a stamped write as a merge and
 skips it wholesale when the stored observation is fresher; `providerEvents`
 keeps the feed's own rows (a journal `operationId` dedupes, an id-less sighting
-keys on `orderID ‖ status ‖ source`), and `statusAdvanced` — *not* row
+keys on `orderID ‖ status ‖ source` — at the epoch both keys gain the writer's key
+id and the sighting the provider's revision and its route digest, <doc:Schema> →
+"Identity on signed tables"), and `statusAdvanced` — *not* row
 insertion — is the notification layer's gate, so a cursor-reset replay, a stale
 arrival, and a same-word re-sighting all stay silent. Notifications ride
 `BGAppRefreshTask` journal wakes between foreground polls (board `5c`): one
@@ -239,6 +241,63 @@ about each constraint:
   line: swap credentials the moment a transfer completes.
 - **Survives untouched:** bundle ID, the App Group identifier and its on-device data,
   ratings and users. **Does not transfer:** TestFlight builds and testers.
+
+## Parties, not CloudKit names (2026-10-06)
+
+Every row that names a person — an author, a subject, a member, a courier — names an
+opaque id, a `partyRef`: `UUIDv5(party ‖ "cloudkit" ‖ userRecordName)` in CloudKit mode,
+derived identically on every device with no server in between, and adopted verbatim as
+the party's id by a server of our own, which records `("cloudkit", userRecordName)` as
+one of that party's identities beside Apple, Google, email and phone. "Who is party
+7f3a…" is answered by the authority — the share now, the server's identities table
+later — never by the row. CloudKit's vocabulary (`CKCurrentUserDefaultName`, record
+names, `CKShare` participants, the creator stamp) lives inside one identity-authority
+adapter; rows carry `partyRef`, models carry `Party`. The owner's question was whether
+the structure changes when the app gains its own backend and other sign-in methods; the
+answer is that it does not, provided this one thing changes now (<doc:Schema> →
+"`partyRef`"; <doc:Collaboration> → "Ready for an independent host").
+
+**Rejected: email as the primary key.** As the login handle and lookup key, yes. As the
+key, no: it changes, people hold several, it is PII that would then sit in every shared
+row and in any public registry, and Sign in with Apple hands you a relay address. An
+opaque id costs nothing and survives every one of those; display names are resolved at
+render as they are today. **Also rejected: CloudKit user record names in rows** — the
+first draft's `participantRef`/`authorRef` as record names, with `__defaultOwner__`
+handled in the Kit's read path. It ties every row to one authority, leaks a
+container-scoped identifier into the schema, and makes the host migration a rewrite of
+authors instead of an import.
+
+## P-256 in the Secure Enclave (2026-10-06)
+
+What the app signs with: **ECDSA over P-256 with SHA-256**, the key generated inside the
+Secure Enclave where there is one and a software P-256 key where there is not
+(simulator, test hosts, old hardware). One key per device, never exported, never
+synchronised; the public key published as a row in every order the device writes into;
+signatures 64 bytes, base64 in a TEXT column; a future Vapor server verifies them
+unchanged with swift-crypto. The deciding fact: `SecureEnclave.P256.Signing.PrivateKey`
+exists from iOS 13, its private key never leaves the hardware, and the Secure Enclave
+signs P-256 and nothing else. The owner's concern was the other platforms and the web;
+P-256 is also the one curve every platform's hardware speaks — Android Keystore (TEE or
+StrongBox, where EC P-256 is the universally supported key type), Windows's TPM through
+the platform crypto provider, WebAuthn's ES256 — and the one WebCrypto has always had,
+whose ECDSA signature is the same raw `r ‖ s` 64 bytes; macOS has the Secure Enclave on
+Apple silicon and T2 Intel Macs and takes the simulator's software fallback on older
+ones. A web client would hold a non-extractable software key with the same bytes on the
+wire, and its key row simply carries the server's binding instead of a CloudKit stamp.
+Nothing in the rows or the verdicts changes per platform. The full custody rules —
+access control, the App Group Keychain item, get-or-create, caching only success, the
+ephemeral key for previews and tests, signing always on — are in <doc:Collaboration> →
+"Keys".
+
+**Rejected: Ed25519** — the parked branch's choice and the first draft's. It verifies
+everywhere too, but it has no hardware home on Apple platforms, and deterministic
+signatures, its one practical advantage, buy nothing here: a signature is verified,
+never compared. **Also rejected: one owner key in the iCloud Keychain**
+(`kSecAttrSynchronizable`), the 2026-09-29 custody. Two offline devices mint two items
+and rotate each other forever — the parked PR's red finding — and a Secure Enclave key
+cannot synchronise by design, so "one key everywhere" is not even available once the key
+lives in hardware. Per-device keys plus key rows make every device's key valid on its
+own, and a new device is a second key, not a "key changed" warning.
 
 ## The destination & ordering design (2026-08)
 
