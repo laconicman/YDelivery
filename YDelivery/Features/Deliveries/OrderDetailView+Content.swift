@@ -54,6 +54,7 @@ extension OrderDetailView {
                 Section {
                     HStack {
                         StatusChip(status: order.status)
+                            .layoutPriority(1)
                         // The decision rows name which wait they are — the
                         // provider's phrase beside the chip (the list row's
                         // statusDetail, same derivation).
