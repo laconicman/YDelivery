@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import OSLog
 import OSLogLoggingMiddleware
+import OpenAPIRuntime
 import OpenAPIURLSession
 import YandexDeliveryExpressAPI
 
@@ -20,6 +21,18 @@ final class ClientController {
     private(set) var signInError: (any Error)?
 
     private let tokenStore: TokenStore
+
+    /// The App Review demonstration credential: a token of exactly `demo`
+    /// builds a session whose provider calls are answered by ``DemoTransport``
+    /// — no network, no courier, no charge. The API has no test environment,
+    /// and a real claim dispatches a real courier the reviewer would be billed
+    /// for (Guideline 2.1(a), rejected build 1.0 (5)). A genuine OAuth token is
+    /// a long opaque string this value can never collide with.
+    static let demoToken = "demo"
+
+    /// Whether the live session is the demonstration account — Settings labels
+    /// it honestly rather than implying a Yandex account stands behind it.
+    private(set) var isDemoSession = false
 
     /// The wire-evidence capture every session's client carries (Settings shares it).
     let wireLog: WireLogStore
@@ -149,28 +162,45 @@ final class ClientController {
         providerURLSession?.invalidateAndCancel()
         providerURLSession = nil
         client = nil
+        isDemoSession = false
+    }
+
+    /// The session's middleware pair, shared by the network and the demo
+    /// transport — the demo's exchanges flow through the same console and
+    /// wire-evidence sinks, so Diagnostics works there too.
+    private func middlewares() -> [any ClientMiddleware] {
+        [
+            OSLogLoggingMiddleware(
+                logger: Logger(subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "wire"),
+                bodyLoggingConfiguration: .upTo(maxBytes: 32 * 1024)
+            ),
+            WireLogMiddleware(store: wireLog),
+        ]
     }
 
     private func establishSession(token: String) {
         // Rebuild means re-own: the old session closes before the new one exists, so
         // no request or connection pool outlives the identity that opened it.
         providerURLSession?.invalidateAndCancel()
-        let session = Self.providerSession()
-        providerURLSession = session
+        providerURLSession = nil
         do {
-            client = try Client(
-                credentials: Credentials(authToken: token),
-                // Two sinks on the same exchanges: console lines at .debug for an
-                // attached debugger, and the bounded file Settings can share.
-                middlewares: [
-                    OSLogLoggingMiddleware(
-                        logger: Logger(subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "wire"),
-                        bodyLoggingConfiguration: .upTo(maxBytes: 32 * 1024)
-                    ),
-                    WireLogMiddleware(store: wireLog),
-                ],
-                transport: URLSessionTransport(configuration: .init(session: session))
-            )
+            if token == Self.demoToken {
+                client = try Client(
+                    credentials: Credentials(authToken: token),
+                    middlewares: middlewares(),
+                    transport: DemoTransport())
+                isDemoSession = true
+            } else {
+                let session = Self.providerSession()
+                providerURLSession = session
+                client = try Client(
+                    credentials: Credentials(authToken: token),
+                    // Two sinks on the same exchanges: console lines at .debug for an
+                    // attached debugger, and the bounded file Settings can share.
+                    middlewares: middlewares(),
+                    transport: URLSessionTransport(configuration: .init(session: session))
+                )
+            }
         } catch {
             dropSession()
             signInError = error

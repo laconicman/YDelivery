@@ -1536,6 +1536,16 @@
         }
       }
     },
+    "Demo session" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Демо-режим"
+          }
+        }
+      }
+    },
     "Deliver" : {
       "localizations" : {
         "ru" : {

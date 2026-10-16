@@ -29,6 +29,7 @@ struct SettingsView: View {
         NavigationStack {
             Content(
                 isSignedIn: session.isSignedIn,
+                isDemoSession: session.isDemoSession,
                 errorText: session.signInErrorText,
                 draftToken: $draftToken,
                 startCity: $startCity,
