@@ -62,6 +62,7 @@ extension OrderDetailView {
                             Text(statusDetail)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                         Spacer()
                         Text(order.created.formatted(date: .abbreviated, time: .shortened))
