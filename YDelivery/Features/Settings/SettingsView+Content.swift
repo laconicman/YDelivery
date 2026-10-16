@@ -6,6 +6,10 @@ extension SettingsView {
     /// Pure presentation: plain values in, intents out (R1/R2). Previews are literals.
     struct Content: View {
         let isSignedIn: Bool
+        /// The session is the App Review demonstration account — the status
+        /// row says so rather than implying a real Yandex account stands
+        /// behind it.
+        let isDemoSession: Bool
         let errorText: String?
         @Binding var draftToken: String
         @Binding var startCity: String
@@ -33,7 +37,7 @@ extension SettingsView {
                 Section {
                     if isSignedIn {
                         LabeledContent {
-                            Text("Signed in")
+                            Text(isDemoSession ? "Demo session" : "Signed in")
                         } label: {
                             Text("Status")
                         }
@@ -129,6 +133,7 @@ private extension UNAuthorizationStatus {
     @Previewable @State var city = ""
     SettingsView.Content(
         isSignedIn: false,
+        isDemoSession: false,
         errorText: nil,
         draftToken: $token,
         startCity: $city,
@@ -148,6 +153,7 @@ private extension UNAuthorizationStatus {
     @Previewable @State var city = "Санкт-Петербург"
     SettingsView.Content(
         isSignedIn: true,
+        isDemoSession: false,
         errorText: nil,
         draftToken: $token,
         startCity: $city,
@@ -167,6 +173,7 @@ private extension UNAuthorizationStatus {
     @Previewable @State var city = ""
     SettingsView.Content(
         isSignedIn: true,
+        isDemoSession: false,
         errorText: nil,
         draftToken: $token,
         startCity: $city,
@@ -186,6 +193,7 @@ private extension UNAuthorizationStatus {
     @Previewable @State var city = ""
     SettingsView.Content(
         isSignedIn: false,
+        isDemoSession: false,
         errorText: "The token could not be saved to the Keychain.",
         draftToken: $token,
         startCity: $city,

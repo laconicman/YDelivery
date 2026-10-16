@@ -56,7 +56,6 @@ extension PointPickerView {
         let chooseOnMap: () -> Void
         let useMyLocation: () -> Void
         let continueLocationPrompt: () -> Void
-        let dismissLocationPrompt: () -> Void
         let openSettings: () -> Void
         let paste: (String) -> Void
         let placePreviewedPoint: () -> Void
@@ -296,12 +295,13 @@ extension PointPickerView {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     // Card actions — the prompt's own verbs
-                    // (DesignSystem → "Control roles").
+                    // (DesignSystem → "Control roles"). One door, no defer:
+                    // App Review 5.1.1(iv) requires that after a custom
+                    // permission message the user always proceeds to the
+                    // system request — «Not now» failed review 2026-10-16.
                     HStack {
                         Button("Continue", action: continueLocationPrompt)
                             .leadCardAction()
-                        Button("Not now", action: dismissLocationPrompt)
-                            .cardAction()
                     }
                 }
                 .padding(.vertical, Layout.Spacing.tight)
@@ -490,7 +490,6 @@ extension PointPickerView.SearchContent {
             chooseOnMap: {},
             useMyLocation: {},
             continueLocationPrompt: {},
-            dismissLocationPrompt: {},
             openSettings: {},
             paste: { _ in },
             placePreviewedPoint: {},
@@ -537,7 +536,6 @@ extension PointPickerView.SearchContent {
         chooseOnMap: {},
         useMyLocation: {},
         continueLocationPrompt: {},
-        dismissLocationPrompt: {},
         openSettings: {},
         paste: { _ in },
         placePreviewedPoint: {},
@@ -565,7 +563,6 @@ extension PointPickerView.SearchContent {
         chooseOnMap: {},
         useMyLocation: {},
         continueLocationPrompt: {},
-        dismissLocationPrompt: {},
         openSettings: {},
         paste: { _ in },
         placePreviewedPoint: {},

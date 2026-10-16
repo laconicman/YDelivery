@@ -106,7 +106,6 @@ struct PointPickerView: View {
                 chooseOnMap: { model.chooseOnMap() },
                 useMyLocation: { model.useMyLocation() },
                 continueLocationPrompt: { model.continueAfterLocationPrompt() },
-                dismissLocationPrompt: { model.locationPromptVisible = false },
                 openSettings: {
                     if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                 },
