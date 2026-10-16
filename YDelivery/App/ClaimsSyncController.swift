@@ -99,14 +99,20 @@ final class ClaimsSyncController {
 
     /// Whether the queue is refusing locks — the passes' early out: a pass
     /// started suspended only replays the feed into `SQLITE_INTERRUPT`s and
-    /// still counts as nothing. Written on the main queue — every caller is a
-    /// main-queue callback — so `nonisolated(unsafe)` (the `loop` seam) is the
-    /// honest cost of the nonisolated posts setting it.
+    /// still counts as nothing. Written on the posts lane, read on the main
+    /// actor — a stale read costs a pass the queue would refuse anyway, so
+    /// `nonisolated(unsafe)` (the `loop` seam) is the honest cost.
     @ObservationIgnored private nonisolated(unsafe) static var suspended = false
+    /// The active suspension era — bumped on every resume. A completion or a
+    /// cleanup queued before the newer wake must not suspend over it: only an
+    /// unchanged era may post suspend.
+    @ObservationIgnored private nonisolated(unsafe) static var suspensionEra = 0
     /// The posts' own serial lane, off main: a `suspend` must reach the
     /// queue's observer even while a statement mid-step holds the lock on
     /// thread 0 — posted on main it would queue behind the very work it
-    /// interrupts. One lane keeps `suspend`/`resume` landing in call order.
+    /// interrupts. Flag and post move together on the lane, so callers on
+    /// different threads can never leave the flag disagreeing with the queue,
+    /// and one lane keeps `suspend`/`resume` landing in call order.
     private nonisolated static let suspensionPosts =
         DispatchQueue(label: "YDelivery.db-suspension")
 
@@ -118,8 +124,8 @@ final class ClaimsSyncController {
     /// interrupts the in-flight statement so its lock lands back first (GRDB →
     /// DatabaseSharing, "How to limit the 0xDEAD10CC exception").
     nonisolated static func suspendDatabase() {
-        suspended = true
         suspensionPosts.sync {
+            suspended = true
             NotificationCenter.default.post(name: Database.suspendNotification, object: nil)
         }
     }
@@ -127,8 +133,9 @@ final class ClaimsSyncController {
     /// `scenePhase → .active`, or the head of a background wake that may touch
     /// the database — GRDB's recipe names both.
     nonisolated static func resumeDatabase() {
-        suspended = false
+        suspensionEra &+= 1
         suspensionPosts.sync {
+            suspended = false
             NotificationCenter.default.post(name: Database.resumeNotification, object: nil)
         }
     }
@@ -184,13 +191,15 @@ final class ClaimsSyncController {
         Self.resumeDatabase()
     }
 
-    /// Both arrivals the window can take: drained or expired. Suspends before
-    /// releasing — the freeze may come the moment the window ends.
+    /// Both arrivals the window can take: drained or expired. The suspend is
+    /// gated on the slot still being live — a resume or a newer backgrounding
+    /// nils it first, and a cleanup queued before that must not suspend over
+    /// the resumed queue.
     private func endSuspensionWindow() {
         suspensionDrain?.cancel()
         suspensionDrain = nil
-        Self.suspendDatabase()
         if let window = suspensionWindow {
+            Self.suspendDatabase()
             UIApplication.shared.endBackgroundTask(window)
             suspensionWindow = nil
         }
@@ -577,6 +586,7 @@ final class ClaimsSyncController {
         // A background wake may touch the database — GRDB's recipe resumes the
         // queue for it, then suspends again before the app refreezes.
         Self.resumeDatabase()
+        let era = Self.suspensionEra
         // BGTask predates Sendable — its completion/expiry API is thread-safe
         // by contract (the object lives to be driven from the queue the system
         // delivers it on), so the unchecked marker is honest, not a workaround.
@@ -584,8 +594,11 @@ final class ClaimsSyncController {
         let work = Task { @MainActor [weak self] in
             let completed = await self?.syncJournal() ?? true
             await publish()
+            // Suspend *before* completing — the freeze can land between the
+            // two calls, and an obsolete wake must not suspend over an
+            // activation that already resumed the queue.
+            if Self.suspensionEra == era { Self.suspendDatabase() }
             task.setTaskCompleted(success: completed && !Task.isCancelled)
-            Self.suspendDatabase()
         }
         task.expirationHandler = {
             // The window just spent itself — the in-flight statement's lock
