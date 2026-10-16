@@ -54,6 +54,7 @@ extension OrderDetailView {
                 Section {
                     HStack {
                         StatusChip(status: order.status)
+                            .layoutPriority(1)
                         // The decision rows name which wait they are — the
                         // provider's phrase beside the chip (the list row's
                         // statusDetail, same derivation).
@@ -61,6 +62,7 @@ extension OrderDetailView {
                             Text(statusDetail)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                         Spacer()
                         Text(order.created.formatted(date: .abbreviated, time: .shortened))

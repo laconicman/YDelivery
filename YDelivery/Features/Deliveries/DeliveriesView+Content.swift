@@ -401,6 +401,12 @@ extension DeliveriesView.Content {
 
         /// The status chip, then the trailing group — as-of stamp last but one,
         /// disclosure mark at the edge (semantics rule 7: the stamp trails).
+        /// The chip takes the squeeze priority: it is the fact this line exists
+        /// to show, and without it the most compressible view on the line — a
+        /// `ViewThatFits` whose fallback *is* wrapping — is the one that gives,
+        /// wrapping its words down to a column of single characters while the
+        /// truncating `statusDetail` keeps a wider share (the same doctrine the
+        /// route line states for the destination, above).
         /// The whole line is the trail's door: a tap gesture, not a `Button`,
         /// because inside a `List` row that is itself a `NavigationLink` a button —
         /// even borderless — competes with the row for the whole cell and fires on
@@ -412,6 +418,7 @@ extension DeliveriesView.Content {
         private var statusLine: some View {
             HStack(spacing: Layout.Spacing.unit) {
                 StatusChip(status: row.status)
+                    .layoutPriority(1)
                 if let statusDetail = row.statusDetail {
                     Text(statusDetail)
                         .font(.footnote)
