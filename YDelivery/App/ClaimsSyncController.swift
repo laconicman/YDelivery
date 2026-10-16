@@ -12,6 +12,13 @@ import YDeliveryKit
 /// by a newer identity is not a failure worth a footnote (review, PR #35).
 private struct SyncSuperseded: Error {}
 
+/// The marker a suspended pass throws instead of touching the state file —
+/// caught beside `SyncSuperseded` as vacuously done: `readSyncState`'s
+/// corrupt-file fallback would answer a *fresh* cursor for an interruption,
+/// and replaying the feed from `nil` under a refusing queue is waste, not
+/// recovery.
+private struct SyncSuspended: Error {}
+
 /// Keeps the claims list truthful — the hybrid sync of Phase 3 (Design → "Claims
 /// sync"). `claims/search` answers *what exists*: active and delayed claims every
 /// pass, finished history once ever. `claims/journal` answers *what changed*,
@@ -264,7 +271,7 @@ final class ClaimsSyncController {
         do {
             try await drainPendingAcceptances(identity: identity)
             try await drainPendingDiscovery(identity: identity)
-            try await journalPasses(from: syncState().cursor, identity: identity)
+            try await journalPasses(from: try syncState().cursor, identity: identity)
             lastJournalSyncedAt = .now
             lastSyncedAt = lastJournalSyncedAt
             journalError = nil
@@ -273,7 +280,8 @@ final class ClaimsSyncController {
             // The position rotted — restart it and nothing else: the pending
             // queue and the backfill flag are the account's, not the cursor's,
             // so the wipe that clears *them* belongs to the identity boundary.
-            var state = syncState()
+            var state = (try? syncState())
+                ?? SyncState(cursor: nil, historyBackfilled: false)
             state.cursor = nil
             try? writeSyncState(state, identity: identity)
             do {
@@ -282,7 +290,7 @@ final class ClaimsSyncController {
                 lastSyncedAt = lastJournalSyncedAt
                 journalError = nil
                 return true
-            } catch is SyncSuperseded {
+            } catch is SyncSuperseded, is SyncSuspended {
                 return true
             } catch DatabaseError.SQLITE_INTERRUPT, DatabaseError.SQLITE_ABORT {
                 return true
@@ -290,7 +298,7 @@ final class ClaimsSyncController {
                 journalError = (error, .now)
                 return false
             }
-        } catch is SyncSuperseded {
+        } catch is SyncSuperseded, is SyncSuspended {
             // The identity moved mid-pass — its writes were dropped at the
             // guards, and the new account's own passes start fresh.
             return true
@@ -317,7 +325,7 @@ final class ClaimsSyncController {
         let identity = identityGeneration
         await store.refresh()
         do {
-            var state = syncState()
+            var state = try syncState()
             var states: [Components.Schemas.SearchClaimState] = [.active, .delayed]
             if !state.historyBackfilled { states.append(.finished) }
             var truncated = false
@@ -348,7 +356,7 @@ final class ClaimsSyncController {
             if truncated { throw SyncIncomplete() }
             lastSyncedAt = .now
             searchError = nil
-        } catch is SyncSuperseded {
+        } catch is SyncSuperseded, is SyncSuspended {
         } catch DatabaseError.SQLITE_INTERRUPT, DatabaseError.SQLITE_ABORT {
             // Suspended mid-pass — vacuous like the journal's: membership was
             // never proven, so the error state stays where it was.
@@ -364,7 +372,7 @@ final class ClaimsSyncController {
         for _ in 0..<Self.maxPages {
             let page = try await session.journalPage(cursor: cursor)
             try await applyJournal(page.events, identity: identity)
-            var state = syncState()
+            var state = try syncState()
             state.cursor = page.cursor
             try writeSyncState(state, identity: identity)
             cursor = page.cursor
@@ -408,7 +416,7 @@ final class ClaimsSyncController {
         try await recordSightings(discovered, among: orders,
                                   source: "card", identity: identity)
         if !missed.isEmpty {
-            var state = syncState()
+            var state = try syncState()
             state.pendingClaimIDs = Array(Set(state.pendingClaimIDs ?? []).union(missed)).sorted()
             try writeSyncState(state, identity: identity)
         }
@@ -419,7 +427,7 @@ final class ClaimsSyncController {
     /// signed-out session notes nothing: the boundary's wipe takes the row
     /// anyway, and an unsigned app has no credential to reconcile it with.
     func noteUnresolvedAcceptance(claimID: String) {
-        guard session.isSignedIn else { return }
+        guard session.isSignedIn, !Self.suspended else { return }
         do {
             try database?.noteUnresolvedAcceptance(claimID: claimID)
         } catch {
@@ -479,7 +487,7 @@ final class ClaimsSyncController {
     /// refusing stay for the next tick.
     private func drainPendingDiscovery(identity: Int) async throws {
         guard database != nil else { return }
-        var state = syncState()
+        var state = try syncState()
         let pending = state.pendingClaimIDs ?? []
         let unknown = pending.filter { id in !store.orders.contains { $0.claimID == id } }
         guard !unknown.isEmpty else {
@@ -648,7 +656,11 @@ final class ClaimsSyncController {
 
     /// The stored position — unless a boundary wipe is still owed, in which case
     /// the read goes fresh in memory (the retry lives in `flushOwedReset`).
-    private func syncState() -> SyncState {
+    /// Throws `SyncSuspended` rather than read under a refusing queue: the
+    /// file's own fallback would answer a fresh cursor for an interruption,
+    /// and a nil cursor replays history the saved one already proved.
+    private func syncState() throws -> SyncState {
+        guard !Self.suspended else { throw SyncSuspended() }
         guard flushOwedReset() else {
             return SyncState(cursor: nil, historyBackfilled: false)
         }
