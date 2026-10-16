@@ -839,6 +839,32 @@ the trust doctrine's third round (2026-10-08).
   within a family) and take the winner's own stamp — in the trust layer's adoption or
   on its own; settle the one-clock question either way.
 
+## YD-47 — The suspension gate treats the kill, not the synchronous database work — **open**
+
+Build 5's three `RUNNINGBOARD 0xdead10cc` reports (2026-10-16) shared one stack:
+thread 0 inside a synchronous GRDB read (`AppDatabase.readSyncState`) when the
+app froze mid-statement, the App-Group SQLite file's lock still held. The fix
+posted `Database.suspendNotification`/`resumeNotification` at the scene-phase
+edge and inside the refresh task's expiry window, and gates passes on the
+suspended flag — the queue now refuses locks before the freeze and interrupts
+the in-flight statement to release them. What it does not change is *where* the
+work runs: the whole pass — journal, search, drains — does its GRDB calls
+synchronously on the main actor.
+
+- **Cost:** every pass still blocks thread 0 for the duration of its SQLite
+  statements — small today, unbounded only by table size; and a `suspend` post
+  can only interrupt a statement, so the residual kill window is one
+  statement's length rather than a pass's. Sibling exposures outside the gate
+  are the same class at smaller windows: the wire log, the widget snapshot,
+  the places/draft files — any file lock held across a freeze is the same
+  termination reason, and extensions post no notifications at all.
+- **Discharge:** run the pass's database work on a dedicated executor (the
+  read/write hops already exist at the controller boundary) so thread 0 never
+  sits inside `sqlite3_step`, and bring the file writes the surfaces share
+  under a drain like `draftWrites` — or move them off the suspension path
+  entirely. The notifications' wiring stays — suspension remains the freeze's
+  guard even once nothing synchronous stands in its way.
+
 ## See Also
 
 - <doc:Design>
