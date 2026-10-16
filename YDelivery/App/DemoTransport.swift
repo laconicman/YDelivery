@@ -32,8 +32,11 @@ actor DemoTransport: ClientTransport {
     private var journal: [[String: Any]] = []
     /// `operation_id` is the journal's position — strictly increasing.
     private var nextOperationID: Int64 = 1
-    /// Mints `demo…` claim ids for created claims — 32 chars like the wire's.
-    private var nextClaimSerial = 4
+    /// `request_id` → minted claim id — the provider's own idempotency token,
+    /// honored the same way: a create retried under its token replays the same
+    /// claim rather than dispatching a twin (the guarantee that makes the app's
+    /// ordering retry safe, review PR #136).
+    private var createdClaims: [String: String] = [:]
 
     init() {
         let now = Date.now
@@ -70,13 +73,15 @@ actor DemoTransport: ClientTransport {
         body requestBody: HTTPBody?,
         operationID: String
     ) async throws -> (HTTPResponse, HTTPBody?) {
-        let claimID = Self.claimID(from: request)
+        let claimID = Self.queryItem("claim_id", in: request)
         let requestObject = try await Self.jsonObject(from: requestBody)
         switch operationID {
         case "calculateOffers":
             return respond(.ok, DemoClaims.offers())
         case "createClaim":
-            return respond(.ok, createClaim(from: requestObject))
+            return respond(.ok, createClaim(
+                from: requestObject,
+                requestID: Self.queryItem("request_id", in: request)))
         case "acceptClaim":
             return accept(claimID)
         case "getClaimInfo":
@@ -102,9 +107,20 @@ actor DemoTransport: ClientTransport {
     /// proceed to acceptance without a wait it cannot distinguish from lag.
     /// Route points and items are echoed so the order carries the reviewer's
     /// own addresses — `point_id` in the request becomes `id` in the claim.
-    private func createClaim(from request: [String: Any]?) -> [String: Any] {
-        let id = String(format: "demo%028d", nextClaimSerial)
-        nextClaimSerial += 1
+    private func createClaim(
+        from request: [String: Any]?, requestID: String?
+    ) -> [String: Any] {
+        // The idempotency token replays the first create — a retried request
+        // must not mint a twin claim (nor, on the wire, a second courier).
+        if let requestID, let existing = createdClaims[requestID],
+           let claim = claims[existing] {
+            return claim
+        }
+        // A random suffix, not a sequence: ids from an earlier launch's demo
+        // transport must never alias a stored order's claimID — a relaunched
+        // transport starts empty while its orders persist (review PR #136).
+        let id = "demo" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(28)
+        if let requestID { createdClaims[requestID] = id }
         let now = Date.now
         let points = (request?["route_points"] as? [[String: Any]] ?? [])
             .enumerated()
@@ -326,12 +342,13 @@ actor DemoTransport: ClientTransport {
         return (response, HTTPBody(data))
     }
 
-    /// The claim id rides in the query for every single-claim operation —
-    /// `claims/info?claim_id=…`, `cancel-info`, `accept`, `cancel`.
-    private static func claimID(from request: HTTPRequest) -> String? {
+    /// Single-claim ids ride the query — `claims/info?claim_id=…`,
+    /// `cancel-info`, `accept`, `cancel` — and the create's idempotency token
+    /// rides `?request_id=` the same way.
+    private static func queryItem(_ name: String, in request: HTTPRequest) -> String? {
         URLComponents(string: request.path ?? "")
             .flatMap(\.queryItems)?
-            .first(where: { $0.name == "claim_id" })?
+            .first(where: { $0.name == name })?
             .value
     }
 

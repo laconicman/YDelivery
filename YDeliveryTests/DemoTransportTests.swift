@@ -128,6 +128,16 @@ struct DemoTransportTests {
                 body: .json(try ClientController.createRequest(for: order)))))
         #expect(created.status == .readyToAccept)
 
+        // The request_id replays rather than duplicating — the ordering flow's
+        // idempotent retry must not mint a second claim (nor, on the wire, a
+        // second courier).
+        let replayed = try ClientController.createdClaim(from: try await client
+            .createClaim(.init(
+                query: .init(requestId: "demo-test"),
+                headers: .init(acceptLanguage: .ru),
+                body: .json(try ClientController.createRequest(for: order)))))
+        #expect(replayed.id == created.id)
+
         // The card echoes the draft's own route — the reviewer sees their stops.
         let claim = try await card(client, id: created.id)
         let mapped = Order(claim: claim, adoptingID: UUID())
