@@ -187,7 +187,8 @@ final class ClaimsSyncController {
     }
 
     /// `scenePhase → .active`: locks serve again, and a drain still pending
-    /// from the outgoing edge is moot — its window ends quietly.
+    /// from the outgoing edge is moot — its window ends quietly. Notes parked
+    /// while suspended land now — the queue answers again.
     func resumeFromSuspension() {
         suspensionDrain?.cancel()
         suspensionDrain = nil
@@ -196,6 +197,9 @@ final class ClaimsSyncController {
             suspensionWindow = nil
         }
         Self.resumeDatabase()
+        let deferred = deferredAcceptanceNotes
+        deferredAcceptanceNotes = []
+        for claimID in deferred { noteUnresolvedAcceptance(claimID: claimID) }
     }
 
     /// Both arrivals the window can take: drained or expired. The suspend is
@@ -422,17 +426,33 @@ final class ClaimsSyncController {
         }
     }
 
+    /// Acceptance notes a suspended queue could not take — parked claim IDs,
+    /// flushed on resume. Losing one is losing the whole record: the note is
+    /// the only durable place the answer's claimID lives (YD-5).
+    @ObservationIgnored private var deferredAcceptanceNotes: [String] = []
+
     /// The ordering flow's lost answer, persisted before the screen can forget
     /// it — `Ordering.unresolved` without this dies with the draft (YD-5). A
     /// signed-out session notes nothing: the boundary's wipe takes the row
-    /// anyway, and an unsigned app has no credential to reconcile it with.
+    /// anyway, and an unsigned app has no credential to reconcile it with. A
+    /// suspended queue parks the note for the resume flush rather than
+    /// dropping it — suspension is exactly when the app may never come back
+    /// to ask again.
     func noteUnresolvedAcceptance(claimID: String) {
-        guard session.isSignedIn, !Self.suspended else { return }
+        guard session.isSignedIn else { return }
+        guard !Self.suspended else {
+            deferredAcceptanceNotes.append(claimID)
+            return
+        }
         do {
             try database?.noteUnresolvedAcceptance(claimID: claimID)
         } catch {
-            Self.logger.error(
-                "Pending-acceptance note failed: \(error.localizedDescription, privacy: .public)")
+            if (error as? DatabaseError)?.isInterruptionError == true {
+                deferredAcceptanceNotes.append(claimID)
+            } else {
+                Self.logger.error(
+                    "Pending-acceptance note failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 

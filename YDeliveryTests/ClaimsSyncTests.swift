@@ -562,10 +562,15 @@ struct ClaimsSyncTests {
                 "the gate answers vacuously — a pass that cannot start is done, not failed")
         #expect(sync.lastJournalSyncedAt == nil,
                 "no pass ran — nothing stamped the feed's clock")
+        // A note taken while suspended is parked, not dropped — the claimID is
+        // the acceptance's only durable record (YD-5).
+        sync.noteUnresolvedAcceptance(claimID: "deferred-claim")
 
-        ClaimsSyncController.resumeDatabase()
+        sync.resumeFromSuspension()
         #expect(await sync.syncJournal())
         #expect(sync.lastJournalSyncedAt != nil,
                 "resumed, the same pass runs and stamps")
+        #expect(try database.pendingAcceptances().map(\.claimID) == ["deferred-claim"],
+                "the parked note lands on resume, not in the void")
     }
 }
