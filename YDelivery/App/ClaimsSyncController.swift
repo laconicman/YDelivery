@@ -1,7 +1,9 @@
 import BackgroundTasks
 import Foundation
+import GRDB
 import Observation
 import OSLog
+import UIKit
 import YandexDeliveryExpressAPI
 import YDeliveryKit
 
@@ -95,6 +97,105 @@ final class ClaimsSyncController {
     /// polling forever (YD-5).
     private static let acceptanceWindow: TimeInterval = 7 * 24 * 3600
 
+    /// Whether the queue is refusing locks — the passes' early out: a pass
+    /// started suspended only replays the feed into `SQLITE_INTERRUPT`s and
+    /// still counts as nothing. Written on the main queue — every caller is a
+    /// main-queue callback — so `nonisolated(unsafe)` (the `loop` seam) is the
+    /// honest cost of the nonisolated posts setting it.
+    @ObservationIgnored private nonisolated(unsafe) static var suspended = false
+    /// The posts' own serial lane, off main: a `suspend` must reach the
+    /// queue's observer even while a statement mid-step holds the lock on
+    /// thread 0 — posted on main it would queue behind the very work it
+    /// interrupts. One lane keeps `suspend`/`resume` landing in call order.
+    private nonisolated static let suspensionPosts =
+        DispatchQueue(label: "YDelivery.db-suspension")
+
+    /// `scenePhase → .background`, or a background wake ending: the queue stops
+    /// taking locks *before* the freeze — an app suspended mid-lock is the kill
+    /// family build 5 shipped (`RUNNINGBOARD 0xdead10cc`, three reports, all
+    /// mid-read on this actor). The queue half lives in `AppDatabase`'s
+    /// `observesSuspensionNotifications` wiring: the post refuses new locks and
+    /// interrupts the in-flight statement so its lock lands back first (GRDB →
+    /// DatabaseSharing, "How to limit the 0xDEAD10CC exception").
+    nonisolated static func suspendDatabase() {
+        suspended = true
+        suspensionPosts.sync {
+            NotificationCenter.default.post(name: Database.suspendNotification, object: nil)
+        }
+    }
+
+    /// `scenePhase → .active`, or the head of a background wake that may touch
+    /// the database — GRDB's recipe names both.
+    nonisolated static func resumeDatabase() {
+        suspended = false
+        suspensionPosts.sync {
+            NotificationCenter.default.post(name: Database.resumeNotification, object: nil)
+        }
+    }
+
+    /// The backgrounding drain's window — keeps the process awake just long
+    /// enough for the detached draft write (and any in-flight access) to land
+    /// before the queue stops taking locks.
+    @ObservationIgnored private var suspensionWindow: UIBackgroundTaskIdentifier?
+    /// The tail the window waits on — cancelled when a resume or a repeated
+    /// backgrounding makes the wait moot.
+    @ObservationIgnored private var suspensionDrain: Task<Void, Never>?
+
+    /// `scenePhase → .background`: the detached draft write rides the store's
+    /// serial tail — awaiting its end is the drain — inside a
+    /// `beginBackgroundTask` window so the process is still awake to see the
+    /// suspend land. iOS expiring the window first takes the same end:
+    /// suspend, then release (the GRDB recipe's "expiration handler" seat).
+    func beginSuspension() {
+        suspensionDrain?.cancel()
+        if let window = suspensionWindow {
+            UIApplication.shared.endBackgroundTask(window)
+            suspensionWindow = nil
+        }
+        let window = UIApplication.shared.beginBackgroundTask { [weak self] in
+            // The window is spent — the freeze is next, locks go now; the hop
+            // ends the window, but the post above already released the
+            // in-flight lock.
+            Self.suspendDatabase()
+            Task { @MainActor in self?.endSuspensionWindow() }
+        }
+        guard window != .invalid else {
+            // No grace granted — suspend at once rather than race the freeze.
+            Self.suspendDatabase()
+            return
+        }
+        suspensionWindow = window
+        suspensionDrain = Task { [weak self] in
+            await self?.store.drainDraftWrites()
+            guard !Task.isCancelled else { return }
+            self?.endSuspensionWindow()
+        }
+    }
+
+    /// `scenePhase → .active`: locks serve again, and a drain still pending
+    /// from the outgoing edge is moot — its window ends quietly.
+    func resumeFromSuspension() {
+        suspensionDrain?.cancel()
+        suspensionDrain = nil
+        if let window = suspensionWindow {
+            UIApplication.shared.endBackgroundTask(window)
+            suspensionWindow = nil
+        }
+        Self.resumeDatabase()
+    }
+
+    /// Both arrivals the window can take: drained or expired. Suspends before
+    /// releasing — the freeze may come the moment the window ends.
+    private func endSuspensionWindow() {
+        suspensionDrain?.cancel()
+        suspensionDrain = nil
+        Self.suspendDatabase()
+        if let window = suspensionWindow {
+            UIApplication.shared.endBackgroundTask(window)
+            suspensionWindow = nil
+        }
+    }
+
     /// The background-refresh task's identifier — must match
     /// `BGTaskSchedulerPermittedIdentifiers` in the generated Info.plist.
     nonisolated static let refreshTaskIdentifier = "com.learnable.YDelivery.claims-refresh"
@@ -146,7 +247,7 @@ final class ClaimsSyncController {
     func syncJournal() async -> Bool {
         // One pass at a time — a manual pull landing on a running tick is a no-op,
         // not a doubled feed. Idempotency makes the skip free.
-        guard session.isSignedIn, !isSyncing else { return true }
+        guard session.isSignedIn, !isSyncing, !Self.suspended else { return true }
         isSyncing = true
         defer { isSyncing = false }
         let identity = identityGeneration
@@ -174,6 +275,8 @@ final class ClaimsSyncController {
                 return true
             } catch is SyncSuperseded {
                 return true
+            } catch DatabaseError.SQLITE_INTERRUPT, DatabaseError.SQLITE_ABORT {
+                return true
             } catch {
                 journalError = (error, .now)
                 return false
@@ -181,6 +284,11 @@ final class ClaimsSyncController {
         } catch is SyncSuperseded {
             // The identity moved mid-pass — its writes were dropped at the
             // guards, and the new account's own passes start fresh.
+            return true
+        } catch DatabaseError.SQLITE_INTERRUPT, DatabaseError.SQLITE_ABORT {
+            // The suspension gate closed mid-pass — vacuously done like a skip:
+            // the cursor never claimed work it didn't land, so the pass after
+            // resume replays honestly.
             return true
         } catch {
             journalError = (error, .now)
@@ -194,7 +302,7 @@ final class ClaimsSyncController {
     /// or before install is exactly what search exists to find (the reason the
     /// journal alone is not enough: it only reports claims that *change*).
     func syncSearch() async {
-        guard session.isSignedIn, !isSyncing else { return }
+        guard session.isSignedIn, !isSyncing, !Self.suspended else { return }
         isSyncing = true
         defer { isSyncing = false }
         let identity = identityGeneration
@@ -232,6 +340,9 @@ final class ClaimsSyncController {
             lastSyncedAt = .now
             searchError = nil
         } catch is SyncSuperseded {
+        } catch DatabaseError.SQLITE_INTERRUPT, DatabaseError.SQLITE_ABORT {
+            // Suspended mid-pass — vacuous like the journal's: membership was
+            // never proven, so the error state stays where it was.
         } catch {
             searchError = (error, .now)
         }
@@ -463,6 +574,9 @@ final class ClaimsSyncController {
         publish: @escaping @MainActor () async -> Void = {}
     ) {
         scheduleAppRefresh()
+        // A background wake may touch the database — GRDB's recipe resumes the
+        // queue for it, then suspends again before the app refreezes.
+        Self.resumeDatabase()
         // BGTask predates Sendable — its completion/expiry API is thread-safe
         // by contract (the object lives to be driven from the queue the system
         // delivers it on), so the unchecked marker is honest, not a workaround.
@@ -471,8 +585,15 @@ final class ClaimsSyncController {
             let completed = await self?.syncJournal() ?? true
             await publish()
             task.setTaskCompleted(success: completed && !Task.isCancelled)
+            Self.suspendDatabase()
         }
-        task.expirationHandler = { work.cancel() }
+        task.expirationHandler = {
+            // The window just spent itself — the in-flight statement's lock
+            // must land back before the freeze, which a cooperative cancel
+            // cannot do (it is honored between statements, never inside one).
+            Self.suspendDatabase()
+            work.cancel()
+        }
     }
 
     /// Queues the next background wake — a hint, not a timer: iOS grants
@@ -550,6 +671,7 @@ final class ClaimsSyncController {
     /// The sign-out edge wipes the sync state: the same identity boundary as the
     /// wire log's, so a new token never inherits this account's position.
     private func tick(_ count: Int) async {
+        guard !Self.suspended else { return }
         let signedIn = session.isSignedIn
         // Sampled at the top, not the end: a boundary crossing mid-tick bumps the
         // generation — writing the post-change value here would consume it and

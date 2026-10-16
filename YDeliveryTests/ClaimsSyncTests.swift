@@ -534,4 +534,38 @@ struct ClaimsSyncTests {
         #expect(database.readSyncState() == .init(cursor: nil, historyBackfilled: false),
                 "the sign-out boundary returns to a first sync")
     }
+
+    // MARK: Suspension gate — the 0xdead10cc fix's work half
+
+    /// Suspended, a pass never starts: it would only replay the feed into
+    /// `SQLITE_INTERRUPT`s and still count as nothing, so the gate answers
+    /// vacuously — and the journal's clock is what proves no pass ran (a real
+    /// one stamps it). `suspended` is process-wide; the `defer` restores it
+    /// for the siblings.
+    @Test("A suspended pass is vacuous — the journal clock does not move")
+    func suspendedPassIsVacuous() async throws {
+        ClaimsSyncController.suspendDatabase()
+        defer { ClaimsSyncController.resumeDatabase() }
+
+        let session = ClientController(
+            tokenStore: TokenStore(service: "tests.YDelivery.suspension.\(UUID().uuidString)"))
+        await session.signIn(token: "demo")
+        defer { session.signOut() }
+        let database = AppDatabase(
+            directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("suspension-\(UUID().uuidString)", isDirectory: true),
+            providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test")
+        let store = StoreController(database: database)
+        let sync = ClaimsSyncController(session: session, store: store, database: database)
+
+        #expect(await sync.syncJournal(),
+                "the gate answers vacuously — a pass that cannot start is done, not failed")
+        #expect(sync.lastJournalSyncedAt == nil,
+                "no pass ran — nothing stamped the feed's clock")
+
+        ClaimsSyncController.resumeDatabase()
+        #expect(await sync.syncJournal())
+        #expect(sync.lastJournalSyncedAt != nil,
+                "resumed, the same pass runs and stamps")
+    }
 }
