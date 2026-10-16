@@ -665,6 +665,12 @@ final class StoreController {
         }
     }
 
+    /// The detached draft-write tail's end — the suspension gate awaits it so
+    /// the cannot-wait save lands before the queue stops taking locks.
+    func drainDraftWrites() async {
+        await draftWrites?.value
+    }
+
     /// The parked draft, if the substrate holds one — `nil` also when the store
     /// is containerless. A corrupt draft throws inside the store and is logged
     /// here rather than answering "no draft" over bytes it could not read; the

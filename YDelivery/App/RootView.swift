@@ -121,20 +121,28 @@ struct RootView: View {
             }
         }
         // Leaving the foreground is when the refresh chain gets armed — the
-        // system decides when it actually wakes the journal pass. Coming back
-        // is when a parked share gets applied: the extension's `open` is
-        // best-effort, so the activation sweep is the half that always runs.
+        // system decides when it actually wakes the journal pass — and when the
+        // database drains into suspension: an app frozen mid-lock is a
+        // 0xdead10cc kill, so the queue stops taking locks *before* the freeze.
+        // Coming back is when a parked share gets applied: the extension's
+        // `open` is best-effort, so the activation sweep is the half that
+        // always runs.
         .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .background {
                 sync.scheduleAppRefresh()
                 // A pending debounce cannot count on ever firing — suspension
-                // may be the last run the draft gets before a force-quit.
+                // may be the last run the draft gets before a force-quit. The
+                // flush enqueues before the drain so the gate waits on it.
                 draft.flushPersistedDraft()
+                sync.beginSuspension()
             }
             // `initial: true` because a launch is already `.active` — a share
             // parked while the app was terminated must not wait a full
             // background cycle to surface (review, PR #46).
-            if phase == .active { applySharedDraftIfPending() }
+            if phase == .active {
+                sync.resumeFromSuspension()
+                applySharedDraftIfPending()
+            }
         }
         // A share that arrived while the sheet was up waited in its slot —
         // closing the draft is the moment it stops waiting.
