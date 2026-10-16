@@ -197,6 +197,13 @@ final class ClaimsSyncController {
             suspensionWindow = nil
         }
         Self.resumeDatabase()
+        flushDeferredAcceptanceNotes()
+    }
+
+    /// The parked acceptance notes land wherever locks serve again —
+    /// activation or a background wake, whichever comes first. Each stays
+    /// parked only as long as the queue keeps refusing writes.
+    private func flushDeferredAcceptanceNotes() {
         let deferred = deferredAcceptanceNotes
         deferredAcceptanceNotes = []
         for claimID in deferred { noteUnresolvedAcceptance(claimID: claimID) }
@@ -620,6 +627,9 @@ final class ClaimsSyncController {
         // delivers it on), so the unchecked marker is honest, not a workaround.
         nonisolated(unsafe) let task = task
         let work = Task { @MainActor [weak self] in
+            // Parked notes first — a wake is a writable window too, and an
+            // interrupted pass must not postpone them to the next activation.
+            self?.flushDeferredAcceptanceNotes()
             let completed = await self?.syncJournal() ?? true
             await publish()
             // Suspend *before* completing — the freeze can land between the
@@ -706,6 +716,9 @@ final class ClaimsSyncController {
         journalError = nil
         lastSyncedAt = nil
         lastJournalSyncedAt = nil
+        // Parked notes are account-bound like the table they name — the wipe
+        // takes them too.
+        deferredAcceptanceNotes = []
         // The next tick must see this as a fresh sign-in — an out-and-in inside
         // one interval would otherwise keep `wasSignedIn` true and wait ~10
         // minutes for the reconcile tick to run search (review, PR #35).
