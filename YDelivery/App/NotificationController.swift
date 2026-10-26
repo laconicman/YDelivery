@@ -40,7 +40,7 @@ final class NotificationController: NSObject {
     /// a banner reports news, and past the ``announcementHorizon`` it is the
     /// timeline's job, not the lock screen's (this is what keeps a fresh
     /// install's first backfill from bannering two years of deliveries).
-    func announce(_ event: ProviderEvent, for order: Order) async {
+    func announce(_ event: OrderEvent, for order: Order) async {
         guard let providerStatus = event.providerStatus,
               let request = Self.request(
                 for: providerStatus, order: order,

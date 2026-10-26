@@ -120,7 +120,7 @@ struct DeliveriesRowsTests {
     func oneOpenTrail() async {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
-        let event = ProviderEvent(orderID: a, providerEventID: 1, at: .now, kind: "status",
+        let event = OrderEvent(orderID: a, providerEventID: 1, at: .now, kind: "status",
                                   providerStatus: "pickuped", source: "journal")
         model.toggleTrail(of: a) { [event] }
         for _ in 0..<50 where model.expandedID == nil { await Task.yield() }
@@ -151,9 +151,9 @@ struct DeliveriesRowsTests {
     func republicationRefreshesOpenTrail() async {
         let model = DeliveriesView.Model()
         let id = UUID()
-        let first = ProviderEvent(orderID: id, providerEventID: 1, at: .now, kind: "status",
+        let first = OrderEvent(orderID: id, providerEventID: 1, at: .now, kind: "status",
                                   providerStatus: "pickuped", source: "journal")
-        let second = ProviderEvent(orderID: id, providerEventID: 2, at: .now, kind: "status",
+        let second = OrderEvent(orderID: id, providerEventID: 2, at: .now, kind: "status",
                                    providerStatus: "delivery_arrived", source: "journal")
         let store = Counter()
         model.toggleTrail(of: id) {
@@ -182,8 +182,8 @@ struct DeliveriesRowsTests {
     func republishKeepsPendingAndShownApart() async {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
-        func event(_ id: Int64, order: UUID) -> ProviderEvent {
-            ProviderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+        func event(_ id: Int64, order: UUID) -> OrderEvent {
+            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
                           providerStatus: "pickuped", source: "journal")
         }
         let counter = Counter()
@@ -219,8 +219,8 @@ struct DeliveriesRowsTests {
     func pendingCancelLeavesCommittedAlone() async {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
-        func event(_ id: Int64, order: UUID) -> ProviderEvent {
-            ProviderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+        func event(_ id: Int64, order: UUID) -> OrderEvent {
+            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
                           providerStatus: "pickuped", source: "journal")
         }
         model.toggleTrail(of: a) { [event(1, order: a)] }
@@ -265,8 +265,8 @@ struct DeliveriesRowsTests {
     func collapseClearsPendingTap() async {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
-        func event(_ id: Int64, order: UUID) -> ProviderEvent {
-            ProviderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+        func event(_ id: Int64, order: UUID) -> OrderEvent {
+            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
                           providerStatus: "pickuped", source: "journal")
         }
         model.toggleTrail(of: a) { [event(1, order: a)] }
@@ -294,15 +294,15 @@ struct DeliveriesRowsTests {
     func staleRefreshDrops() async {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
-        func event(_ id: Int64, order: UUID) -> ProviderEvent {
-            ProviderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+        func event(_ id: Int64, order: UUID) -> OrderEvent {
+            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
                           providerStatus: "pickuped", source: "journal")
         }
         let counter = Counter()
         let gate = Gate()
         // A's reads: the open, the held republish re-read (a stale [1]), the
         // re-open's fresh read ([1, 2]).
-        let aFetch: () async throws -> [ProviderEvent] = {
+        let aFetch: () async throws -> [OrderEvent] = {
             counter.n += 1
             switch counter.n {
             case 1: return [event(1, order: a)]

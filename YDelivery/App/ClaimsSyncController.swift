@@ -559,7 +559,7 @@ final class ClaimsSyncController {
         }
     }
 
-    /// The feed's own history rows — one `ProviderEvent` per journal entry.
+    /// The feed's own history rows — one `OrderEvent` per journal entry.
     /// `statusAdvanced` is the announce gate: only a genuinely new provider
     /// word banners, so a replayed page, a stale arrival, or a status the
     /// mirror already holds stays silent (Kit PR #7). A write failure throws
@@ -574,16 +574,16 @@ final class ClaimsSyncController {
                 continue
             }
             let providerEvent = ClaimsSync.providerEvent(event, orderID: order.id)
-            guard (try database?.recordProviderEvent(providerEvent))?.statusAdvanced == true
+            guard (try database?.recordEvent(providerEvent))?.statusAdvanced == true
             else { continue }
             await notifications?.announce(providerEvent, for: order)
         }
     }
 
-    /// The id-less half of the feed: every claim a pass sighted records a
-    /// `ProviderEvent` keyed `orderID ‖ status ‖ source`. The hundredth
-    /// sighting of the same status merges into its first row yet still
-    /// freshens the mirror's stamp — and a status the journal never reported
+    /// The id-less half of the feed: every claim a pass sighted records an
+    /// `OrderEvent` keyed `orderID ‖ revision ‖ status ‖ routeDigest`
+    /// (doc:Schema → "Epoch 2"). A re-sight of one revision merges into its
+    /// first row yet still freshens the mirror's stamp — and a status the journal never reported
     /// (a feed gap) still announces through this backstop. Failures throw like
     /// `recordJournal`'s: the pass fails and replays rather than losing the
     /// sighting permanently (review, PR #43).
@@ -596,7 +596,7 @@ final class ClaimsSyncController {
                 continue
             }
             let sighting = ClaimsSync.sighting(of: claim, orderID: order.id, source: source)
-            guard (try database?.recordProviderEvent(sighting))?.statusAdvanced == true
+            guard (try database?.recordEvent(sighting))?.statusAdvanced == true
             else { continue }
             await notifications?.announce(sighting, for: order)
         }

@@ -57,7 +57,7 @@ struct DeliveriesView: View {
                 toggleTrail: { id in
                     model.toggleTrail(
                         of: id,
-                        using: { try await store.providerEvents(for: id) },
+                        using: { try await store.events(for: id) },
                         reduceMotion: reduceMotion)
                 },
                 archive: { id in Task { await store.setArchived(true, orderID: id) } },
@@ -107,7 +107,7 @@ extension DeliveriesView {
         /// The open row's trail as read — `nil` while the read is in flight, empty
         /// for an order the provider never reported on: asking and nothing-there are
         /// different rows (R9).
-        private(set) var trail: [ProviderEvent]?
+        private(set) var trail: [OrderEvent]?
         /// Why the trail could not be read, when it could not — a storage failure
         /// must not wear «nothing reported» (review, PR #77).
         private(set) var trailError: String?
@@ -131,7 +131,7 @@ extension DeliveriesView {
         /// the publish block — while another row is still opening, a republish
         /// re-reads the shown row's trail, not the pending one's (review, PR
         /// #109: holding the pending fetch here mixed B's events into A's row).
-        private var fetchTrail: (() async throws -> [ProviderEvent])?
+        private var fetchTrail: (() async throws -> [OrderEvent])?
 
         /// Open the trail of `id`, or close it if it is the one already open —
         /// or still opening (`pendingID`), which reads the same to a sender.
@@ -148,7 +148,7 @@ extension DeliveriesView {
         /// fallback for an animation with no opacity equivalent).
         func toggleTrail(
             of id: UUID,
-            using fetch: @escaping () async throws -> [ProviderEvent],
+            using fetch: @escaping () async throws -> [OrderEvent],
             reduceMotion: Bool = false
         ) {
             opening?.cancel()

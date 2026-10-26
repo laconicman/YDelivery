@@ -67,7 +67,7 @@ extension YDeliveryApp {
     /// same key, so no resurrection pass is needed or wanted.
     ///
     /// Verify with: `xcrun cktool export-schema --team-id WEJF495R4D
-    /// --container-id iCloud.com.learnable.YDelivery --environment development`.
+    /// --container-id iCloud.com.learnable.YDelivery.v2 --environment development`.
     static func seedCloudKitSchemaIfFlagged() async {
         guard isCloudKitSeed else { return }
         let logger = Logger(subsystem: "YDelivery", category: "ckschema-seed")
@@ -182,11 +182,12 @@ extension YDeliveryApp {
         }
         // `providerDetail` is the one orderProviderStates column recordOrder
         // never writes — the event detail is its only typed source.
-        await seed("providerEvents") {
-            _ = try database.recordProviderEvent(ProviderEvent(
-                orderID: orderID, providerEventID: 1, at: t0 + 120,
-                kind: "status", providerStatus: "performer_found",
-                detail: "schema seed detail", source: "journal"))
+        let seedEvent = OrderEvent(
+            orderID: orderID, providerEventID: 1, providerRevision: 1, at: t0 + 120,
+            kind: "status", providerStatus: "performer_found",
+            detail: "schema seed detail", source: "journal")
+        await seed("orderEvents") {
+            _ = try database.recordEvent(seedEvent)
         }
         await seed("orderMessages") {
             try database.postMessage(OrderMessage(
@@ -202,6 +203,69 @@ extension YDeliveryApp {
             try database.postPhotoMessage(
                 orderID: orderID, data: Self.seedPNG(),
                 caption: "schema seed photo", authorHint: "Seed")
+        }
+        // The trust layer's columns and tables (doc:Schema → "Stage 1"): the Kit's
+        // writers leave the signing triple NULL until the trust layer signs, and a
+        // column that is NULL on every seeded record never becomes a CloudKit
+        // field — so the seed fills them with placeholder values through raw SQL
+        // on the same queue, and writes one fully populated row into each of the
+        // three new tables. An UPDATE on a fact table is what the Kit's review
+        // cues flag; here the rows are the seed's own, in an isolated store,
+        // deleted before the run ends — nothing anyone keeps is rewritten. The
+        // engine is already running and may upload the NULL-columned first version
+        // before this lands; the development schema is additive per save, so the
+        // updated record adds the fields on its own upload.
+        await seed("the trust columns; participantKeys, memberships, orderRatings") {
+            try database.queue.write { db in
+                let party = UUID.partyRef(authority: "cloudkit", subject: "_ckschema-seed")
+                    .uuidString.lowercased()
+                let legRef = seedID("leg").uuidString.lowercased()
+                let keyID = "p256.v2.0000000000000000"
+                let stamp = t0.timeIntervalSince1970
+                try db.execute(sql: """
+                    UPDATE "orderEvents" SET
+                      "legRef" = ?, "routeDigest" = 'schema-seed-digest',
+                      "authorRef" = ?, "signingKeyID" = ?, "signature" = 'schema-seed-signature'
+                    WHERE "orderID" = ?
+                    """, arguments: [legRef, party, keyID, orderPK])
+                try db.execute(sql: """
+                    UPDATE "orderMessages" SET
+                      "authorRef" = ?, "signingKeyID" = ?, "signature" = 'schema-seed-signature'
+                    WHERE "orderID" = ?
+                    """, arguments: [party, keyID, orderPK])
+                try db.execute(sql: """
+                    UPDATE "orderAttachments" SET
+                      "authorRef" = ?, "signingKeyID" = ?, "signature" = 'schema-seed-signature'
+                    WHERE "orderID" = ?
+                    """, arguments: [party, keyID, orderPK])
+                try db.execute(sql: """
+                    INSERT OR IGNORE INTO "participantKeys"
+                      ("id", "orderID", "partyRef", "keyID", "publicKey", "bindingKind",
+                       "bindingProof", "bindingKeyID", "boundAt", "addedAt", "signature")
+                    VALUES (?, ?, ?, ?, 'schema-seed-public-key', 'cloudkit',
+                            'schema-seed-proof', 'schema-seed-binding-key', ?, ?,
+                            'schema-seed-signature')
+                    """, arguments: [
+                        seedID("participantKey").uuidString.lowercased(), orderPK, party,
+                        keyID, stamp, stamp])
+                try db.execute(sql: """
+                    INSERT OR IGNORE INTO "memberships"
+                      ("id", "orderID", "partyRef", "role", "addedAt",
+                       "authorRef", "signingKeyID", "signature")
+                    VALUES (?, ?, ?, 'participant', ?, ?, ?, 'schema-seed-signature')
+                    """, arguments: [
+                        seedID("membership").uuidString.lowercased(), orderPK, party,
+                        stamp, party, keyID])
+                try db.execute(sql: """
+                    INSERT OR IGNORE INTO "orderRatings"
+                      ("id", "orderID", "legRef", "authorRef", "subjectKind", "subjectRef",
+                       "subjectLabel", "score", "comment", "at", "signingKeyID", "signature")
+                    VALUES (?, ?, ?, ?, 'leg', ?, 'Seed Courier · seed 000 xx 77', 5,
+                            'schema seed rating', ?, ?, 'schema-seed-signature')
+                    """, arguments: [
+                        seedID("rating").uuidString.lowercased(), orderPK, legRef, party,
+                        legRef, stamp, keyID])
+            }
         }
         await seed("savedPlaces") {
             try await store.save(SavedPlace(
@@ -336,6 +400,10 @@ extension YDeliveryApp {
             }) ?? false
         }
         print("ckschema-seed reachedCloud order=\(reachedCloud(recordType: "orders", primaryKey: orderPK)) privateState=\(reachedCloud(recordType: "orderPrivateStates", primaryKey: orderPK))")
+        // The epoch's own record types, the ones a NULL column would have left
+        // without a field: the probe names each so a miss is blamed on upload
+        // or on the write, not guessed.
+        print("ckschema-seed reachedCloud events=\(reachedCloud(recordType: "orderEvents", primaryKey: seedEvent.id.uuidString.lowercased())) keys=\(reachedCloud(recordType: "participantKeys", primaryKey: seedID("participantKey").uuidString.lowercased())) memberships=\(reachedCloud(recordType: "memberships", primaryKey: seedID("membership").uuidString.lowercased())) ratings=\(reachedCloud(recordType: "orderRatings", primaryKey: seedID("rating").uuidString.lowercased()))")
 
         // The schema is registered; the rows go home. Children first, and in
         // their own flush: CloudKit validates references per record, so the
@@ -392,7 +460,10 @@ extension YDeliveryApp {
             ("orderProviderStates", String(format: byOrder, "orderProviderStates"), [orderPK], false),
             ("orderOptions", String(format: byOrder, "orderOptions"), [orderPK], false),
             ("orderCustomFields", String(format: byOrder, "orderCustomFields"), [orderPK], false),
-            ("providerEvents", String(format: byOrder, "providerEvents"), [orderPK], false),
+            ("orderEvents", String(format: byOrder, "orderEvents"), [orderPK], false),
+            ("participantKeys", String(format: byOrder, "participantKeys"), [orderPK], false),
+            ("memberships", String(format: byOrder, "memberships"), [orderPK], false),
+            ("orderRatings", String(format: byOrder, "orderRatings"), [orderPK], false),
             ("orderMessages", String(format: byOrder, "orderMessages"), [orderPK], false),
             ("orderAttachments", String(format: byOrder, "orderAttachments"), [orderPK], false),
             ("orderPrivateStates", String(format: byOrder, "orderPrivateStates"), [orderPK], false),

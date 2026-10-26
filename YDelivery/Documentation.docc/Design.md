@@ -125,11 +125,13 @@ not courier bookkeeping).
 every timeline row carries the wire's own `updatedTs` — never `.now`: a delayed
 answer describes *older* provider truth and must not be able to rewind what a
 newer event already saw. `recordOrder` treats a stamped write as a merge and
-skips it wholesale when the stored observation is fresher; `providerEvents`
-keeps the feed's own rows (a journal `operationId` dedupes, an id-less sighting
-keys on `orderID ‖ status ‖ source` — at the epoch both keys gain the writer's key
-id and the sighting the provider's revision and its route digest, <doc:Schema> →
-"Identity on signed tables"), and `statusAdvanced` — *not* row
+skips it wholesale when the stored observation is fresher; `orderEvents`
+(`providerEvents` before the epoch) keeps the feed's own rows (a journal
+`operationId` dedupes; an id-less sighting keyed on `orderID ‖ status ‖ source`
+before the epoch and on `orderID ‖ revision ‖ status ‖ routeDigest` since — the
+wire's `revision` rides on every row the app records (Kit 0.5.0) — and both keys
+gain the writer's key id once the trust layer signs, <doc:Schema> → "Identity on
+signed tables"), and `statusAdvanced` — *not* row
 insertion — is the notification layer's gate, so a cursor-reset replay, a stale
 arrival, and a same-word re-sighting all stay silent. Notifications ride
 `BGAppRefreshTask` journal wakes between foreground polls (board `5c`): one

@@ -751,6 +751,30 @@ The epoch below seeds its new container from scratch — the seed inventory beco
 new catalogue of record types, one fully populated row per table and every column — and
 deploys it once.
 
+**Epoch 2's catalogue** (the seed as the epoch's app PR writes it, over Kit 0.5.0): the
+shared tier is epoch 1's with `providerEvents` gone and `orderEvents` (14 fields) in its
+place, `orderMessages` at 10 and `orderAttachments` at 11 (the signing triple, `dataHash`),
+and three new types: `participantKeys` (11), `memberships` (8), `orderRatings` (12). The
+trust columns are seeded with placeholder values through raw SQL, because the Kit's
+writers leave them NULL until the trust layer signs and a NULL column never becomes a
+field. The private tier is epoch 1's; the device tier gains `localIdentity`, which, like
+the rest of that tier, produces no record type.
+
+*Verified 2026-10-27:* the seed ran on a development-signed PavP (the build's automatic
+provisioning registered the container for the App ID on the way), and
+`xcrun cktool export-schema --team-id WEJF495R4D --container-id
+iCloud.com.learnable.YDelivery.v2 --environment development` lists all nineteen record
+types with every declared column as a field: shared — `orders` (5), `routeStops` (20),
+`orderItems` (12), `orderProviderStates` (16), `orderOptions` (7), `orderCustomFields`
+(6), `orderEvents` (14), `orderMessages` (10), `orderAttachments` (11), `attachmentBlobs`
+(`data` as a CKAsset plus `data_hash`), `participantKeys` (11), `memberships` (8),
+`orderRatings` (12); private — `providerAccounts` (6), `orderPrivateStates` (5),
+`savedPlaces` (17: epoch 1's inventory above undercounted it by one), `customFieldDefinitions`
+(8), `parcelTemplates` (3), `parcelTemplateItems` (11). What remains is the Console's
+"Deploy Schema Changes" to production, once — the new container's first and, until the
+trust layer, only deploy — and a device with a pre-epoch store opening with its history
+intact (PavP's App Group holds no store, so that check needs the tester device that has one).
+
 ## Epoch 2 — a fresh container, a fresh file, one import (decided 2026-10-06)
 
 The production CloudKit schema is deployed but carries no real users — two TestFlight
@@ -763,8 +787,13 @@ this file's own founding sentence.
 
 The epoch is: a new CloudKit container identifier (`SyncIdentity.cloudKitContainer` and
 the entitlement), a new local file (`ydelivery-2.sqlite`), and a one-time import of the
-old file's orders, places, templates, field definitions, drafts and sync state through
-the typed writers — orders arrive as *legacy* rows with no key rows, which is the truth.
+old file's orders, places, templates, field definitions, drafts and sync state as a raw
+row copy — table by table, parents first, the column intersection of the two shapes,
+`INSERT OR IGNORE`, one transaction; the typed writers would have re-derived ids and
+restamped mirrors with the device's clock (amended 2026-10-27, Kit #45) — so orders
+arrive with their ids and stamps intact, as *legacy* rows with no key rows, which is the
+truth. The defaults the pre-epoch ALTER list carried for columns an older shape lacks,
+and its one backfill, live in the import now.
 The old container is abandoned, not cleaned; the old file is marked in place and never
 destroyed (the migration's own rule, above). What the epoch changes beyond "additive":
 
@@ -774,9 +803,17 @@ destroyed (the migration's own rule, above). What the epoch changes beyond "addi
 - No `ON CONFLICT REPLACE` on any shared primary key ("Primary keys", above). The
   private and device tiers keep theirs where a writer relies on it (`saveDraft`'s
   wholesale rewrite), stated per table.
-- Stops get stable ids on the model (<doc:TechDebt> YD-40): `RoutePoint.id`, written as
-  `routeStops.id`, minted at placement; the index-derived id stays only as the import's
-  fallback.
+- Stops were to get stable ids on the model here (<doc:TechDebt> YD-40): `RoutePoint.id`,
+  written as `routeStops.id`, minted at placement. **Deferred** (amended 2026-10-27,
+  building Kit #45): `recordOrder` and the claims sync detect a changed route by
+  `Equatable` on `[RoutePoint]`, so an id on the model makes every decoded route
+  "different" and every sighting rewrites every stop — and because `routeStops.id` keys
+  the synced record, fresh ids would churn every stop into a delete-and-insert on the
+  wire, YD-34's shape. Keeping the id out of equality, or threading the stored ids back
+  through the wire mapping, is a design pass with the app's sync in the loop, not a line
+  in the epoch. The position-derived id stands; legs (Stage 2) are the first consumer that
+  needs the real thing; a later minor mints ids for new placements while legacy stops keep
+  theirs.
 - `partyRef` columns everywhere a person is referenced, from day one; `memberships` and
   `participantKeys` exist before the first synced row.
 - The development schema is seeded from scratch and deployed once; the seed inventory
@@ -1031,9 +1068,10 @@ would have dropped the row some events pointed at.)
 
 ### What the epoch discharges
 
-YD-40 (stop ids minted on the model) and YD-41 (no REPLACE on shared keys) at the epoch
-itself; YD-42 (`dataHash`) and the Kit's half of YD-43 (`authorRef`) with the signed
-columns; the Kit's half of YD-45 (`memberships`) with its table. The app's halves —
+YD-41 (no REPLACE on shared keys) at the epoch itself — YD-40 (stop ids minted on the
+model) was planned here and deferred (above); YD-42's hash (`dataHash`, signed later) and
+the Kit's half of YD-43 (`authorRef`) with the signed columns; the Kit's half of YD-45
+(`memberships`) with its table. The app's halves —
 names resolved through the authority, the membership reconcile after each sync pass —
 land with the app's adoption (<doc:Roadmap> → "Next — the trust layer").
 

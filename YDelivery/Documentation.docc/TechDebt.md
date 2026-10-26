@@ -733,8 +733,14 @@ which had no ids to keep.
   as `routeStops.id`, minted at placement; the index-derived id stays only as the
   import's fallback. On the additive path it would have been an optional `RoutePoint.id`
   column landing before legs.
+  *Deferred at the epoch (2026-10-27, Kit #45):* an id on `RoutePoint` breaks the
+  `Equatable` change detection `recordOrder` and the claims sync rely on, so every
+  sighting would rewrite every stop, and fresh ids re-key every synced stop into a
+  delete-and-insert on the wire (YD-34's shape). The discharge is its own Kit patch before
+  Stage 2: the id kept out of equality, or the stored ids threaded back through the wire
+  mapping; minted for new placements, index-derived for legacy stops.
 
-## YD-41 — Shared primary keys declare `ON CONFLICT REPLACE` — **open**
+## YD-41 — Shared primary keys declare `ON CONFLICT REPLACE` — **discharged (Kit 0.5.0)**
 
 The Kit's DDL (0.4.15) declares `ON CONFLICT REPLACE` on the primary keys of `orders`,
 `routeStops`, `orderItems`, `orderCustomFields`, `orderMessages` and `orderAttachments`
@@ -752,6 +758,10 @@ design (2026-10-06).
   writer on a signed table states `INSERT OR IGNORE` in the statement, which SQLite lets
   override the column's clause. The private and device tiers keep theirs where a writer
   relies on it (`saveDraft`'s wholesale rewrite), stated per table.
+  *Discharged 2026-10-27 (Kit #45, 0.5.0):* the epoch DDL carries no conflict clause on
+  any shared primary key; `postMessage` and `postPhotoMessage` state `INSERT OR IGNORE`,
+  the projections upsert explicitly, and the Kit's `REVIEW.md` flags a REPLACE clause or a
+  bare `INSERT` on a fact table from here on.
 
 ## YD-42 — Attachment blobs carry no integrity — **open**
 

@@ -778,9 +778,9 @@ final class StoreController {
     /// One order's provider trail, oldest first — the history row's expanded
     /// timeline. Read on demand, never with the list: a trail per row would
     /// drag every event the journal ever wrote through the list's read.
-    func providerEvents(for orderID: Order.ID) async throws -> [ProviderEvent] {
+    func events(for orderID: Order.ID) async throws -> [OrderEvent] {
         guard let database else { throw StoreUnavailable() }
-        return try await Self.readProviderEvents(database, orderID: orderID)
+        return try await Self.readOrderEvents(database, orderID: orderID)
     }
 
     /// A photo's bytes, fetched lazily by id — the list never drags image data.
@@ -914,10 +914,10 @@ final class StoreController {
     }
 
     @concurrent
-    private static func readProviderEvents(
+    private static func readOrderEvents(
         _ database: AppDatabase, orderID: Order.ID
-    ) async throws -> [ProviderEvent] {
-        try database.providerEvents(orderID: orderID)
+    ) async throws -> [OrderEvent] {
+        try database.events(orderID: orderID)
     }
 
     @concurrent
