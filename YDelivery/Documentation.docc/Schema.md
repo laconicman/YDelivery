@@ -770,10 +770,12 @@ types with every declared column as a field: shared — `orders` (5), `routeStop
 (`data` as a CKAsset plus `data_hash`), `participantKeys` (11), `memberships` (8),
 `orderRatings` (12); private — `providerAccounts` (6), `orderPrivateStates` (5),
 `savedPlaces` (17: epoch 1's inventory above undercounted it by one), `customFieldDefinitions`
-(8), `parcelTemplates` (3), `parcelTemplateItems` (11). What remains is the Console's
-"Deploy Schema Changes" to production, once — the new container's first and, until the
-trust layer, only deploy — and a device with a pre-epoch store opening with its history
-intact (PavP's App Group holds no store, so that check needs the tester device that has one).
+(8), `parcelTemplates` (3), `parcelTemplateItems` (11). The Console's "Deploy Schema
+Changes" to production followed the same day — the new container's first and, until the
+trust layer, only deploy — and the export as deployed is kept at
+`docs/cloudkit-schema/epoch-2-deployed-2026-10-27.ckdb`, the record of what production
+holds. The pre-epoch-store import check is waived while the app is unreleased (owner,
+2026-10-27); the import's own tests stand.
 
 ## Epoch 2 — a fresh container, a fresh file, one import (decided 2026-10-06)
 
