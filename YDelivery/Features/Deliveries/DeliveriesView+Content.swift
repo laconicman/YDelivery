@@ -84,7 +84,7 @@ extension DeliveriesView {
         /// spinner in place of the chevron while the open is pending.
         var pendingID: UUID? = nil
         /// The open row's trail: `nil` while the read is in flight.
-        var trail: [ProviderEvent]? = nil
+        var trail: [OrderEvent]? = nil
         /// Why the open row's trail could not be read — rendered instead of the
         /// trail, never as «nothing reported».
         var trailError: String? = nil
@@ -466,7 +466,7 @@ extension DeliveriesView.Content {
     struct TrailRow: View {
         let route: [RoutePoint]
         /// `nil` still loading, `[]` nothing reported.
-        let trail: [ProviderEvent]?
+        let trail: [OrderEvent]?
         /// A read that failed — its own row, so a storage error never reads as a
         /// fact about the provider's history.
         var trailError: String? = nil
@@ -624,9 +624,9 @@ private let previewSections: [DeliveriesView.Content.Section] = [
         DeliveriesView.Content(
             isSignedIn: true, sections: previewSections, expandedID: live.id,
             trail: [
-                ProviderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: "status", providerStatus: "accepted", source: "journal"),
-                ProviderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: "status", providerStatus: "performer_found", source: "journal"),
-                ProviderEvent(orderID: live.id, providerEventID: 3, at: t0 + 1_200, kind: "status", providerStatus: "pickuped", source: "journal"),
+                OrderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: "status", providerStatus: "accepted", source: "journal"),
+                OrderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: "status", providerStatus: "performer_found", source: "journal"),
+                OrderEvent(orderID: live.id, providerEventID: 3, at: t0 + 1_200, kind: "status", providerStatus: "pickuped", source: "journal"),
             ],
             compose: {})
     }
@@ -670,8 +670,8 @@ private let previewSections: [DeliveriesView.Content.Section] = [
     let live = previewSections[0].rows[0]
     List {
         DeliveriesView.Content.TrailRow(route: live.route, trail: [
-            ProviderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: "status", providerStatus: "accepted", source: "journal"),
-            ProviderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: "status", providerStatus: "performer_found", source: "journal"),
+            OrderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: "status", providerStatus: "accepted", source: "journal"),
+            OrderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: "status", providerStatus: "performer_found", source: "journal"),
         ])
         DeliveriesView.Content.TrailRow(
             route: live.route, trail: nil,

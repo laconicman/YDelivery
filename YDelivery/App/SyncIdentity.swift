@@ -12,6 +12,10 @@ nonisolated enum SyncIdentity {
     static let providerAccountRef = "yandex:unattributed"
 
     /// The CloudKit container the shared/private tiers sync through — matches the
-    /// entitlement in `YDelivery.entitlements`.
-    static let cloudKitContainer = "iCloud.com.learnable.YDelivery"
+    /// entitlement in `YDelivery.entitlements`. Schema epoch 2 (doc:Schema →
+    /// "Epoch 2", decided 2026-10-06): the second container. The first,
+    /// `iCloud.com.learnable.YDelivery`, is abandoned, never cleaned and never
+    /// opened again; its store is imported into the epoch's file by the Kit on
+    /// first open. Epochs are small integers, never semantic versions.
+    static let cloudKitContainer = "iCloud.com.learnable.YDelivery.v2"
 }

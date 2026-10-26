@@ -317,7 +317,7 @@ design is written against the local 0.4.15 source, where stops upsert and prune.
 #### The eight rules
 
 1. **Signed tables are append-only and never updated after insert:** `orderEvents`
-   (today's `providerEvents`), `orderMessages`, `orderAttachments`, `orderRatings`,
+   (`providerEvents` before the epoch), `orderMessages`, `orderAttachments`, `orderRatings`,
    `participantKeys`, `memberships`, and later `legs`. Retries re-insert the same id
    with `INSERT OR IGNORE`; a conflicting insert is a no-op, never a replace. **A signed
    row's identity belongs to one writer** (amended 2026-10-08, review of #135): a

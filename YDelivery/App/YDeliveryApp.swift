@@ -270,7 +270,7 @@ struct YDeliveryApp: App {
         ]
         for (id, status, offset) in trail {
             await seed("event \(status)") {
-                _ = try database.recordProviderEvent(ProviderEvent(
+                _ = try database.recordEvent(OrderEvent(
                     orderID: live.id, providerEventID: id,
                     at: .init(timeIntervalSince1970: t0 + offset),
                     kind: "status", providerStatus: status, source: "journal"))

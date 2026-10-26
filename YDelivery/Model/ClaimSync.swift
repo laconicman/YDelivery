@@ -108,18 +108,21 @@ nonisolated enum ClaimsSync {
                    uniquingKeysWith: { Swift.max($0, $1) })
     }
 
-    /// A feed event as the feed's own row (`providerEvents`, doc:Schema): the
+    /// A feed event as the feed's own row (`orderEvents`, doc:Schema): the
     /// journal's `operationId` is the dedupe key, so a replayed page re-derives
-    /// the same row and `recordProviderEvent` answers "new to us". `at` is the
+    /// the same row and `recordEvent` answers "new to us"; the event's own
+    /// `revision` rides along as `providerRevision`, the derived verdicts'
+    /// tie-break within one family (doc:Schema → "Epoch 2"). `at` is the
     /// event's own stamp — provider time is what the mirror's freshness gate
     /// compares, never the read's clock.
     static func providerEvent(
         _ event: Components.Schemas.JournalEvent,
         orderID: Order.ID
-    ) -> ProviderEvent {
-        ProviderEvent(
+    ) -> OrderEvent {
+        OrderEvent(
             orderID: orderID,
             providerEventID: event.operationId,
+            providerRevision: event.revision,
             at: event.updatedTs,
             kind: event.changeType.rawValue,
             providerStatus: event.newStatus?.rawValue,
@@ -132,16 +135,20 @@ nonisolated enum ClaimsSync {
     /// the id-less half of the event stream. `at` is the claim's own `updatedTs`,
     /// the as-of time its content describes: a delayed answer can't rewind the
     /// mirror past a journal event it predates. The derived key
-    /// (`orderID ‖ status ‖ source`) makes the hundredth sighting of the same
-    /// status merge into its first row — while still freshening the mirror's
-    /// observation stamp.
+    /// (`orderID ‖ revision ‖ status ‖ routeDigest`, doc:Schema → "Epoch 2")
+    /// makes a re-sight of one revision merge into its first row — a card read
+    /// and a search read of one revision are one observation — while a new
+    /// revision is a new row; the route digest joins the key when the trust
+    /// layer's adoption computes it. The mirror's observation stamp freshens
+    /// either way.
     static func sighting(
         of claim: Components.Schemas.ClaimResponse,
         orderID: Order.ID,
         source: String
-    ) -> ProviderEvent {
-        ProviderEvent(
+    ) -> OrderEvent {
+        OrderEvent(
             orderID: orderID,
+            providerRevision: claim.revision,
             at: claim.updatedTs,
             kind: "sighting",
             providerStatus: claim.status.rawValue,

@@ -17,13 +17,14 @@ struct ClaimsSyncTests {
     private func claim(
         id: String,
         status: Components.Schemas.ClaimStatus = .delivered,
-        createdTs: Date = Date(timeIntervalSince1970: 1_790_000_000)
+        createdTs: Date = Date(timeIntervalSince1970: 1_790_000_000),
+        revision: Int64 = 1
     ) -> Components.Schemas.ClaimResponse {
         .init(
             createdTs: createdTs,
             id: id,
             items: [],
-            revision: 1,
+            revision: revision,
             routePoints: [
                 .init(
                     id: 2,
@@ -436,7 +437,7 @@ struct ClaimsSyncTests {
     // MARK: Provider events — the feed's own rows
 
     @Test("A journal event becomes the feed row — operationId is the dedupe key")
-    func journalEventBecomesProviderEvent() {
+    func journalEventBecomesOrderEvent() {
         let orderID = UUID()
         let wire = event(
             claimId: "claim-1", newStatus: .performerFound,
@@ -487,13 +488,20 @@ struct ClaimsSyncTests {
         #expect(row.providerEventID == nil, "no feed id — the status is the key")
     }
 
-    @Test("A repeated sighting re-derives its first row; a new status is a new row")
+    @Test("A sighting's id is the observed revision of a status, whichever read saw it")
     func sightingIdIsStatusKeyed() {
         let seen = claim(id: "claim-1", status: .deliveryArrived)
         let orderID = UUID()
         let first = ClaimsSync.sighting(of: seen, orderID: orderID, source: "search")
+        #expect(first.providerRevision == 1, "the wire's revision rides on the row")
         #expect(ClaimsSync.sighting(of: seen, orderID: orderID, source: "search").id == first.id,
-                "the hundredth sighting merges")
+                "a re-sight of one revision merges into its first row")
+        #expect(ClaimsSync.sighting(of: seen, orderID: orderID, source: "card").id == first.id,
+                "a card read and a search read of one revision are one observation (doc:Schema → \"Epoch 2\")")
+        #expect(ClaimsSync.sighting(
+            of: claim(id: "claim-1", status: .deliveryArrived, revision: 2),
+            orderID: orderID, source: "search").id != first.id,
+                "a later revision is a new fact even with the status unchanged")
         #expect(ClaimsSync.sighting(
             of: claim(id: "claim-1", status: .delivered),
             orderID: orderID, source: "search").id != first.id,

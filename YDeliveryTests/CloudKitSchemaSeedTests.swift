@@ -34,8 +34,9 @@ struct CloudKitSchemaSeedTests {
     func coversEverySeededTable() {
         let seededTables: Set<String> = [
             "orders", "routeStops", "orderItems", "orderProviderStates",
-            "orderOptions", "orderCustomFields", "providerEvents",
+            "orderOptions", "orderCustomFields", "orderEvents",
             "orderMessages", "orderAttachments", "attachmentBlobs",
+            "participantKeys", "memberships", "orderRatings",
             "orderPrivateStates", "savedPlaces", "customFieldDefinitions",
             "parcelTemplates", "parcelTemplateItems", "providerAccounts",
         ]
@@ -90,7 +91,7 @@ struct CloudKitSchemaSeedTests {
                 order, customFields: [OrderCustomField(
                     orderID: order.id, fieldRef: field,
                     name: "f", value: "v")], providerObservedAt: t0)
-            _ = try database.recordProviderEvent(ProviderEvent(
+            _ = try database.recordEvent(OrderEvent(
                 orderID: order.id, providerEventID: 1, at: t0,
                 kind: "status", providerStatus: "accepted", source: "journal"))
             try database.postMessage(OrderMessage(
@@ -153,6 +154,23 @@ struct CloudKitSchemaSeedTests {
                        "lastSeenActivityAt")
                     VALUES (?, 'n', 1, ?)
                     """, arguments: [pk, t0.timeIntervalSince1970])
+                // The trust layer's tables, written by the seed through raw SQL.
+                try db.execute(sql: """
+                    INSERT INTO "participantKeys"
+                      ("id", "orderID", "keyID", "publicKey", "bindingKind", "addedAt")
+                    VALUES (?, ?, 'p256.v2.0000000000000000', 'k', 'cloudkit', ?)
+                    """, arguments: [UUID().uuidString.lowercased(), pk, t0.timeIntervalSince1970])
+                try db.execute(sql: """
+                    INSERT INTO "memberships"
+                      ("id", "orderID", "partyRef", "role", "addedAt")
+                    VALUES (?, ?, ?, 'participant', ?)
+                    """, arguments: [UUID().uuidString.lowercased(), pk,
+                                     UUID().uuidString.lowercased(), t0.timeIntervalSince1970])
+                try db.execute(sql: """
+                    INSERT INTO "orderRatings"
+                      ("id", "orderID", "subjectKind", "subjectRef", "score", "at")
+                    VALUES (?, ?, 'provider', 'yandex:x', 5, ?)
+                    """, arguments: [UUID().uuidString.lowercased(), pk, t0.timeIntervalSince1970])
             }
             try db.execute(sql: """
                 INSERT INTO "providerAccounts"
@@ -184,8 +202,9 @@ struct CloudKitSchemaSeedTests {
 
         // The seed's side is gone — every table, every qualifier.
         for table in ["routeStops", "orderItems", "orderProviderStates",
-                      "orderOptions", "orderCustomFields", "providerEvents",
-                      "orderMessages", "orderAttachments", "orderPrivateStates"] {
+                      "orderOptions", "orderCustomFields", "orderEvents",
+                      "orderMessages", "orderAttachments", "orderPrivateStates",
+                      "participantKeys", "memberships", "orderRatings"] {
             #expect(try await count("""
                 SELECT COUNT(*) FROM "\(table)" WHERE "orderID" = ?
                 """, [orderPK]) == 0, "\(table) kept a seed row")
@@ -218,8 +237,9 @@ struct CloudKitSchemaSeedTests {
         let expected: [String: Int] = [
             "orders": 1, "routeStops": 2, "orderItems": 1,
             "orderProviderStates": 1, "orderOptions": 1,
-            "orderCustomFields": 1, "providerEvents": 1,
+            "orderCustomFields": 1, "orderEvents": 1,
             "orderMessages": 2, "orderAttachments": 1, "attachmentBlobs": 1,
+            "participantKeys": 1, "memberships": 1, "orderRatings": 1,
             "orderPrivateStates": 1, "savedPlaces": 1,
             "customFieldDefinitions": 1, "parcelTemplates": 1,
             "parcelTemplateItems": 1, "providerAccounts": 1,
