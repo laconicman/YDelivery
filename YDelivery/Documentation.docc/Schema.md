@@ -858,7 +858,8 @@ on single-FK tables). Every reference to a person is a `partyRef`.
 belongs to one writer: a caller-held id is held by the device that minted it, and a
 *derived* id carries the writer's key id among its inputs — `orderID ‖ providerEventID ‖
 keyID` for a journal row, `orderID ‖ providerRevision ‖ providerStatus ‖ routeDigest ‖
-keyID` for a sighting, `orderID ‖ partyRef ‖ keyID` for a share-mirrored membership; a
+keyID` for a sighting, `orderID ‖ partyRef ‖ keyID ‖ generation ‖ revision` for a
+share-mirrored membership (the revision omitted at 0; "Stage 1" below); a
 decision a later one can supersede — a role or leg assignment, a rating, a message —
 holds a caller-held id per decision instead, or the second decision would collide with
 the first (<doc:Collaboration> → rule 1). Two devices that record the same fact
@@ -966,8 +967,8 @@ Registered with the engine: `participantKeys`, `memberships`, `orderRatings` joi
 NULL columns never become CloudKit fields.
 
 **`memberships` — the share's mirror and the server's source.** The owner's device
-writes an `INSERT OR IGNORE` signed `participant` row for every accepted share
-participant without one, after each sync pass, under the derived id above — two owner
+writes an `INSERT OR IGNORE` signed `participant` row — `reader` for one the share lists
+read-only (below) — for every accepted share participant without one, after each sync pass, under the derived id above — two owner
 devices reconciling the same share each write their own row, both valid, same role. A
 role *assignment* by the owner — receiver, dispatcher, courier — is a new row under a
 caller-held id (amended 2026-10-08, review of #135: a derived `orderID ‖ partyRef` id
