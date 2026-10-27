@@ -562,7 +562,7 @@ public protocol IdentityAuthority: Sendable {
 }
 ```
 
-| Row kind | Owner | Member (receiver, dispatcher, participant) | Courier assigned to leg L |
+| Row kind | Owner | Member (receiver, dispatcher, participant; a `reader` writes nothing) | Courier assigned to leg L |
 |---|---|---|---|
 | `orderEvents` with `legRef` NULL (the order's platform leg, and `placed`) | entitled | notEntitled | notEntitled |
 | `orderEvents` with `legRef` = L | entitled | notEntitled | entitled |
@@ -572,9 +572,8 @@ public protocol IdentityAuthority: Sendable {
 
 Role resolution: the owner is the party the authority names as the order's owner (the
 share's owner in CloudKit mode; whoever the device is on a private order); a member is a
-party whose *effective* membership row names a role other than `removed`, or, before
-the owner's device has reconciled one, a party the authority lists as a participant; a
-courier is a member whom the *effective* `legs` row for a leg names as
+party the read *places* (below) whose *effective* membership row names a role other than
+`removed`; a courier is a member whom the *effective* `legs` row for a leg names as
 `courierPartyRef` (<doc:Schema> → "Stage 2": a leg is a logical identity its rows group by, the read selecting the effective one). Only membership
 rows that themselves read *verified* as the owner's count for roles — a row anyone else
 appends, a `removed` for the owner included, is *notEntitled*, rendered as such, and
@@ -599,6 +598,29 @@ the role changed", never hidden; on the host, where upload is the arbiter, the s
 refuses it instead. `participantKeys` carries no role: roles come from `memberships` and
 `legs`, never from a writer's claim.
 
+**Placement: the share's list is the trigger, the owner's signed rows are the dates**
+(amended 2026-10-28, review of Kit #48). The owner's reconcile mirrors the share's
+permission as well as its list: a participant the share lists read-only gets a `reader`
+row — in the order, entitled to write nothing; a permission change is a new row under
+the next `revision` of the admission's derived id (`orderID ‖ partyRef ‖ keyID ‖
+generation ‖ revision`, the revision omitted at 0, so the ids Kit 0.5.2 derived stand);
+and a restored write permission brings back the role the rows last gave in that
+admission, `participant` only where they gave none, never a bare `participant` over an
+assignment. `Membership.standing(of:)` folds the roles to three standings — participant
+(every live role the owner may assign), reader, removed — and a party is placed only
+when the share's list and the owner's rows agree on that standing: in as a writer, in
+as a reader, or out. Before the owner's device has written a first row for a party, the
+list stands in. A disagreement — a departure, a permission change, a return the owner's
+device has not mirrored yet — places nobody: that party's rows read *unverifiable*,
+quietly, until the owner's device dates the change, after which what they wrote while
+entitled stays *verified* and what is dated after reads *notEntitled*. No cached roster
+places nobody but the owner. A placed party with no role as of the row's stamp — dated
+past the owner's `removed` row — reads *notEntitled*, with the party named. `Party.Role`
+keeps this article's vocabulary: there is no `reader` case, `.member(kind: "reader")`
+carries the word, and the matrix denies a reader every table. The round that found it:
+a read-only participant passed write entitlement, and a departed participant kept their
+last row's role before the owner's device had dated the departure.
+
 **Derived verdicts for projections.** `mirrorIntegrity(orderID:)` compares
 `orderProviderStates.providerStatus` with the `providerStatus` of the latest *verified*
 status-bearing event and yields `.consistent` / `.disagrees(expected:)` /
@@ -611,8 +633,10 @@ order is one lexicographic key over every candidate: by `at`, the provider's own
 journal rows and sightings alike; on a tie, by family — a journal row beats a claim read
 (a card or a search row, which carry the same claim `revision`) beats the app's own
 `placed` (among digest-bearing rows the journal never competes: it carries no route);
-then, within one family, the higher `providerRevision`; a residual tie is settled by the
-smallest id. Each component is
+then, within the journal family, the feed's operation id (`providerEventID`), the higher
+winning — two transitions in one second are feed order, never a hash tie (amended
+2026-10-28, review of Kit #48); then, within one family, the higher `providerRevision`;
+a residual tie is settled by the smallest id. Each component is
 totally ordered and compared only after the ones before it are equal, so the order is
 transitive and every device picks the same winner.
 
@@ -643,10 +667,12 @@ Exactly one event is the expected value; a projection that matches any other rea
 *disagrees*, so a forged rollback cannot pass as consistent. The residuals all come from
 the provider's clocks — `updated_ts` is documented only as "last update", and the
 package records no guarantee that two reads at one stamp agree — and none of them lets a
-forgery pass. An exact tie of `at` between rows that disagree: the mirror keeps the last
-arrival, which can differ per device, while the verdict keeps the order's winner, so one
-device may show the disagreement line and another not, with nothing in the signed trail
-to tell them apart. If a journal event and a card at one stamp carry incompatible
+forgery pass. An exact tie of `at` between rows that disagree no longer splits devices
+(amended 2026-10-28, review of Kit #48): at an equal stamp the mirror follows the same
+total order over the status-bearing rows — the set the verdict ranks, so a price-only
+row never blocks a status — rather than arrival, and for honest rows the mirror and the
+verdict agree whatever arrives last; what is left is that the order's winner may be the
+staler word when the provider's clocks tie. If a journal event and a card at one stamp carry incompatible
 revisions, the family rule picks the journal row for both the mirror and the verdict, so
 they agree on what may be the staler word; the open verification decides whether both
 move to revision-first. And today's sync pass stamps the mirror with the latest provider

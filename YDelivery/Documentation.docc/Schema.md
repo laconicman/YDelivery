@@ -516,15 +516,19 @@ never a column:
   event loses on entitlement before it can compete — and it is one lexicographic key:
   by `at`, the provider's clock on journal rows and sightings alike; on a tie, by family —
   journal beats a claim read (card or search, one claim `revision`) beats `placed`; then,
-  within one family, the higher `providerRevision`; then the smallest id. Timestamp first because
+  within the journal family, the feed's operation id (`providerEventID`), so two
+  transitions in one second are feed order, never a hash tie (amended 2026-10-28, review
+  of Kit #48); then, within one family, the higher `providerRevision`; then the smallest id. Timestamp first because
   it is the order the mirror's own writer gates on, so an honest write never reads as
   tampering; revision only within one family, where it is one counter (third round,
   2026-10-08: comparing by revision when both rows carried one and by `at` otherwise
   could cycle through a third row). One expected value, never a set to match any of — a
   set let a forged rollback to an older, equally stamped verified status pass as
   consistent (second round). The residuals come from the provider's clocks and none
-  lets a forgery pass: two disagreeing rows at one exact stamp, where the mirror's last
-  arrival can differ per device; incompatible revisions at one stamp, where the mirror
+  lets a forgery pass: two disagreeing rows at one exact stamp, where the order's winner
+  may be the staler word — the mirror follows the same order at an equal stamp over the
+  status-bearing rows, so a price-only row never blocks a status and the mirror and the
+  verdict agree whatever arrives last (same amendment); incompatible revisions at one stamp, where the mirror
   and the verdict agree on the journal row; and today's batch stamp, which can write a
   card's content under a newer event's stamp — a writer defect, <doc:TechDebt> YD-46. The
   verdicts check status and route only: price, tariff and the courier fields on the
@@ -907,10 +911,10 @@ CREATE TABLE IF NOT EXISTS "participantKeys" (
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS "memberships" (
-  "id" TEXT PRIMARY KEY NOT NULL,                      -- mirrored row: UUIDv5(membership ‖ orderID ‖ partyRef ‖ keyID); an assignment: caller-held
+  "id" TEXT PRIMARY KEY NOT NULL,                      -- mirrored row: UUIDv5(membership ‖ orderID ‖ partyRef ‖ keyID ‖ generation ‖ revision); an assignment: caller-held
   "orderID" TEXT NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
   "partyRef" TEXT NOT NULL,
-  "role" TEXT NOT NULL,                                -- participant · receiver · dispatcher · courier · removed
+  "role" TEXT NOT NULL,                                -- participant · receiver · dispatcher · courier · reader · removed
   "addedAt" REAL NOT NULL,
   "authorRef" TEXT, "signingKeyID" TEXT, "signature" TEXT   -- owner-written
 ) STRICT;
@@ -988,13 +992,25 @@ identity generation per iteration — is enough; a removed participant is absent
 the decoded share's `participants` or carries `acceptanceStatus == .removed`. Whether a
 participant *leaving* arrives the same way as the owner removing one is on the
 open-verifications list. Roles live here and in `legs`, never on `participantKeys`,
-never in a writer's claim. Before the owner's device has reconciled a row, a party the
-authority lists as a participant counts as a member; a membership row's role wins over
-the share's binary participant status. So a participant the owner's device has not yet
-mirrored — a courier invited while the owner is offline — still reads as a member
-through the share, and the verdict never degrades to a generic warning for want of a
-row; only a role beyond *participant* waits for the owner's device, as a leg assignment
-does anyway. On the host the table imports as is (<doc:Collaboration> → "Ready for an
+never in a writer's claim. **The share's list is the trigger and the owner's signed rows
+are the dates** (amended 2026-10-28, review of Kit #48). The reconcile mirrors the
+share's permission as well as its list: a participant the share lists read-only gets a
+`reader` row — in, and entitled to write nothing; a permission change is a new row under
+the next `revision` of the admission's derived id (`orderID ‖ partyRef ‖ keyID ‖
+generation ‖ revision`, the revision omitted at 0, so the ids Kit 0.5.2 derived stand —
+`generation` counts the `removed` rows the writer sees, so a return after a removal is a
+new admission); and a restored write permission brings back the role the rows last gave
+in that admission, `participant` only where they gave none. `Membership.standing(of:)`
+folds the roles to participant, reader and removed, and a party is placed only when the
+list and the rows agree on that standing — in as a writer, in as a reader, or out. Before
+the owner's device has written a first row for a party the list stands in, so a
+participant not yet mirrored — a courier invited while the owner is offline — still reads
+as a member through the share. A disagreement — a departure, a permission change, a
+return not yet mirrored — places nobody: that party's rows read *unverifiable* until the
+owner's device dates the change. No cached roster places nobody but the owner, and a
+placed party with no role as of the row's stamp reads *notEntitled*. `Party.Role` keeps
+<doc:Collaboration>'s vocabulary: no `reader` case, `.member(kind: "reader")` carries the
+word, and entitlement denies a reader every table. On the host the table imports as is (<doc:Collaboration> → "Ready for an
 independent host"). <doc:TechDebt> YD-45.
 
 **`orderRatings` — a fact, not a message kind.** A rating is a human statement in the
@@ -1005,7 +1021,7 @@ event row by merging the two streams by time; "only the last counts" is a read-t
 derivation — the effective rating per (author, subject) is the row with the latest `at`,
 earlier rows stay as history (<doc:Vision> → "Players, trust and reputation" for who
 rates whom and where ratings aggregate). The id is caller-held so a retry is the same row.
-Entitlement for a rating needs no join to anything mutable: every member may post one,
+Entitlement for a rating needs no join to anything mutable: every member but a reader may post one,
 and the row carries its author, subject and leg itself. The table is created, seeded and
 deployed at the epoch with the rest of Stage 1 — one development schema, one production
 deploy — and its writer, its reads and the UX land in the ratings phase (<doc:Roadmap> →
