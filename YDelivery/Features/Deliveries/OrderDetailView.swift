@@ -52,7 +52,12 @@ struct OrderDetailView: View {
                 CloudSharingView(
                     sharedRecord: sharedRecord,
                     didFinish: { result in
-                        if case .success = result { model.dismissShareSheet() }
+                        guard case .success = result else { return }
+                        model.dismissShareSheet()
+                        // The sheet may have changed who is in the share: mirror it
+                        // now rather than at the next pass (review, PR #142). The
+                        // reconcile logs its own failures and never throws.
+                        Task { await store.reconcileMemberships(of: [order.id]) }
                     },
                     syncEngine: syncEngine
                 )

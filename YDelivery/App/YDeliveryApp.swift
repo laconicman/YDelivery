@@ -27,10 +27,19 @@ struct YDeliveryApp: App {
         // One database, both consumers — orders/places on one side, the sync cursor
         // on the other. Sharing the instance shares the queue, not just the file.
         let database = Self.database()
-        let store = StoreController(database: database, republishing: Self.republication())
+        // One identity authority over that database (rule 2): the party every write
+        // is attributed to and the judge of every attested read. Built on the same
+        // container the database syncs through — the fixture's included — so the
+        // party it reads back is the one noted for that store.
+        let authority = database.map {
+            CloudKitIdentityAuthority(database: $0, containerIdentifier: Self.containerIdentifier)
+        }
+        let store = StoreController(database: database, authority: authority,
+                                    republishing: Self.republication())
         let notifications = NotificationController(store: store)
         let sync = ClaimsSyncController(session: session, store: store,
-                                        database: database, notifications: notifications)
+                                        database: database, notifications: notifications,
+                                        authority: authority)
         let activities = LiveActivityController(
             reconciles: !(Self.isHistoryFixture || Self.isCloudKitSeed))
         // The identity boundary, wired at composition: a sign-out + sign-in inside
@@ -73,6 +82,10 @@ struct YDeliveryApp: App {
         _syncTask = State(initialValue: Task {
             guard !Self.isCloudKitSeed, !Self.isCloudKitSeedClean else { return }
             await database?.startSync()
+            await Self.noteLocalParty(database: database, authority: authority)
+            // The first mirror of the launch, once the device may know it owns
+            // something — the loop's own passes may have run before the note.
+            await store.reconcileMemberships()
         })
         _session = State(initialValue: session)
         _store = State(initialValue: store)
@@ -97,6 +110,10 @@ struct YDeliveryApp: App {
         #endif
     }
 
+    /// The hermetic history fixture's launch argument — read below and by the
+    /// identity note's skip list.
+    nonisolated static let historyFixtureFlag = "--uitest-history"
+
     /// `--uitest-history` is a hermetic launch: the screenshot pass starts from an
     /// empty store on every run, must never sync fixtures into a signed-in
     /// account, must never pull a real account's orders into the fixture, and must
@@ -104,7 +121,7 @@ struct YDeliveryApp: App {
     /// Live Activities untouched (review, PR #61). Four seams, each read once here.
     private static var isHistoryFixture: Bool {
         #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("--uitest-history")
+        ProcessInfo.processInfo.arguments.contains(historyFixtureFlag)
         #else
         false
         #endif
@@ -122,6 +139,47 @@ struct YDeliveryApp: App {
         #endif
     }
 
+    /// Learns which party this device is — once per launch, after sync started:
+    /// the container's user record noted through the authority, which keeps the
+    /// record name to itself. Skipped where there is nothing to learn it from — the
+    /// schema-seed and fixture launches, and any build whose sync did not start (no
+    /// iCloud entitlement, an engine that failed); a failure logs and the next
+    /// launch asks again. Until the first note, writes carry `authorRef` nil and
+    /// readers resolve them through the key row's creator stamp (Collaboration,
+    /// rule 1).
+    private static func noteLocalParty(
+        database: AppDatabase?, authority: CloudKitIdentityAuthority?
+    ) async {
+        guard notesLocalParty(launchArguments: ProcessInfo.processInfo.arguments),
+              let database, database.syncStartFailure == nil, let authority
+        else { return }
+        do {
+            try await authority.noteLocalParty()
+        } catch {
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "identity")
+                .error("local party not noted: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Whether this launch learns its party: not the schema-seed launches, which
+    /// drive their own isolated store, and not the hermetic fixture, whose store is
+    /// a throwaway that must never learn a real account. The flags are debug-only,
+    /// as everywhere they are read.
+    nonisolated static func notesLocalParty(launchArguments: [String]) -> Bool {
+        #if DEBUG
+        let skipping: Set = [cloudKitSeedFlag, cloudKitSeedCleanFlag, historyFixtureFlag]
+        return skipping.isDisjoint(with: launchArguments)
+        #else
+        return true
+        #endif
+    }
+
+    /// The container the store syncs through: the epoch's, or for the fixture
+    /// launch one that resolves to nothing (see ``database()``).
+    private static var containerIdentifier: String {
+        isHistoryFixture ? "iCloud.uitest" : SyncIdentity.cloudKitContainer
+    }
+
     /// The App Group database — or, for the fixture launch, a throwaway one in a
     /// fresh directory with a container that resolves to nothing (`startSync`
     /// degrades to a logged failure, as it does on any unentitled install). The
@@ -134,12 +192,12 @@ struct YDeliveryApp: App {
                 directory: FileManager.default.temporaryDirectory
                     .appendingPathComponent(UUID().uuidString, isDirectory: true),
                 providerAccountRef: SyncIdentity.providerAccountRef,
-                containerIdentifier: "iCloud.uitest")
+                containerIdentifier: containerIdentifier)
         }
         return AppDatabase.inAppGroup(
             id: AppGroup.id,
             providerAccountRef: SyncIdentity.providerAccountRef,
-            containerIdentifier: SyncIdentity.cloudKitContainer)
+            containerIdentifier: containerIdentifier)
     }
 
     /// The fixture launch reads a Keychain service no sign-in ever writes, so the
@@ -214,7 +272,8 @@ struct YDeliveryApp: App {
     }
 
     /// `--uitest-history`: seed a history the Deliveries screen can show — five
-    /// orders across the status vocabulary, a provider-event trail on the live one,
+    /// orders across the status vocabulary, a provider-event trail on the live one
+    /// in the kinds real rows carry (`status_changed`, `price_changed`, `sighting`),
     /// and a chat on the finished one — through the same Kit writes the sync engine
     /// and the chat screen perform. The store is the throwaway one `database()`
     /// minted for this flag, so every launch seeds from empty; a write that fails
@@ -273,8 +332,28 @@ struct YDeliveryApp: App {
                 _ = try database.recordEvent(OrderEvent(
                     orderID: live.id, providerEventID: id,
                     at: .init(timeIntervalSince1970: t0 + offset),
-                    kind: "status", providerStatus: status, source: "journal"))
+                    kind: OrderEvent.Kind.statusChanged, providerStatus: status,
+                    source: OrderEvent.Source.journal))
             }
+        }
+        // The rest of the vocabulary real rows speak (YD-44): a price change, which
+        // the trail skips — it carries no status — and the claim card read at the
+        // last journal stamp, carrying the route's digest; its phrase repeats the
+        // journal row's and folds into it, so the trail reads as before.
+        await seed("event price_changed") {
+            _ = try database.recordEvent(OrderEvent(
+                orderID: live.id, providerEventID: 10,
+                at: .init(timeIntervalSince1970: t0 + 1_210),
+                kind: OrderEvent.Kind.priceChanged, detail: "650 RUB",
+                source: OrderEvent.Source.journal))
+        }
+        await seed("event sighting") {
+            _ = try database.recordEvent(OrderEvent(
+                orderID: live.id, providerRevision: 9,
+                at: .init(timeIntervalSince1970: t0 + 2_300),
+                kind: OrderEvent.Kind.sighting, providerStatus: "delivery_arrived",
+                source: OrderEvent.Source.card,
+                routeDigest: CanonicalPayload.routeDigest(for: live.route)))
         }
         // The finished order's chat — a participant's word and their confirmation.
         await seed("chat text") {

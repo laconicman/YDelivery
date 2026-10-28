@@ -518,6 +518,77 @@ struct ClaimsSyncTests {
                            "claim-2": Date(timeIntervalSince1970: 2_000)])
     }
 
+    // MARK: Trust layer — the sighting's digest and YD-46
+
+    /// A throwaway store with a key the test owns, and an authority that binds that
+    /// key to this device (a private order: no stamps, no roster).
+    private func scratchDatabase() throws -> (AppDatabase, FakeAuthority) {
+        let keys = EphemeralKeyStore()
+        let database = AppDatabase(
+            directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("sync-trust-\(UUID().uuidString)", isDirectory: true),
+            providerAccountRef: "test:unattributed", containerIdentifier: "iCloud.test",
+            keyStore: keys)
+        return (database, FakeAuthority(localParty: nil, myKeyID: try keys.signatory().keyID))
+    }
+
+    @Test("A sighting digests the claim's route as the stops are stored: an unchanged route agrees")
+    func sightingDigestMatchesStoredStops() throws {
+        let (database, authority) = try scratchDatabase()
+        let card = claim(id: "claim-digest", status: .pickuped)
+        let order = Order(claim: card, adoptingID: UUID())
+        try database.recordOrder(order, providerObservedAt: card.updatedTs)
+        let sighting = ClaimsSync.sighting(of: card, orderID: order.id, source: OrderEvent.Source.card)
+        #expect(sighting.kind == OrderEvent.Kind.sighting)
+        #expect(sighting.routeDigest == (try database.storedRouteDigest(orderID: order.id)),
+                "the same mapping on both sides, or routeIntegrity reads every honest order as disagreeing")
+        try database.recordEvent(sighting)
+        #expect(try database.routeIntegrity(orderID: order.id, authority: authority) == .consistent)
+
+        // A route the provider corrected under one revision is a new fact, not a re-sight.
+        var corrected = card
+        corrected.routePoints[0].address.fullname = "Москва, Каширское шоссе, 54"
+        let resighted = ClaimsSync.sighting(of: corrected, orderID: order.id, source: OrderEvent.Source.search)
+        #expect(resighted.routeDigest != sighting.routeDigest && resighted.id != sighting.id)
+    }
+
+    @Test("YD-46: an older card no longer lands over a newer event — content and stamp come from one observation")
+    func foldStampsTheContentItCarries() throws {
+        let t100 = Date(timeIntervalSince1970: 1_790_000_100)
+        let t200 = Date(timeIntervalSince1970: 1_790_000_200)
+        let found = event(claimId: "claim-fold", newStatus: .performerFound, operationId: 7, updatedTs: t200)
+
+        // A card older than the event: the event applies over it, under its own stamp.
+        let (afterEvent, eventStamps) = ClaimsSync.folding(
+            [found], cards: [claim(id: "claim-fold", status: .performerLookup, createdTs: t100)], into: [])
+        #expect(afterEvent.first?.status == .active && afterEvent.first?.providerStatus == "performer_found")
+        #expect(eventStamps["claim-fold"] == t200)
+
+        // A card newer than the event wins with its own stamp.
+        let t300 = Date(timeIntervalSince1970: 1_790_000_300)
+        let (afterCard, cardStamps) = ClaimsSync.folding(
+            [found], cards: [claim(id: "claim-fold", status: .pickuped, createdTs: t300)], into: [])
+        #expect(afterCard.first?.providerStatus == "pickuped" && cardStamps["claim-fold"] == t300)
+
+        // At one stamp the journal row beats the card read, as in the verdicts' order.
+        let (tied, tiedStamps) = ClaimsSync.folding(
+            [found], cards: [claim(id: "claim-fold", status: .performerLookup, createdTs: t200)], into: [])
+        #expect(tied.first?.providerStatus == "performer_found" && tiedStamps["claim-fold"] == t200)
+
+        // An event for a claim nobody fetched stays a no-op and stamps nothing.
+        let (untouched, noStamps) = ClaimsSync.folding([found], cards: [], into: [])
+        #expect(untouched.isEmpty && noStamps.isEmpty)
+
+        // Stored, the row says what the provider last said: the event's state, not the
+        // older card's under the event's stamp — the shape that refused a later correction.
+        let (database, authority) = try scratchDatabase()
+        let order = try #require(afterEvent.first)
+        try database.recordOrder(order, providerObservedAt: eventStamps["claim-fold"])
+        try database.recordEvent(ClaimsSync.providerEvent(found, orderID: order.id))
+        #expect(try database.readOrders().first?.status == .active)
+        #expect(try database.mirrorIntegrity(orderID: order.id, authority: authority) == .consistent)
+    }
+
     // MARK: Sync state
 
     @Test("The cursor and the backfill flag round-trip together")

@@ -624,9 +624,9 @@ private let previewSections: [DeliveriesView.Content.Section] = [
         DeliveriesView.Content(
             isSignedIn: true, sections: previewSections, expandedID: live.id,
             trail: [
-                OrderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: "status", providerStatus: "accepted", source: "journal"),
-                OrderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: "status", providerStatus: "performer_found", source: "journal"),
-                OrderEvent(orderID: live.id, providerEventID: 3, at: t0 + 1_200, kind: "status", providerStatus: "pickuped", source: "journal"),
+                OrderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: OrderEvent.Kind.statusChanged, providerStatus: "accepted", source: "journal"),
+                OrderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: OrderEvent.Kind.statusChanged, providerStatus: "performer_found", source: "journal"),
+                OrderEvent(orderID: live.id, providerEventID: 3, at: t0 + 1_200, kind: OrderEvent.Kind.statusChanged, providerStatus: "pickuped", source: "journal"),
             ],
             compose: {})
     }
@@ -670,8 +670,8 @@ private let previewSections: [DeliveriesView.Content.Section] = [
     let live = previewSections[0].rows[0]
     List {
         DeliveriesView.Content.TrailRow(route: live.route, trail: [
-            OrderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: "status", providerStatus: "accepted", source: "journal"),
-            OrderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: "status", providerStatus: "performer_found", source: "journal"),
+            OrderEvent(orderID: live.id, providerEventID: 1, at: t0, kind: OrderEvent.Kind.statusChanged, providerStatus: "accepted", source: "journal"),
+            OrderEvent(orderID: live.id, providerEventID: 2, at: t0 + 420, kind: OrderEvent.Kind.statusChanged, providerStatus: "performer_found", source: "journal"),
         ])
         DeliveriesView.Content.TrailRow(
             route: live.route, trail: nil,

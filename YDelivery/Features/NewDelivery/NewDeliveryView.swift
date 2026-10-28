@@ -217,13 +217,17 @@ struct NewDeliveryView: View {
                     sync.noteUnresolvedAcceptance(claimID: claimID)
                 }
                 // Recording happens once per placed order. This task re-runs whenever a
-                // parked draft is reopened, and `.placed` is still true then.
+                // parked draft is reopened, and `.placed` is still true then. The
+                // mirror is stamped with the last card's provider time, as the
+                // `placed` fact is — never the device's clock, which could refuse the
+                // first card after acceptance (doc:Schema → "Epoch 2"); with no card
+                // read it is a local write and carries none.
                 if draft.ordering == .placed, !draft.placedOrderIsRecorded,
                    let order = draft.placedOrder {
                     do {
                         try await store.record(
                             order, customFields: draft.customFields(for: order.id),
-                            providerObservedAt: .now)
+                            providerObservedAt: draft.placedEvent?.at, placed: draft.placedEvent)
                         draft.notePlacedOrderRecorded()
                     } catch {
                         draft.notePlacedButUnrecorded(error)
@@ -238,7 +242,7 @@ struct NewDeliveryView: View {
                     do {
                         try await store.record(
                             order, customFields: draft.customFields(for: order.id),
-                            providerObservedAt: .now)
+                            providerObservedAt: draft.placedEvent?.at, placed: draft.placedEvent)
                         draft.notePlacedOrderRecorded()
                     } catch {
                         draft.notePlacedButUnrecorded(error)
@@ -252,7 +256,7 @@ struct NewDeliveryView: View {
                 do {
                     try await store.record(
                         order, customFields: draft.customFields(for: order.id),
-                        providerObservedAt: .now)
+                        providerObservedAt: draft.placedEvent?.at, placed: draft.placedEvent)
                     draft.notePlacedOrderRecorded()
                 } catch {
                     draft.notePlacedButUnrecorded(error)

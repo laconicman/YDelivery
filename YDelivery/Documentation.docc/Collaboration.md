@@ -557,8 +557,9 @@ public struct Party: Hashable, Sendable {
 /// The seam that keeps CloudKit out of the rows. One implementation now.
 public protocol IdentityAuthority: Sendable {
     var localParty: UUID? { get }
-    func binding(of keyRow: ParticipantKeyRow) -> KeyBinding   // .party(UUID) · .mine · .none · .conflict
-    func members(of orderID: UUID) -> [Member]                 // ref, role, permission, displayName?
+    func binding(of key: ParticipantKey) -> KeyBinding   // .party(UUID) · .mine · .none · .conflict
+    func owner(of orderID: UUID) -> Ownership            // .local · .party(UUID) · .unresolved
+    func members(of orderID: UUID) -> [Member]           // ref, role, canWrite, displayName?, isOwner
 }
 ```
 

@@ -345,6 +345,44 @@ struct NewDeliveryOrderingTests {
         #expect(order.route.first?.contactGivenName == "Иван")
     }
 
+    /// The `placed` fact (doc:Schema → "Epoch 2"): the agreed terms as sorted-key
+    /// JSON, the digest of the route as sent, and the stamp of the last *card* the
+    /// run read — the accept answer carries none, and the device's clock never
+    /// stands in for it.
+    @Test("The placed fact carries the terms, the route's digest and the last card's stamp")
+    func placedFactCarriesTermsDigestAndCardStamp() async throws {
+        let model = readyDraft()
+        await priced(model)
+        model.confirmOrder()
+        let created = PlacedClaim.Observation(at: Date(timeIntervalSince1970: 1_800_000_000), revision: 1)
+        let quoted = PlacedClaim.Observation(at: Date(timeIntervalSince1970: 1_800_000_040), revision: 3)
+        await model.placeOrder(
+            create: { _, _ in
+                PlacedClaim(id: "claim-1", version: 1, status: .estimating, failureText: nil, observed: created)
+            },
+            watch: { id in
+                PlacedClaim(id: id, version: 2, status: .readyToAccept, failureText: nil, observed: quoted)
+            },
+            accept: { id, version in
+                PlacedClaim(id: id, version: version, status: .searching, failureText: nil)
+            },
+            clock: TestClock()
+        )
+
+        let order = try #require(model.placedOrder)
+        let placed = try #require(model.placedEvent)
+        #expect(placed.orderID == order.id)
+        #expect(placed.kind == OrderEvent.Kind.placed && placed.source == OrderEvent.Source.app)
+        #expect(placed.at == quoted.at && placed.providerRevision == quoted.revision,
+                "the card read before accepting, not the create's and not the device's clock")
+        #expect(placed.providerStatus == nil, "a digest-bearing row never competes with the mirror's status")
+        #expect(placed.routeDigest == CanonicalPayload.routeDigest(for: order.route))
+        #expect(placed.detail == #"{"claimID":"claim-1","currency":"RUB","price":"1190","tariff":"express"}"#)
+        let terms = try JSONDecoder().decode(PlacedTerms.self, from: Data(try #require(placed.detail).utf8))
+        #expect(terms == PlacedTerms(claimID: "claim-1", tariff: "express", price: "1190", currency: "RUB"))
+        #expect(OrderEvent.placed(order, observed: nil) == nil, "no card read, no fact")
+    }
+
     /// The answers a claim carries are fixed when the provider takes it — a
     /// schema sync landing during estimation (a definition deleted or renamed
     /// on another device) must not rewrite what history records (review, PR #42).

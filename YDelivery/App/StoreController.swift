@@ -73,6 +73,17 @@ final class StoreController {
     private(set) var hasLoadedPlaces = false
 
     private let database: AppDatabase?
+    /// The one identity authority, built in `@main` beside the database (rule 2):
+    /// the party every write is attributed to, and the judge of every attested read.
+    /// `nil` exactly when the database is.
+    private let authority: (any IdentityAuthority)?
+
+    /// The rows whose warning verdict has been logged this run — a trail re-read on
+    /// every expansion must not repeat the line (identifiers only, never names).
+    private var loggedWarnings: Set<UUID> = []
+    /// The orders whose derived-verdict disagreement has been logged this run,
+    /// keyed `<orderID>.<mirror|route>` — same rule.
+    private var loggedDisagreements: Set<String> = []
 
     /// The indexing tail of a refresh — serialized so a later wipe can never land
     /// under an earlier add, and never awaited: Spotlight is best-effort, and a
@@ -111,6 +122,9 @@ final class StoreController {
     private nonisolated static let draftLogger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "drafts")
 
+    private nonisolated static let trustLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "YDelivery", category: "trust")
+
     /// Where a healthy read is republished. The store's reads feed three system
     /// surfaces outside its own directory — the Spotlight index, the widget
     /// snapshot in the App Group, the share extension's places file — and those
@@ -129,8 +143,10 @@ final class StoreController {
         id: AppGroup.id,
         providerAccountRef: SyncIdentity.providerAccountRef,
         containerIdentifier: SyncIdentity.cloudKitContainer),
+         authority: (any IdentityAuthority)? = nil,
          republishing republication: Republication = .systemSurfaces) {
         self.database = database
+        self.authority = authority
         self.republication = republication
     }
 
@@ -586,13 +602,18 @@ final class StoreController {
     /// *placed* but not *remembered* is a state the sender must see, not a silent gap
     /// in the list. `providerObservedAt` marks a provider sighting: callers fresh off
     /// the wire (claim accepted, cancelled, merged) pass it; local writes leave it
-    /// nil so the mirror never fabricates freshness.
+    /// nil so the mirror never fabricates freshness. `placed` is the ordering
+    /// flow's own fact (`OrderEvent.placed`), written after the order it names and
+    /// attributed like every write here; a retry re-derives the same row.
     func record(_ order: Order, customFields: [OrderCustomField]? = nil,
-                providerObservedAt: Date? = nil) async throws {
+                providerObservedAt: Date? = nil, placed: OrderEvent? = nil) async throws {
         guard let database else { throw StoreUnavailable() }
         try await Self.write(
             order, customFields: customFields,
             providerObservedAt: providerObservedAt, to: database)
+        if let placed {
+            try await Self.write(placed, authority: authority, to: database)
+        }
         // The write held; if the confirming read stumbles, the order still leads the
         // list rather than vanishing until the next refresh — but the write and the
         // read report different facts, and only the read may clear the error: a
@@ -730,7 +751,25 @@ final class StoreController {
     /// as ``save(_:)``).
     func shareOrder(_ id: Order.ID, title: String) async throws -> SharedRecord {
         guard let database else { throw StoreUnavailable() }
-        return try await database.shareOrder(id: id, title: title)
+        let record = try await database.shareOrder(id: id, title: title)
+        // The share's list is the trigger, the owner's rows are the dates: mirror it
+        // now rather than at the next sync pass (doc:Collaboration, YD-45).
+        await reconcileMemberships(of: [id])
+        return record
+    }
+
+    /// Mirrors every owned share among `orderIDs` — by default every order in the
+    /// database, read there rather than from ``orders``, which a launch-time caller
+    /// may reach before the first read published (review, PR #142) — into membership
+    /// rows, off the main actor. The Kit's reconcile is a
+    /// no-op wherever this device is not the share's owner (a private order, a
+    /// joined share, a device that has not noted its party yet), so no pre-filter
+    /// is needed; a failure is one order's, logged and retried by the next pass.
+    /// Returns what was written, for the tests.
+    @discardableResult
+    func reconcileMemberships(of orderIDs: [Order.ID]? = nil) async -> MembershipReconciliation {
+        guard let database, let authority else { return MembershipReconciliation(mirrored: 0, removed: 0) }
+        return await Self.reconcile(orderIDs, authority: authority, in: database)
     }
 
     /// The recipient side of the door — the scene delegate's tapped share URL
@@ -758,21 +797,23 @@ final class StoreController {
 
     /// Appends to the stream — text, or a structured kind like
     /// `OrderMessage.Kind.receptionConfirmed`. `authorHint` stays nil today:
-    /// no account display-name exists in the app yet, and the record's
-    /// `createdBy` carries the real attribution regardless.
+    /// no account display-name exists in the app yet. `authorRef` is this
+    /// device's party, stamped here whatever the caller passed: the signed row
+    /// names its writer (doc:Collaboration, rule 1), `nil` before the first note.
     func postMessage(_ message: OrderMessage) async throws {
         guard let database else { throw StoreUnavailable() }
-        try await Self.writeMessage(message, to: database)
+        try await Self.writeMessage(message, authority: authority, to: database)
     }
 
     /// The photo post — attachment, blob, and carrying message in one Kit
-    /// transaction (the same-order rule holds by construction there).
+    /// transaction (the same-order rule holds by construction there), both rows
+    /// attributed like ``postMessage(_:)``.
     func postPhotoMessage(
         orderID: Order.ID, data: Data, caption: String?
     ) async throws {
         guard let database else { throw StoreUnavailable() }
         try await Self.writePhotoMessage(
-            orderID: orderID, data: data, caption: caption, to: database)
+            orderID: orderID, data: data, caption: caption, authority: authority, to: database)
     }
 
     /// One order's provider trail, oldest first — the history row's expanded
@@ -787,6 +828,74 @@ final class StoreController {
     func attachmentData(_ id: UUID) async throws -> Data? {
         guard let database else { throw StoreUnavailable() }
         return try await Self.readAttachment(id, in: database)
+    }
+
+    // MARK: The attested reads — each row with its verdict (doc:Collaboration)
+
+    /// One order's trail with a verdict per row, oldest first, deduped by fact —
+    /// the read the trail renders once verdicts are on screen. No names on an
+    /// unshared order (the #92 lesson): the authority is only asked who wrote a
+    /// row of an order that rides a share.
+    func attestedEvents(for orderID: Order.ID) async throws -> [Attested<OrderEvent>] {
+        guard let database, let authority else { throw StoreUnavailable() }
+        let attested = try await Self.readAttestedEvents(orderID, authority: authority, in: database)
+        logWarnings(attested, table: "orderEvents", orderID: orderID)
+        return attested
+    }
+
+    /// One order's stream with a verdict per message, oldest first; names as above.
+    func attestedMessages(for orderID: Order.ID) async throws -> [Attested<OrderMessage>] {
+        guard let database, let authority else { throw StoreUnavailable() }
+        let attested = try await Self.readAttestedMessages(orderID, authority: authority, in: database)
+        logWarnings(attested, table: "orderMessages", orderID: orderID)
+        return attested
+    }
+
+    /// A photo's metadata row with its verdict — the hash checked against the
+    /// bytes when they are here, *unverifiable* until they are; `nil` for an id
+    /// the store does not hold.
+    func attestedAttachment(_ id: UUID) async throws -> Attested<OrderAttachment>? {
+        guard let database, let authority else { throw StoreUnavailable() }
+        let attested = try await Self.readAttestedAttachment(id, authority: authority, in: database)
+        if let attested {
+            logWarnings([attested], table: "orderAttachments", orderID: attested.value.orderID)
+        }
+        return attested
+    }
+
+    /// The order's two derived verdicts: the mirror's status and the stored route,
+    /// each against the latest verified fact (doc:Schema → "Derived integrity").
+    func integrity(of orderID: Order.ID) async throws -> OrderIntegrity {
+        guard let database, let authority else { throw StoreUnavailable() }
+        let integrity = try await Self.readIntegrity(orderID, authority: authority, in: database)
+        for (name, verdict) in [("mirror", integrity.mirror), ("route", integrity.route)] {
+            guard case .disagrees = verdict,
+                  loggedDisagreements.insert("\(orderID.uuidString).\(name)").inserted
+            else { continue }
+            Self.trustLogger.warning(
+                "integrity: \(name, privacy: .public) disagrees on order \(orderID.uuidString, privacy: .public)")
+        }
+        return integrity
+    }
+
+    /// Who is in the order — the share's owner and accepted participants with the
+    /// roles the owner's rows give them. Empty for an unshared order: its device is
+    /// its owner, and there is nobody to name.
+    func members(of orderID: Order.ID) async throws -> [Member] {
+        guard let database, let authority else { throw StoreUnavailable() }
+        return try await Self.readMembers(orderID, authority: authority, in: database)
+    }
+
+    /// The diagnostics line (doc:Collaboration → "Verdicts and entitlement"): every
+    /// warned verdict — not verified, legacy or the quiet unverifiable — logs once
+    /// per row per run, with identifiers only: no names, no payloads.
+    private func logWarnings<Value: Identifiable>(
+        _ attested: [Attested<Value>], table: String, orderID: Order.ID
+    ) where Value.ID == UUID {
+        for row in attested where row.verdict.isWarned && loggedWarnings.insert(row.value.id).inserted {
+            Self.trustLogger.warning(
+                "verdict \(row.verdict.diagnosticName, privacy: .public) on \(table, privacy: .public) row \(row.value.id.uuidString, privacy: .public) of order \(orderID.uuidString, privacy: .public)")
+        }
     }
 
     struct StoreUnavailable: LocalizedError {
@@ -900,17 +1009,110 @@ final class StoreController {
 
     @concurrent
     private static func writeMessage(
-        _ message: OrderMessage, to database: AppDatabase
+        _ message: OrderMessage, authority: (any IdentityAuthority)?, to database: AppDatabase
     ) async throws {
+        var message = message
+        message.authorRef = authority?.localParty
         try database.postMessage(message)
     }
 
     @concurrent
     private static func writePhotoMessage(
-        orderID: Order.ID, data: Data, caption: String?, to database: AppDatabase
+        orderID: Order.ID, data: Data, caption: String?,
+        authority: (any IdentityAuthority)?, to database: AppDatabase
     ) async throws {
         try database.postPhotoMessage(
-            orderID: orderID, data: data, caption: caption)
+            orderID: orderID, data: data, caption: caption, authorRef: authority?.localParty)
+    }
+
+    @concurrent
+    private static func write(
+        _ event: OrderEvent, authority: (any IdentityAuthority)?, to database: AppDatabase
+    ) async throws {
+        var event = event
+        event.authorRef = authority?.localParty
+        try database.recordEvent(event)
+    }
+
+    @concurrent
+    private static func reconcile(
+        _ orderIDs: [Order.ID]?, authority: any IdentityAuthority, in database: AppDatabase
+    ) async -> MembershipReconciliation {
+        var total = MembershipReconciliation(mirrored: 0, removed: 0)
+        let ids: [Order.ID]
+        if let orderIDs {
+            ids = orderIDs
+        } else {
+            // A failed read is not an empty history: say so, and let the next
+            // trigger try again.
+            do {
+                ids = try database.readOrders().map(\.id)
+            } catch {
+                trustLogger.error(
+                    "membership reconcile skipped, orders unreadable: \(error.localizedDescription, privacy: .public)")
+                return total
+            }
+        }
+        for orderID in ids {
+            do {
+                let outcome = try database.reconcileMemberships(orderID: orderID, authority: authority)
+                total.mirrored += outcome.mirrored
+                total.removed += outcome.removed
+            } catch {
+                trustLogger.error(
+                    "membership reconcile failed for order \(orderID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return total
+    }
+
+    @concurrent
+    private static func readAttestedEvents(
+        _ orderID: Order.ID, authority: any IdentityAuthority, in database: AppDatabase
+    ) async throws -> [Attested<OrderEvent>] {
+        let attested = try database.attestedEvents(orderID: orderID, authority: authority)
+        return isShared(orderID, in: database) ? attested : attested.map(\.withoutNames)
+    }
+
+    @concurrent
+    private static func readAttestedMessages(
+        _ orderID: Order.ID, authority: any IdentityAuthority, in database: AppDatabase
+    ) async throws -> [Attested<OrderMessage>] {
+        let attested = try database.attestedMessages(orderID: orderID, authority: authority)
+        return isShared(orderID, in: database) ? attested : attested.map(\.withoutNames)
+    }
+
+    @concurrent
+    private static func readAttestedAttachment(
+        _ id: UUID, authority: any IdentityAuthority, in database: AppDatabase
+    ) async throws -> Attested<OrderAttachment>? {
+        guard let attested = try database.attestedAttachment(id, authority: authority) else { return nil }
+        return isShared(attested.value.orderID, in: database) ? attested : attested.withoutNames
+    }
+
+    @concurrent
+    private static func readIntegrity(
+        _ orderID: Order.ID, authority: any IdentityAuthority, in database: AppDatabase
+    ) async throws -> OrderIntegrity {
+        OrderIntegrity(
+            mirror: try database.mirrorIntegrity(orderID: orderID, authority: authority),
+            route: try database.routeIntegrity(orderID: orderID, authority: authority))
+    }
+
+    @concurrent
+    private static func readMembers(
+        _ orderID: Order.ID, authority: any IdentityAuthority, in database: AppDatabase
+    ) async throws -> [Member] {
+        isShared(orderID, in: database) ? authority.members(of: orderID) : []
+    }
+
+    /// The names seam (the #92 lesson): only an order that rides a share has anyone
+    /// to name. It fails closed — the share lives in the sync engine's metadatabase,
+    /// which is attached once the engine exists, so a store whose sync never started
+    /// (no entitlement, the tests) or a read that failed answers "not shared", and a
+    /// name is never shown because a lookup broke.
+    private nonisolated static func isShared(_ orderID: Order.ID, in database: AppDatabase) -> Bool {
+        (try? database.orderIsShared(orderID)) ?? false
     }
 
     @concurrent

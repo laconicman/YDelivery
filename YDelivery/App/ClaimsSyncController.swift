@@ -62,6 +62,10 @@ final class ClaimsSyncController {
     private let session: ClientController
     private let store: StoreController
     private let database: AppDatabase?
+    /// The one identity authority (built in `@main`, rule 2) — the party the feed's
+    /// rows are attributed to. `nil` where the database is, and in tests that do
+    /// not attribute.
+    private let authority: (any IdentityAuthority)?
     /// The lock-screen surface feed events drive — optional so previews and
     /// tests can stand the controller up without a notification center.
     private let notifications: NotificationController?
@@ -238,12 +242,14 @@ final class ClaimsSyncController {
             id: AppGroup.id,
             providerAccountRef: SyncIdentity.providerAccountRef,
             containerIdentifier: SyncIdentity.cloudKitContainer),
-        notifications: NotificationController? = nil
+        notifications: NotificationController? = nil,
+        authority: (any IdentityAuthority)? = nil
     ) {
         self.session = session
         self.store = store
         self.database = database
         self.notifications = notifications
+        self.authority = authority
         loop = Task { [weak self] in
             var ticks = 0
             while !Task.isCancelled {
@@ -286,6 +292,7 @@ final class ClaimsSyncController {
             lastJournalSyncedAt = .now
             lastSyncedAt = lastJournalSyncedAt
             journalError = nil
+            await store.reconcileMemberships(of: store.orders.map(\.id))
             return true
         } catch is JournalCursorInvalid {
             // The position rotted — restart it and nothing else: the pending
@@ -300,6 +307,7 @@ final class ClaimsSyncController {
                 lastJournalSyncedAt = .now
                 lastSyncedAt = lastJournalSyncedAt
                 journalError = nil
+                await store.reconcileMemberships(of: store.orders.map(\.id))
                 return true
             } catch is SyncSuperseded, is SyncSuspended {
                 return true
@@ -364,6 +372,11 @@ final class ClaimsSyncController {
                     try writeSyncState(state, identity: identity)
                 }
             }
+            // The share mirror rides the pass, truncated or not: membership is the
+            // share's, not the provider's, and every order this device holds is
+            // already in the store, which the pass refreshed (doc:Collaboration,
+            // YD-45).
+            await store.reconcileMemberships(of: store.orders.map(\.id))
             if truncated { throw SyncIncomplete() }
             lastSyncedAt = .now
             searchError = nil
@@ -398,34 +411,27 @@ final class ClaimsSyncController {
     /// pass drains (review, PR #35).
     private func applyJournal(_ events: [Components.Schemas.JournalEvent],
                               identity: Int) async throws {
-        var orders = store.orders
-        for event in events {
-            orders = ClaimsSync.applying(event, to: orders)
-        }
         var discovered: [Components.Schemas.ClaimResponse] = []
         var missed: [String] = []
-        for id in ClaimsSync.missingClaimIDs(in: events, among: orders) {
+        for id in ClaimsSync.missingClaimIDs(in: events, among: store.orders) {
             if let card = try? await session.claimCard(id: id) {
                 discovered.append(card)
             } else {
                 missed.append(id)
             }
         }
-        orders = ClaimsSync.merging(discovered, into: orders)
-        // Provider-side as-of stamps — an event's own `updatedTs`, a card's
-        // own. The mirror's freshness follows the provider's clock, never the
-        // read's: a stale page can't rewind what a newer event already saw.
-        var stamps = ClaimsSync.stamps(of: discovered)
-        for event in events {
-            stamps[event.claimId] = max(stamps[event.claimId] ?? .distantPast,
-                                        event.updatedTs)
-        }
+        // Events and cards in the doctrine's total order, each claim stamped with
+        // the provider stamp of the content it carries — never the batch's newest
+        // over a card's older content (YD-46). The mirror's freshness follows the
+        // provider's clock, never the read's: a stale page can't rewind what a
+        // newer event already saw.
+        let (orders, stamps) = ClaimsSync.folding(events, cards: discovered, into: store.orders)
         try await persistChanged(orders, stamps: stamps, identity: identity)
         // The feed's own rows land after the merge so a just-discovered
         // claim's events record against its new row.
         try await recordJournal(events, among: orders, identity: identity)
         try await recordSightings(discovered, among: orders,
-                                  source: "card", identity: identity)
+                                  source: OrderEvent.Source.card, identity: identity)
         if !missed.isEmpty {
             var state = try syncState()
             state.pendingClaimIDs = Array(Set(state.pendingClaimIDs ?? []).union(missed)).sorted()
@@ -568,12 +574,14 @@ final class ClaimsSyncController {
     /// (review, PR #43 — a swallowed failure would lose the event for good).
     private func recordJournal(_ events: [Components.Schemas.JournalEvent],
                                among orders: [Order], identity: Int) async throws {
+        let party = authority?.localParty
         for event in events {
             guard identity == identityGeneration else { throw SyncSuperseded() }
             guard let order = orders.first(where: { $0.claimID == event.claimId }) else {
                 continue
             }
-            let providerEvent = ClaimsSync.providerEvent(event, orderID: order.id)
+            let providerEvent = ClaimsSync.providerEvent(
+                event, orderID: order.id, authorRef: party)
             guard (try database?.recordEvent(providerEvent))?.statusAdvanced == true
             else { continue }
             await notifications?.announce(providerEvent, for: order)
@@ -590,12 +598,14 @@ final class ClaimsSyncController {
     private func recordSightings(_ claims: [Components.Schemas.ClaimResponse],
                                  among orders: [Order],
                                  source: String, identity: Int) async throws {
+        let party = authority?.localParty
         for claim in claims {
             guard identity == identityGeneration else { throw SyncSuperseded() }
             guard let order = orders.first(where: { $0.claimID == claim.id }) else {
                 continue
             }
-            let sighting = ClaimsSync.sighting(of: claim, orderID: order.id, source: source)
+            let sighting = ClaimsSync.sighting(
+                of: claim, orderID: order.id, source: source, authorRef: party)
             guard (try database?.recordEvent(sighting))?.statusAdvanced == true
             else { continue }
             await notifications?.announce(sighting, for: order)
@@ -742,6 +752,12 @@ final class ClaimsSyncController {
                 await syncSearch()
             }
             await syncJournal()
+        } else if count % Self.reconcileEveryTicks == 0 {
+            // The share is iCloud's, not the provider's: a participant who accepts
+            // while the owner is signed out of the provider still gets a membership
+            // row, at the membership cadence (review, PR #142). Signed in, the
+            // passes above reconcile after each success.
+            await store.reconcileMemberships()
         }
         lastSeenGeneration = generation
         wasSignedIn = signedIn
