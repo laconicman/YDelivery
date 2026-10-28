@@ -315,6 +315,15 @@ nonisolated struct PlacedClaim: Hashable, Sendable {
     var status: Progress
     /// The provider's own words when estimation failed — displayable as arrived.
     var failureText: String?
+    /// The card's own as-of stamp and revision — provider time, which is what the
+    /// `placed` fact is stamped with (doc:Schema → "Epoch 2"). `nil` on the accept
+    /// answer, which carries `version` but neither.
+    var observed: Observation? = nil
+
+    nonisolated struct Observation: Hashable, Sendable {
+        var at: Date
+        var revision: Int64
+    }
 
     nonisolated enum Progress: Hashable, Sendable {
         /// Still pricing the run.
@@ -336,7 +345,8 @@ nonisolated extension PlacedClaim {
             id: claim.id,
             version: Int(claim.version),
             status: .init(claim.status),
-            failureText: claim.errorMessages?.compactMap(\.message).first
+            failureText: claim.errorMessages?.compactMap(\.message).first,
+            observed: Observation(at: claim.updatedTs, revision: claim.revision)
         )
     }
 }

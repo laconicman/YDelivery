@@ -120,7 +120,7 @@ struct DeliveriesRowsTests {
     func oneOpenTrail() async {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
-        let event = OrderEvent(orderID: a, providerEventID: 1, at: .now, kind: "status",
+        let event = OrderEvent(orderID: a, providerEventID: 1, at: .now, kind: OrderEvent.Kind.statusChanged,
                                   providerStatus: "pickuped", source: "journal")
         model.toggleTrail(of: a) { [event] }
         for _ in 0..<50 where model.expandedID == nil { await Task.yield() }
@@ -151,9 +151,9 @@ struct DeliveriesRowsTests {
     func republicationRefreshesOpenTrail() async {
         let model = DeliveriesView.Model()
         let id = UUID()
-        let first = OrderEvent(orderID: id, providerEventID: 1, at: .now, kind: "status",
+        let first = OrderEvent(orderID: id, providerEventID: 1, at: .now, kind: OrderEvent.Kind.statusChanged,
                                   providerStatus: "pickuped", source: "journal")
-        let second = OrderEvent(orderID: id, providerEventID: 2, at: .now, kind: "status",
+        let second = OrderEvent(orderID: id, providerEventID: 2, at: .now, kind: OrderEvent.Kind.statusChanged,
                                    providerStatus: "delivery_arrived", source: "journal")
         let store = Counter()
         model.toggleTrail(of: id) {
@@ -183,7 +183,7 @@ struct DeliveriesRowsTests {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
         func event(_ id: Int64, order: UUID) -> OrderEvent {
-            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: OrderEvent.Kind.statusChanged,
                           providerStatus: "pickuped", source: "journal")
         }
         let counter = Counter()
@@ -220,7 +220,7 @@ struct DeliveriesRowsTests {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
         func event(_ id: Int64, order: UUID) -> OrderEvent {
-            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: OrderEvent.Kind.statusChanged,
                           providerStatus: "pickuped", source: "journal")
         }
         model.toggleTrail(of: a) { [event(1, order: a)] }
@@ -266,7 +266,7 @@ struct DeliveriesRowsTests {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
         func event(_ id: Int64, order: UUID) -> OrderEvent {
-            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: OrderEvent.Kind.statusChanged,
                           providerStatus: "pickuped", source: "journal")
         }
         model.toggleTrail(of: a) { [event(1, order: a)] }
@@ -295,7 +295,7 @@ struct DeliveriesRowsTests {
         let model = DeliveriesView.Model()
         let a = UUID(), b = UUID()
         func event(_ id: Int64, order: UUID) -> OrderEvent {
-            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: "status",
+            OrderEvent(orderID: order, providerEventID: id, at: .now, kind: OrderEvent.Kind.statusChanged,
                           providerStatus: "pickuped", source: "journal")
         }
         let counter = Counter()

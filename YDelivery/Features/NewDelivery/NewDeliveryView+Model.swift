@@ -980,6 +980,11 @@ extension NewDeliveryView {
         private(set) var ordering: Ordering = .idle
         /// The order as recorded once accepted — what history remembers.
         private(set) var placedOrder: Order?
+        /// The `placed` fact recorded with ``placedOrder`` — the claim as accepted,
+        /// stamped by the last card read (`OrderEvent.placed`). `nil` beside a placed
+        /// order only when no card was read, which the doctrine forbids filling with
+        /// the device's clock.
+        private(set) var placedEvent: OrderEvent?
         /// The field answers the sent claim actually carried — frozen the moment
         /// the provider holds it, so a schema refresh mid-run cannot rewrite what
         /// history records (review, PR #42). `nil` until a create has landed.
@@ -1473,10 +1478,14 @@ extension NewDeliveryView {
             // it the flow reached a terminal state holding nothing, and the only way on
             // was a fresh draft with a fresh token (review, PR #22).
             var createdClaimID: String?
+            // The last claim *card* this run read — the accept answer carries no
+            // stamp, so the `placed` fact takes the card's (doc:Schema → "Epoch 2").
+            var lastCard: PlacedClaim.Observation?
             do {
                 ordering = .creating
                 var claim = try await create(request, orderRequestID)
                 createdClaimID = claim.id
+                lastCard = claim.observed
                 // From here the provider holds these exact answers — freeze them
                 // so a schema edit during estimation can't change what history
                 // says the order carried (review, PR #42).
@@ -1488,6 +1497,7 @@ extension NewDeliveryView {
                     guard clock.now < deadline else { throw OrderingTimedOut() }
                     try await clock.sleep(for: Self.pollInterval)
                     claim = try await watch(claim.id)
+                    lastCard = claim.observed ?? lastCard
                 }
 
                 // Creation is idempotent on `orderRequestID`, so a retry can be handed
@@ -1549,8 +1559,10 @@ extension NewDeliveryView {
                                refusal.status == 409,
                                standing.version != claim.version, !versionRetried {
                                 // Still ours at a newer version — one re-accept,
-                                // then the abandon path if that fails too.
+                                // then the abandon path if that fails too. This
+                                // card precedes the accept, so it stamps `placed`.
                                 claim = standing
+                                lastCard = standing.observed ?? lastCard
                                 versionRetried = true
                                 continue acceptLoop
                             }
@@ -1602,6 +1614,7 @@ extension NewDeliveryView {
                     tariff: offer.tariff.wireValue,
                     claimID: claim.id
                 )
+                placedEvent = placedOrder.flatMap { OrderEvent.placed($0, observed: lastCard) }
                 ordering = .placed
             } catch is CancellationError {
                 // A cancel that lands after `accept` was sent is not a return to
@@ -1681,6 +1694,9 @@ extension NewDeliveryView {
                     tariff: offer.tariff.wireValue,
                     claimID: claim.id
                 )
+                // The card read here is the only one this path holds — after the
+                // accept, but provider time all the same, never the device's.
+                placedEvent = placedOrder.flatMap { OrderEvent.placed($0, observed: claim.observed) }
                 ordering = .placed
             } catch {
                 // Still unknown, which is what it already said.

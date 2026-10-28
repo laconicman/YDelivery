@@ -93,7 +93,7 @@ struct CloudKitSchemaSeedTests {
                     name: "f", value: "v")], providerObservedAt: t0)
             _ = try database.recordEvent(OrderEvent(
                 orderID: order.id, providerEventID: 1, at: t0,
-                kind: "status", providerStatus: "accepted", source: "journal"))
+                kind: OrderEvent.Kind.statusChanged, providerStatus: "accepted", source: "journal"))
             try database.postMessage(OrderMessage(
                 id: UUID(), orderID: order.id, sentAt: t0,
                 kind: OrderMessage.Kind.text, text: "hi", authorHint: "T"))
@@ -233,13 +233,15 @@ struct CloudKitSchemaSeedTests {
             """, [seedID("field").uuidString.lowercased()]) == 0)
 
         // The neighbour's side stands whole — one order, two stops, one of
-        // each child, two messages, one account, one place, one template.
+        // each child, two messages, one account, one place, one template, and
+        // two key rows: the raw one above and the one its typed writes published,
+        // since the writers sign (Kit 0.5.3).
         let expected: [String: Int] = [
             "orders": 1, "routeStops": 2, "orderItems": 1,
             "orderProviderStates": 1, "orderOptions": 1,
             "orderCustomFields": 1, "orderEvents": 1,
             "orderMessages": 2, "orderAttachments": 1, "attachmentBlobs": 1,
-            "participantKeys": 1, "memberships": 1, "orderRatings": 1,
+            "participantKeys": 2, "memberships": 1, "orderRatings": 1,
             "orderPrivateStates": 1, "savedPlaces": 1,
             "customFieldDefinitions": 1, "parcelTemplates": 1,
             "parcelTemplateItems": 1, "providerAccounts": 1,

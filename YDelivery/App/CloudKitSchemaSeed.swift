@@ -7,12 +7,17 @@ import UIKit
 import YDeliveryKit
 
 extension YDeliveryApp {
+    /// The schema seed's launch arguments — read below and by the identity note's
+    /// skip list.
+    nonisolated static let cloudKitSeedFlag = "--ckschema-seed"
+    nonisolated static let cloudKitSeedCleanFlag = "--ckschema-seed-clean"
+
     /// Whether this launch was asked to seed the CloudKit development schema —
     /// `--ckschema-seed`. Read at composition like ``isHistoryFixture``: in a
     /// release build the flag does not exist and this is always false.
     static var isCloudKitSeed: Bool {
         #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("--ckschema-seed")
+        ProcessInfo.processInfo.arguments.contains(cloudKitSeedFlag)
         #else
         false
         #endif
@@ -22,7 +27,7 @@ extension YDeliveryApp {
     /// `--ckschema-seed-clean`. Same DEBUG-only reading.
     static var isCloudKitSeedClean: Bool {
         #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("--ckschema-seed-clean")
+        ProcessInfo.processInfo.arguments.contains(cloudKitSeedCleanFlag)
         #else
         false
         #endif
@@ -184,7 +189,7 @@ extension YDeliveryApp {
         // never writes — the event detail is its only typed source.
         let seedEvent = OrderEvent(
             orderID: orderID, providerEventID: 1, providerRevision: 1, at: t0 + 120,
-            kind: "status", providerStatus: "performer_found",
+            kind: OrderEvent.Kind.statusChanged, providerStatus: "performer_found",
             detail: "schema seed detail", source: "journal")
         await seed("orderEvents") {
             _ = try database.recordEvent(seedEvent)

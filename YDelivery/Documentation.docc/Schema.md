@@ -1025,9 +1025,10 @@ rates whom and where ratings aggregate). The id is caller-held so a retry is the
 Entitlement for a rating needs no join to anything mutable: every member but a reader may post one,
 and the row carries its author, subject and leg itself. The table is created, seeded and
 deployed at the epoch with the rest of Stage 1 — one development schema, one production
-deploy — and its writer, its reads and the UX land in the ratings phase (<doc:Roadmap> →
-T2), so no second schema deploy stands between the two (clarified 2026-10-08, review of
-#135).
+deploy — so no second schema deploy stands between it and the ratings phase (<doc:Roadmap>
+→ T2; clarified 2026-10-08, review of #135). Its model, writer and reads shipped in Kit
+0.5.4 (`OrderRating`, `postRating`, `attestedRatings`, `effectiveRatings`,
+`ratingSummary`); the UX is the ratings phase's (updated 2026-10-28).
 
 ### Stage 2 — legs (when a second provider or the courier edition starts)
 

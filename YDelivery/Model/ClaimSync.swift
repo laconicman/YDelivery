@@ -98,6 +98,61 @@ nonisolated enum ClaimsSync {
         return orders.sorted { $0.created > $1.created }
     }
 
+    /// One journal pass's events and discovered cards folded into history in the
+    /// doctrine's total order (doc:Schema → "Derived integrity"): by provider stamp,
+    /// then family — a journal row beats a card read at one stamp — then the feed's
+    /// operation id among events and the revision among cards, so the winner is
+    /// applied last. Each claim's stamp is the stamp of the content it now carries,
+    /// the last observation applied to it: an older card no longer lands over a
+    /// newer event while taking the event's stamp, which is what let it hold back a
+    /// later correction (YD-46). An event for a claim history does not know and no
+    /// card discovered is a no-op, as in ``applying(_:to:)``.
+    static func folding(
+        _ events: [Components.Schemas.JournalEvent],
+        cards: [Components.Schemas.ClaimResponse],
+        into orders: [Order]
+    ) -> (orders: [Order], stamps: [String: Date]) {
+        enum Observation {
+            case event(Components.Schemas.JournalEvent)
+            case card(Components.Schemas.ClaimResponse)
+            var claimID: String {
+                switch self {
+                case .event(let event): event.claimId
+                case .card(let card): card.id
+                }
+            }
+            /// `(at, family, sequence)` — the family ranks a journal row above a
+            /// card read; the sequence is the operation id within the journal and
+            /// the revision within the cards, never compared across the two.
+            var key: (Date, Int, Int64) {
+                switch self {
+                case .event(let event): (event.updatedTs, 1, event.operationId)
+                case .card(let card): (card.updatedTs, 0, card.revision)
+                }
+            }
+        }
+        let ordered = (events.map(Observation.event) + cards.map(Observation.card))
+            .enumerated()
+            .sorted { lhs, rhs in
+                let (l, r) = (lhs.element.key, rhs.element.key)
+                return (l.0, l.1, l.2, lhs.offset) < (r.0, r.1, r.2, rhs.offset)
+            }
+            .map(\.element)
+        var orders = orders
+        var stamps: [String: Date] = [:]
+        for observation in ordered {
+            switch observation {
+            case .event(let event):
+                guard orders.contains(where: { $0.claimID == event.claimId }) else { continue }
+                orders = applying(event, to: orders)
+            case .card(let card):
+                orders = merging([card], into: orders)
+            }
+            stamps[observation.claimID] = observation.key.0
+        }
+        return (orders, stamps)
+    }
+
     /// Provider-side as-of stamps for a page of claims — `updatedTs` per
     /// claimID. The mirror's freshness follows the provider's clock, not the
     /// read's: this is what `recordOrder(providerObservedAt:)` receives.
@@ -115,9 +170,13 @@ nonisolated enum ClaimsSync {
     /// tie-break within one family (doc:Schema → "Epoch 2"). `at` is the
     /// event's own stamp — provider time is what the mirror's freshness gate
     /// compares, never the read's clock.
+    /// `authorRef` is the writing device's party (doc:Collaboration, rule 1),
+    /// `nil` before it has noted one — readers then resolve the row through its key
+    /// row's creator stamp.
     static func providerEvent(
         _ event: Components.Schemas.JournalEvent,
-        orderID: Order.ID
+        orderID: Order.ID,
+        authorRef: UUID? = nil
     ) -> OrderEvent {
         OrderEvent(
             orderID: orderID,
@@ -127,7 +186,8 @@ nonisolated enum ClaimsSync {
             kind: event.changeType.rawValue,
             providerStatus: event.newStatus?.rawValue,
             detail: detail(of: event),
-            source: "journal"
+            source: OrderEvent.Source.journal,
+            authorRef: authorRef
         )
     }
 
@@ -138,21 +198,27 @@ nonisolated enum ClaimsSync {
     /// (`orderID ‖ revision ‖ status ‖ routeDigest`, doc:Schema → "Epoch 2")
     /// makes a re-sight of one revision merge into its first row — a card read
     /// and a search read of one revision are one observation — while a new
-    /// revision is a new row; the route digest joins the key when the trust
-    /// layer's adoption computes it. The mirror's observation stamp freshens
-    /// either way.
+    /// revision, or a route the provider corrected under one, is a new row. The
+    /// digest is over the claim's route mapped exactly as the stored stops are
+    /// (``Order/route(of:)``), so an unchanged route digests to what
+    /// `storedRouteDigest` reads back and `routeIntegrity` agrees. The mirror's
+    /// observation stamp freshens either way. `authorRef` as in
+    /// ``providerEvent(_:orderID:authorRef:)``.
     static func sighting(
         of claim: Components.Schemas.ClaimResponse,
         orderID: Order.ID,
-        source: String
+        source: String,
+        authorRef: UUID? = nil
     ) -> OrderEvent {
         OrderEvent(
             orderID: orderID,
             providerRevision: claim.revision,
             at: claim.updatedTs,
-            kind: "sighting",
+            kind: OrderEvent.Kind.sighting,
             providerStatus: claim.status.rawValue,
-            source: source
+            source: source,
+            routeDigest: CanonicalPayload.routeDigest(for: Order.route(of: claim)),
+            authorRef: authorRef
         )
     }
 
@@ -241,9 +307,7 @@ nonisolated extension Order {
             id: id,
             created: claim.createdTs,
             status: OrderStatus(claimStatus: claim.status),
-            route: claim.routePoints
-                .sorted { $0.visitOrder < $1.visitOrder }
-                .map(RoutePoint.init(claimPoint:)),
+            route: Self.route(of: claim),
             price: claim.pricing?.finalPrice ?? claim.pricing?.offer?.priceWithVat,
             currency: claim.pricing?.currency?.rawValue,
             tariff: claim.clientRequirements?.taxiClass.rawValue,
@@ -257,6 +321,17 @@ nonisolated extension Order {
             etaMinutes: claim.eta.map(Int.init),
             providerStatus: claim.status.rawValue
         )
+    }
+}
+
+nonisolated extension Order {
+    /// A claim's route as the store remembers it — in visit order, each point
+    /// mapped by ``RoutePoint/init(claimPoint:)``. One mapping for the history row
+    /// and the sighting's digest, so the two cannot drift.
+    static func route(of claim: Components.Schemas.ClaimResponse) -> [RoutePoint] {
+        claim.routePoints
+            .sorted { $0.visitOrder < $1.visitOrder }
+            .map(RoutePoint.init(claimPoint:))
     }
 }
 

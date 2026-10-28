@@ -797,7 +797,7 @@ system fields — is read nowhere in the app.
   adoption, under the #92 read-side lessons (<doc:Collaboration>): no names for an
   unshared order, and the lookup keyed and guarded like the row it decorates.
 
-## YD-44 — The `--uitest-history` fixture writes event `kind: "status"` — **open**
+## YD-44 — The `--uitest-history` fixture writes event `kind: "status"` — **discharged**
 
 `seedHistoryIfFlagged` writes its provider events with `kind: "status"`; real journal
 rows carry `status_changed` / `price_changed`, and sightings carry `sighting`. The same
@@ -810,8 +810,13 @@ word rides the schema seed, the Deliveries previews and `DeliveriesRowsTests`.
   nothing.
 - **Discharge:** the fixture, the seed, the previews and the tests write the real kinds;
   the app's adoption of the trust layer carries it, or it goes on its own.
+  *Discharged 2026-10-28 (the trust layer's adoption, Kit 0.5.5):* the fixture's trail is
+  `status_changed` rows through `OrderEvent.Kind`, plus a `price_changed` row and a
+  digest-bearing `sighting` — neither moves the rendered trail, which skips a row with no
+  status and folds a repeated phrase — and the schema seed, the Deliveries previews and
+  the tests write `status_changed`.
 
-## YD-45 — Membership lives only in the `CKShare` — **open**
+## YD-45 — Membership lives only in the `CKShare` — **discharged**
 
 Who is in an order is recorded nowhere but the share's participant list: <doc:Schema>
 ruled membership "not a table" on 2026-09-25, and the chat, the share row and every name
@@ -828,8 +833,15 @@ home at all.
   2026-10-06). The Kit's half is the table, the reconcile and the authority that merges
   it with the share; the app's half calls the reconcile and renders the members. The
   share stays the only grant.
+  *Discharged 2026-10-28 (Kit 0.5.2's table and reconcile; the app's adoption):*
+  `StoreController.reconcileMemberships()` mirrors every order the store holds after each
+  `ClaimsSyncController` pass and right after `shareOrder` succeeds, off the main actor;
+  the Kit's reconcile writes only on the share owner's device and a second pass writes
+  nothing. sqlite-data's `SyncEngineDelegate` exposes only `accountChanged`, so there is
+  no fetch-completion callback to hang it on. The members read is `members(of:)`; the
+  rendering is the next step's.
 
-## YD-46 — A sync pass stamps the mirror with the batch's newest stamp, not its content's — **open**
+## YD-46 — A sync pass stamps the mirror with the batch's newest stamp, not its content's — **discharged**
 
 A journal pass applies its events to the known orders, fetches cards for the claims it
 had not seen, merges those cards, and then stamps each changed order with the maximum
@@ -848,6 +860,13 @@ the trust doctrine's third round (2026-10-08).
   pass's events and cards in the doctrine's order (by `at`, then family, then revision
   within a family) and take the winner's own stamp — in the trust layer's adoption or
   on its own; settle the one-clock question either way.
+  *Discharged 2026-10-28 (the trust layer's adoption):* `ClaimsSync.folding` applies a
+  journal pass's events and discovered cards per claim by provider stamp, then family (a
+  journal row beats a card read), then operation id or revision, and stamps each claim
+  with its last applied observation — so an older card no longer lands over a newer
+  event under the event's stamp. The one-clock question stays open in
+  <doc:Collaboration> → "Open verifications before committing": the fold needs only that
+  each stamp be its own row's, which holds either way.
 
 ## YD-47 — The suspension gate treats the kill, not the synchronous database work — **open**
 
