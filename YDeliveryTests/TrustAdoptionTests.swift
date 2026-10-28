@@ -83,7 +83,7 @@ struct TrustAdoptionTests {
         #expect(attested.allSatisfy { $0.verdict.isVerified })
     }
 
-    @Test("The share mirror writes for owned shared orders only, and a second pass writes nothing")
+    @Test("The share mirror writes for owned shared orders only, before the store has read them, and a second pass writes nothing")
     func reconcileRunsForOwnedSharesOnly() async throws {
         let database = makeDatabase()
         let owned = order("claim-owned"), joined = order("claim-joined"), solo = order("claim-solo")
@@ -94,7 +94,10 @@ struct TrustAdoptionTests {
             $0.participants = [owned.id: [Member(ref: irina, canWrite: true)],
                                joined.id: [Member(ref: me, canWrite: true)]]
         }, republishing: .none)
-        for order in [owned, joined, solo] { try await store.record(order) }
+        // Written past the store, as a launch finds them: the store has published no
+        // orders yet, and the default reconcile still reads every one (review, PR #142).
+        for order in [owned, joined, solo] { try database.recordOrder(order) }
+        #expect(store.orders.isEmpty)
 
         #expect(await store.reconcileMemberships() == MembershipReconciliation(mirrored: 1, removed: 0))
         #expect(try database.memberships(orderID: owned.id).map(\.partyRef) == [irina])

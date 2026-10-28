@@ -292,7 +292,7 @@ final class ClaimsSyncController {
             lastJournalSyncedAt = .now
             lastSyncedAt = lastJournalSyncedAt
             journalError = nil
-            await store.reconcileMemberships()
+            await store.reconcileMemberships(of: store.orders.map(\.id))
             return true
         } catch is JournalCursorInvalid {
             // The position rotted — restart it and nothing else: the pending
@@ -307,7 +307,7 @@ final class ClaimsSyncController {
                 lastJournalSyncedAt = .now
                 lastSyncedAt = lastJournalSyncedAt
                 journalError = nil
-                await store.reconcileMemberships()
+                await store.reconcileMemberships(of: store.orders.map(\.id))
                 return true
             } catch is SyncSuperseded, is SyncSuspended {
                 return true
@@ -374,8 +374,9 @@ final class ClaimsSyncController {
             }
             // The share mirror rides the pass, truncated or not: membership is the
             // share's, not the provider's, and every order this device holds is
-            // already in the store (doc:Collaboration, YD-45).
-            await store.reconcileMemberships()
+            // already in the store, which the pass refreshed (doc:Collaboration,
+            // YD-45).
+            await store.reconcileMemberships(of: store.orders.map(\.id))
             if truncated { throw SyncIncomplete() }
             lastSyncedAt = .now
             searchError = nil

@@ -758,8 +758,10 @@ final class StoreController {
         return record
     }
 
-    /// Mirrors every owned share among `orderIDs` — every order the store holds by
-    /// default — into membership rows, off the main actor. The Kit's reconcile is a
+    /// Mirrors every owned share among `orderIDs` — by default every order in the
+    /// database, read there rather than from ``orders``, which a launch-time caller
+    /// may reach before the first read published (review, PR #142) — into membership
+    /// rows, off the main actor. The Kit's reconcile is a
     /// no-op wherever this device is not the share's owner (a private order, a
     /// joined share, a device that has not noted its party yet), so no pre-filter
     /// is needed; a failure is one order's, logged and retried by the next pass.
@@ -767,7 +769,7 @@ final class StoreController {
     @discardableResult
     func reconcileMemberships(of orderIDs: [Order.ID]? = nil) async -> MembershipReconciliation {
         guard let database, let authority else { return MembershipReconciliation(mirrored: 0, removed: 0) }
-        return await Self.reconcile(orderIDs ?? orders.map(\.id), authority: authority, in: database)
+        return await Self.reconcile(orderIDs, authority: authority, in: database)
     }
 
     /// The recipient side of the door — the scene delegate's tapped share URL
@@ -1034,10 +1036,24 @@ final class StoreController {
 
     @concurrent
     private static func reconcile(
-        _ orderIDs: [Order.ID], authority: any IdentityAuthority, in database: AppDatabase
+        _ orderIDs: [Order.ID]?, authority: any IdentityAuthority, in database: AppDatabase
     ) async -> MembershipReconciliation {
         var total = MembershipReconciliation(mirrored: 0, removed: 0)
-        for orderID in orderIDs {
+        let ids: [Order.ID]
+        if let orderIDs {
+            ids = orderIDs
+        } else {
+            // A failed read is not an empty history: say so, and let the next
+            // trigger try again.
+            do {
+                ids = try database.readOrders().map(\.id)
+            } catch {
+                trustLogger.error(
+                    "membership reconcile skipped, orders unreadable: \(error.localizedDescription, privacy: .public)")
+                return total
+            }
+        }
+        for orderID in ids {
             do {
                 let outcome = try database.reconcileMemberships(orderID: orderID, authority: authority)
                 total.mirrored += outcome.mirrored
