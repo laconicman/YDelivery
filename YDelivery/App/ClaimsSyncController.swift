@@ -751,6 +751,12 @@ final class ClaimsSyncController {
                 await syncSearch()
             }
             await syncJournal()
+        } else if count % Self.reconcileEveryTicks == 0 {
+            // The share is iCloud's, not the provider's: a participant who accepts
+            // while the owner is signed out of the provider still gets a membership
+            // row, at the membership cadence (review, PR #142). Signed in, the
+            // passes above reconcile after each success.
+            await store.reconcileMemberships()
         }
         lastSeenGeneration = generation
         wasSignedIn = signedIn

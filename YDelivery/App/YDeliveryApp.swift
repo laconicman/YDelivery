@@ -83,6 +83,9 @@ struct YDeliveryApp: App {
             guard !Self.isCloudKitSeed, !Self.isCloudKitSeedClean else { return }
             await database?.startSync()
             await Self.noteLocalParty(database: database, authority: authority)
+            // The first mirror of the launch, once the device may know it owns
+            // something — the loop's own passes may have run before the note.
+            await store.reconcileMemberships()
         })
         _session = State(initialValue: session)
         _store = State(initialValue: store)

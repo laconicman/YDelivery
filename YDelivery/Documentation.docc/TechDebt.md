@@ -894,6 +894,22 @@ synchronously on the main actor.
   entirely. The notifications' wiring stays — suspension remains the freeze's
   guard even once nothing synchronous stands in its way.
 
+## YD-48 — A recorded cancellation stamps the mirror with the device's clock — **open**
+
+`OrderDetailView.recordCancelled` records the cancelled order with
+`providerObservedAt: .now`. The column is the provider's clock by contract, and
+`recordOrder` refuses a card older than the stored observation, so a device clock ahead
+of the provider's can make a later card of the same claim — a `cancelled` that becomes
+`cancelled_with_payment`, a corrected price — read as stale. The placed order had the
+same shape until the trust layer's adoption, which now stamps it with the last card's
+`updated_ts` (Devin, PR #142).
+
+- **Cost:** bounded: the order is terminal and few cards follow a cancellation, but the
+  one that does may carry the final price.
+- **Discharge:** stamp the write with the `updated_ts` of the card that showed the
+  cancellation (`PlacedClaim.observed`), or `nil` when the flow read none; the
+  cancellation model's `onTerminal` and retry closures carry it.
+
 ## See Also
 
 - <doc:Design>
